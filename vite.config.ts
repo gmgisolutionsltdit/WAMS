@@ -12,6 +12,18 @@ export default defineConfig(({ mode }) => ({
       overlay: false,
     },
   },
+  optimizeDeps: {
+    include: [
+      "react",
+      "react-dom",
+      "react/jsx-runtime",
+      "react/jsx-dev-runtime",
+      "@tanstack/react-query",
+      "@supabase/supabase-js",
+      "@lovable.dev/cloud-auth-js",
+      "date-fns",
+    ],
+  },
   plugins: [react(), mode === "development" && componentTagger()].filter(Boolean),
   resolve: {
     alias: {
