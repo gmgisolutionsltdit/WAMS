@@ -14,16 +14,190 @@ export type Database = {
   }
   public: {
     Tables: {
-      [_ in never]: never
+      attendance_logs: {
+        Row: {
+          clock_in: string | null
+          clock_out: string | null
+          created_at: string
+          date: string
+          id: string
+          ip_address: string | null
+          overtime_hours: number | null
+          total_hours: number | null
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          clock_in?: string | null
+          clock_out?: string | null
+          created_at?: string
+          date?: string
+          id?: string
+          ip_address?: string | null
+          overtime_hours?: number | null
+          total_hours?: number | null
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          clock_in?: string | null
+          clock_out?: string | null
+          created_at?: string
+          date?: string
+          id?: string
+          ip_address?: string | null
+          overtime_hours?: number | null
+          total_hours?: number | null
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
+      overtime_requests: {
+        Row: {
+          approved_by: string | null
+          created_at: string
+          date: string
+          id: string
+          reason: string | null
+          requested_hours: number
+          status: Database["public"]["Enums"]["ot_status"]
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          approved_by?: string | null
+          created_at?: string
+          date: string
+          id?: string
+          reason?: string | null
+          requested_hours: number
+          status?: Database["public"]["Enums"]["ot_status"]
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          approved_by?: string | null
+          created_at?: string
+          date?: string
+          id?: string
+          reason?: string | null
+          requested_hours?: number
+          status?: Database["public"]["Enums"]["ot_status"]
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
+      profiles: {
+        Row: {
+          created_at: string
+          department: string | null
+          email: string | null
+          full_name: string | null
+          id: string
+          reporting_manager_id: string | null
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          department?: string | null
+          email?: string | null
+          full_name?: string | null
+          id: string
+          reporting_manager_id?: string | null
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          department?: string | null
+          email?: string | null
+          full_name?: string | null
+          id?: string
+          reporting_manager_id?: string | null
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "profiles_reporting_manager_id_fkey"
+            columns: ["reporting_manager_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      settings: {
+        Row: {
+          created_at: string
+          holiday_ot_multiplier: number
+          id: string
+          standard_shift_hours: number
+          updated_at: string
+          weekday_ot_multiplier: number
+          weekend_ot_multiplier: number
+        }
+        Insert: {
+          created_at?: string
+          holiday_ot_multiplier?: number
+          id?: string
+          standard_shift_hours?: number
+          updated_at?: string
+          weekday_ot_multiplier?: number
+          weekend_ot_multiplier?: number
+        }
+        Update: {
+          created_at?: string
+          holiday_ot_multiplier?: number
+          id?: string
+          standard_shift_hours?: number
+          updated_at?: string
+          weekday_ot_multiplier?: number
+          weekend_ot_multiplier?: number
+        }
+        Relationships: []
+      }
+      user_roles: {
+        Row: {
+          created_at: string
+          id: string
+          role: Database["public"]["Enums"]["app_role"]
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          role?: Database["public"]["Enums"]["app_role"]
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          role?: Database["public"]["Enums"]["app_role"]
+          user_id?: string
+        }
+        Relationships: []
+      }
     }
     Views: {
       [_ in never]: never
     }
     Functions: {
-      [_ in never]: never
+      has_role: {
+        Args: {
+          _role: Database["public"]["Enums"]["app_role"]
+          _user_id: string
+        }
+        Returns: boolean
+      }
+      is_manager_of: {
+        Args: { _employee_id: string; _manager_id: string }
+        Returns: boolean
+      }
     }
     Enums: {
-      [_ in never]: never
+      app_role: "admin" | "manager" | "employee"
+      ot_status: "pending" | "approved" | "rejected"
     }
     CompositeTypes: {
       [_ in never]: never
@@ -150,6 +324,9 @@ export type CompositeTypes<
 
 export const Constants = {
   public: {
-    Enums: {},
+    Enums: {
+      app_role: ["admin", "manager", "employee"],
+      ot_status: ["pending", "approved", "rejected"],
+    },
   },
 } as const
