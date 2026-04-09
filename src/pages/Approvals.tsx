@@ -46,11 +46,11 @@ const Approvals = () => {
         </Card>
         <Card>
           <CardHeader className="pb-2"><CardDescription>Pending Requests</CardDescription></CardHeader>
-          <CardContent><div className="flex items-center gap-2"><Clock className="h-5 w-5 text-orange-500" /><span className="text-2xl font-bold">{stats.pendingCount}</span></div></CardContent>
+          <CardContent><div className="flex items-center gap-2"><Clock className="h-5 w-5 text-destructive" /><span className="text-2xl font-bold">{stats.pendingCount}</span></div></CardContent>
         </Card>
         <Card>
           <CardHeader className="pb-2"><CardDescription>Active Employees</CardDescription></CardHeader>
-          <CardContent><div className="flex items-center gap-2"><Users className="h-5 w-5 text-green-500" /><span className="text-2xl font-bold">{stats.activeEmployees}</span></div></CardContent>
+          <CardContent><div className="flex items-center gap-2"><Users className="h-5 w-5 text-primary" /><span className="text-2xl font-bold">{stats.activeEmployees}</span></div></CardContent>
         </Card>
       </div>
 
