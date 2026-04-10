@@ -1,6 +1,7 @@
 import { ReactNode } from "react";
 import { SidebarProvider, SidebarTrigger } from "@/components/ui/sidebar";
 import { AppSidebar } from "@/components/AppSidebar";
+import { DevUserSwitcher } from "@/components/DevUserSwitcher";
 
 export function AppLayout({ children }: { children: ReactNode }) {
   return (
@@ -8,9 +9,12 @@ export function AppLayout({ children }: { children: ReactNode }) {
       <div className="min-h-screen flex w-full">
         <AppSidebar />
         <div className="flex-1 flex flex-col">
-          <header className="h-14 flex items-center border-b px-4">
-            <SidebarTrigger className="mr-4" />
-            <h1 className="text-lg font-semibold">Overtime Tracker</h1>
+          <header className="h-14 flex items-center border-b px-4 justify-between">
+            <div className="flex items-center">
+              <SidebarTrigger className="mr-4" />
+              <h1 className="text-lg font-semibold">Overtime Tracker</h1>
+            </div>
+            <DevUserSwitcher />
           </header>
           <main className="flex-1 p-4 md:p-6 overflow-auto">
             {children}

@@ -1,70 +1,60 @@
-import { createContext, useContext, useEffect, useState, ReactNode } from "react";
-import { User, Session } from "@supabase/supabase-js";
-import { supabase } from "@/integrations/supabase/client";
-import type { Database } from "@/integrations/supabase/types";
+import { createContext, useContext, useState, ReactNode } from "react";
 
-type AppRole = Database["public"]["Enums"]["app_role"];
+type AppRole = "admin" | "manager" | "employee";
 
-interface AuthContextType {
-  user: User | null;
-  session: Session | null;
-  loading: boolean;
-  role: AppRole | null;
-  profile: { full_name: string | null; email: string | null; department: string | null } | null;
-  signOut: () => Promise<void>;
+interface MockUser {
+  id: string;
+  email: string;
 }
 
+interface AuthContextType {
+  user: MockUser | null;
+  session: any;
+  loading: boolean;
+  role: AppRole;
+  profile: { full_name: string | null; email: string | null; department: string | null };
+  signOut: () => Promise<void>;
+  switchRole: (role: AppRole) => void;
+}
+
+const MOCK_PROFILES: Record<AppRole, { user: MockUser; profile: AuthContextType["profile"] }> = {
+  admin: {
+    user: { id: "00000000-0000-0000-0000-000000000001", email: "admin@test.com" },
+    profile: { full_name: "Test Admin", email: "admin@test.com", department: "IT" },
+  },
+  manager: {
+    user: { id: "00000000-0000-0000-0000-000000000002", email: "manager@test.com" },
+    profile: { full_name: "Test Manager", email: "manager@test.com", department: "Operations" },
+  },
+  employee: {
+    user: { id: "00000000-0000-0000-0000-000000000003", email: "employee@test.com" },
+    profile: { full_name: "Test Employee", email: "employee@test.com", department: "Engineering" },
+  },
+};
+
 const AuthContext = createContext<AuthContextType>({
-  user: null, session: null, loading: true, role: null, profile: null, signOut: async () => {},
+  user: null, session: null, loading: false, role: "admin", profile: null as any, signOut: async () => {}, switchRole: () => {},
 });
 
 export const useAuth = () => useContext(AuthContext);
 
 export const AuthProvider = ({ children }: { children: ReactNode }) => {
-  const [user, setUser] = useState<User | null>(null);
-  const [session, setSession] = useState<Session | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [role, setRole] = useState<AppRole | null>(null);
-  const [profile, setProfile] = useState<AuthContextType["profile"]>(null);
+  const [role, setRole] = useState<AppRole>("admin");
 
-  const fetchUserData = async (userId: string) => {
-    const [{ data: roles }, { data: prof }] = await Promise.all([
-      supabase.from("user_roles").select("role").eq("user_id", userId).limit(1),
-      supabase.from("profiles").select("full_name, email, department").eq("id", userId).single(),
-    ]);
-    setRole(roles?.[0]?.role ?? "employee");
-    setProfile(prof ?? null);
-  };
+  const mock = MOCK_PROFILES[role];
 
-  useEffect(() => {
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
-      setSession(session);
-      setUser(session?.user ?? null);
-      if (session?.user) {
-        setTimeout(() => fetchUserData(session.user.id), 0);
-      } else {
-        setRole(null);
-        setProfile(null);
-      }
-      setLoading(false);
-    });
-
-    supabase.auth.getSession().then(({ data: { session } }) => {
-      setSession(session);
-      setUser(session?.user ?? null);
-      if (session?.user) fetchUserData(session.user.id);
-      setLoading(false);
-    });
-
-    return () => subscription.unsubscribe();
-  }, []);
-
-  const signOut = async () => {
-    await supabase.auth.signOut();
-  };
+  const switchRole = (newRole: AppRole) => setRole(newRole);
 
   return (
-    <AuthContext.Provider value={{ user, session, loading, role, profile, signOut }}>
+    <AuthContext.Provider value={{
+      user: mock.user,
+      session: { user: mock.user },
+      loading: false,
+      role,
+      profile: mock.profile,
+      signOut: async () => {},
+      switchRole,
+    }}>
       {children}
     </AuthContext.Provider>
   );
