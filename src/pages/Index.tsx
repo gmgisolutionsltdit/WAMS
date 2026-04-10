@@ -49,7 +49,7 @@ const Dashboard = () => {
     setRecentLogs(recent || []);
   }, [user]);
 
-  const fetchAdminData = async () => {
+  const fetchAdminData = useCallback(async () => {
     if (!user || !isManagerOrAdmin) return;
     const today = format(new Date(), "yyyy-MM-dd");
 
@@ -70,7 +70,7 @@ const Dashboard = () => {
       pendingCount: (pending || []).length,
       activeEmployees: (active || []).length,
     });
-  };
+  }, [user, isManagerOrAdmin]);
 
   useEffect(() => {
     fetchEmployeeData();
