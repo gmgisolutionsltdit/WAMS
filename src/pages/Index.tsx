@@ -1,5 +1,6 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { useAuth } from "@/contexts/AuthContext";
+import { useRealtimeSubscription } from "@/hooks/useRealtimeSubscription";
 import { supabase } from "@/integrations/supabase/client";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -37,7 +38,7 @@ const Dashboard = () => {
     return () => clearInterval(timer);
   }, []);
 
-  const fetchEmployeeData = async () => {
+  const fetchEmployeeData = useCallback(async () => {
     if (!user) return;
     const today = format(new Date(), "yyyy-MM-dd");
     const [{ data: todayData }, { data: recent }] = await Promise.all([
@@ -46,9 +47,9 @@ const Dashboard = () => {
     ]);
     setTodayLog(todayData);
     setRecentLogs(recent || []);
-  };
+  }, [user]);
 
-  const fetchAdminData = async () => {
+  const fetchAdminData = useCallback(async () => {
     if (!user || !isManagerOrAdmin) return;
     const today = format(new Date(), "yyyy-MM-dd");
 
@@ -69,12 +70,16 @@ const Dashboard = () => {
       pendingCount: (pending || []).length,
       activeEmployees: (active || []).length,
     });
-  };
+  }, [user, isManagerOrAdmin]);
 
   useEffect(() => {
     fetchEmployeeData();
     fetchAdminData();
-  }, [user, role]);
+  }, [fetchEmployeeData, fetchAdminData]);
+
+  // Realtime subscriptions
+  useRealtimeSubscription("overtime_requests", () => { fetchEmployeeData(); fetchAdminData(); }, "dashboard-ot");
+  useRealtimeSubscription("attendance_logs", () => { fetchEmployeeData(); fetchAdminData(); }, "dashboard-attendance");
 
   const handleClockIn = async () => {
     if (!user) return;

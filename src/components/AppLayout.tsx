@@ -2,6 +2,7 @@ import { ReactNode } from "react";
 import { SidebarProvider, SidebarTrigger } from "@/components/ui/sidebar";
 import { AppSidebar } from "@/components/AppSidebar";
 import { DevUserSwitcher } from "@/components/DevUserSwitcher";
+import { NotificationBell } from "@/components/NotificationBell";
 
 export function AppLayout({ children }: { children: ReactNode }) {
   return (
@@ -14,7 +15,10 @@ export function AppLayout({ children }: { children: ReactNode }) {
               <SidebarTrigger className="mr-4" />
               <h1 className="text-lg font-semibold">Overtime Tracker</h1>
             </div>
-            <DevUserSwitcher />
+            <div className="flex items-center gap-2">
+              <NotificationBell />
+              <DevUserSwitcher />
+            </div>
           </header>
           <main className="flex-1 p-4 md:p-6 overflow-auto">
             {children}
