@@ -75,7 +75,11 @@ const Dashboard = () => {
   useEffect(() => {
     fetchEmployeeData();
     fetchAdminData();
-  }, [user, role]);
+  }, [fetchEmployeeData, fetchAdminData]);
+
+  // Realtime subscriptions
+  useRealtimeSubscription("overtime_requests", () => { fetchEmployeeData(); fetchAdminData(); }, "dashboard-ot");
+  useRealtimeSubscription("attendance_logs", () => { fetchEmployeeData(); fetchAdminData(); }, "dashboard-attendance");
 
   const handleClockIn = async () => {
     if (!user) return;
