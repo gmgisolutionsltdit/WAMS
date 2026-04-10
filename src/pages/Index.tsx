@@ -38,7 +38,7 @@ const Dashboard = () => {
     return () => clearInterval(timer);
   }, []);
 
-  const fetchEmployeeData = async () => {
+  const fetchEmployeeData = useCallback(async () => {
     if (!user) return;
     const today = format(new Date(), "yyyy-MM-dd");
     const [{ data: todayData }, { data: recent }] = await Promise.all([
@@ -47,7 +47,7 @@ const Dashboard = () => {
     ]);
     setTodayLog(todayData);
     setRecentLogs(recent || []);
-  };
+  }, [user]);
 
   const fetchAdminData = async () => {
     if (!user || !isManagerOrAdmin) return;
