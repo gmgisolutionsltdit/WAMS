@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useMemo } from "react";
 import { useAuth } from "@/contexts/AuthContext";
 import { supabase } from "@/integrations/supabase/client";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -24,7 +24,8 @@ const OTRequests = () => {
   const [requests, setRequests] = useState<any[]>([]);
   const [pendingRequests, setPendingRequests] = useState<any[]>([]);
   const [date, setDate] = useState(format(new Date(), "yyyy-MM-dd"));
-  const [hours, setHours] = useState("");
+  const [startTime, setStartTime] = useState("");
+  const [endTime, setEndTime] = useState("");
   const [reason, setReason] = useState("");
   const [loading, setLoading] = useState(false);
 
@@ -32,6 +33,19 @@ const OTRequests = () => {
   const [editOpen, setEditOpen] = useState(false);
   const [editReq, setEditReq] = useState<any>(null);
   const [editHours, setEditHours] = useState("");
+
+  // Auto-calculate hours with cross-day logic
+  const calculatedHours = useMemo(() => {
+    if (!startTime || !endTime) return "";
+    const [sh, sm] = startTime.split(":").map(Number);
+    const [eh, em] = endTime.split(":").map(Number);
+    let startMin = sh * 60 + sm;
+    let endMin = eh * 60 + em;
+    // Cross-day: if end is before start, add 24h
+    if (endMin <= startMin) endMin += 24 * 60;
+    const diff = (endMin - startMin) / 60;
+    return Math.round(diff * 100) / 100;
+  }, [startTime, endTime]);
 
   const fetchRequests = useCallback(async () => {
     if (!user) return;
@@ -58,7 +72,6 @@ const OTRequests = () => {
     fetchPendingRequests();
   }, [fetchRequests, fetchPendingRequests]);
 
-  // Realtime subscription
   useRealtimeSubscription("overtime_requests", () => {
     fetchRequests();
     fetchPendingRequests();
@@ -67,10 +80,11 @@ const OTRequests = () => {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!user) return;
+    if (!calculatedHours || calculatedHours <= 0) { toast.error("Please enter valid start and end times"); return; }
     setLoading(true);
     const { data, error } = await supabase
       .from("overtime_requests")
-      .insert({ user_id: user.id, date, requested_hours: parseFloat(hours), reason })
+      .insert({ user_id: user.id, date, requested_hours: calculatedHours, reason })
       .select()
       .single();
     if (error) toast.error(error.message);
@@ -78,10 +92,11 @@ const OTRequests = () => {
       toast.success("OT request submitted!");
       await notifyManagersAndAdmins(
         "New OT Request",
-        `${user.email} requested ${hours}h overtime for ${date}`,
+        `${user.email} requested ${calculatedHours}h overtime for ${date}`,
         data?.id
       );
-      setHours("");
+      setStartTime("");
+      setEndTime("");
       setReason("");
       fetchRequests();
     }
@@ -141,20 +156,48 @@ const OTRequests = () => {
       <Card>
         <CardHeader><CardTitle>Submit Overtime Request</CardTitle></CardHeader>
         <CardContent>
-          <form onSubmit={handleSubmit} className="grid gap-4 md:grid-cols-4 items-end">
-            <div className="space-y-2">
-              <Label>Date</Label>
-              <Input type="date" value={date} onChange={(e) => setDate(e.target.value)} required />
+          <form onSubmit={handleSubmit} className="space-y-4">
+            <div className="grid gap-4 md:grid-cols-2">
+              <div className="space-y-2">
+                <Label>Date</Label>
+                <Input type="date" value={date} onChange={(e) => setDate(e.target.value)} required />
+              </div>
+              <div className="space-y-2">
+                <Label>Calculated Hours</Label>
+                <Input
+                  readOnly
+                  value={calculatedHours ? `${calculatedHours} hours` : "—"}
+                  className="bg-muted"
+                  placeholder="Auto-calculated from start & end time"
+                />
+              </div>
             </div>
-            <div className="space-y-2">
-              <Label>Hours</Label>
-              <Input type="number" step="0.5" min="0.5" max="12" placeholder="e.g. 2" value={hours} onChange={(e) => setHours(e.target.value)} required />
+            <div className="grid gap-4 md:grid-cols-2">
+              <div className="space-y-2">
+                <Label>Start Time</Label>
+                <Input type="time" value={startTime} onChange={(e) => setStartTime(e.target.value)} required />
+              </div>
+              <div className="space-y-2">
+                <Label>End Time</Label>
+                <Input type="time" value={endTime} onChange={(e) => setEndTime(e.target.value)} required />
+              </div>
             </div>
-            <div className="space-y-2 md:col-span-1">
+            {startTime && endTime && calculatedHours && (
+              <p className="text-sm text-muted-foreground">
+                {startTime} → {endTime}
+                {(() => {
+                  const [sh] = startTime.split(":").map(Number);
+                  const [eh] = endTime.split(":").map(Number);
+                  return eh <= sh ? " (next day)" : "";
+                })()}
+                {" = "}{calculatedHours} hours
+              </p>
+            )}
+            <div className="space-y-2">
               <Label>Reason</Label>
-              <Textarea placeholder="Reason for overtime" value={reason} onChange={(e) => setReason(e.target.value)} required rows={1} />
+              <Textarea placeholder="Describe the reason for overtime work..." value={reason} onChange={(e) => setReason(e.target.value)} required rows={3} />
             </div>
-            <Button type="submit" disabled={loading}>{loading ? "Submitting..." : "Submit Request"}</Button>
+            <Button type="submit" disabled={loading || !calculatedHours}>{loading ? "Submitting..." : "Submit Request"}</Button>
           </form>
         </CardContent>
       </Card>

@@ -10,8 +10,7 @@ import { Badge } from "@/components/ui/badge";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Clock, LogIn, LogOut, Timer, AlertCircle, Users, CheckSquare, Plus, Check, X } from "lucide-react";
+import { Clock, LogIn, LogOut, Timer, AlertCircle, Users, CheckSquare, Plus, Check, X, Pause, Play } from "lucide-react";
 import { toast } from "sonner";
 import { format } from "date-fns";
 
@@ -64,7 +63,7 @@ const Dashboard = () => {
     setPendingRequests(pending || []);
     setApprovalHistory(history || []);
 
-    const totalOTToday = (todayLogs || []).reduce((sum, l) => sum + (l.overtime_hours || 0), 0);
+    const totalOTToday = (todayLogs || []).reduce((sum: number, l: any) => sum + (l.overtime_hours || 0), 0);
     setStats({
       totalOTToday: Math.round(totalOTToday * 10) / 10,
       pendingCount: (pending || []).length,
@@ -77,7 +76,6 @@ const Dashboard = () => {
     fetchAdminData();
   }, [fetchEmployeeData, fetchAdminData]);
 
-  // Realtime subscriptions
   useRealtimeSubscription("overtime_requests", () => { fetchEmployeeData(); fetchAdminData(); }, "dashboard-ot");
   useRealtimeSubscription("attendance_logs", () => { fetchEmployeeData(); fetchAdminData(); }, "dashboard-attendance");
 
@@ -95,11 +93,49 @@ const Dashboard = () => {
     setLoading(true);
     const now = new Date();
     const clockIn = new Date(todayLog.clock_in);
-    const totalHours = Math.round(((now.getTime() - clockIn.getTime()) / 3600000) * 100) / 100;
+    const totalMinutes = (now.getTime() - clockIn.getTime()) / 60000;
+    const breakMins = todayLog.break_minutes || 0;
+    const netMinutes = totalMinutes - breakMins;
+    const totalHours = Math.round((netMinutes / 60) * 100) / 100;
     const overtimeHours = Math.max(0, Math.round((totalHours - 8) * 100) / 100);
-    const { error } = await supabase.from("attendance_logs").update({ clock_out: now.toISOString(), total_hours: totalHours, overtime_hours: overtimeHours }).eq("id", todayLog.id);
+    const { error } = await supabase.from("attendance_logs").update({
+      clock_out: now.toISOString(),
+      total_hours: totalHours,
+      overtime_hours: overtimeHours,
+      break_start: null,
+      break_end: null,
+    }).eq("id", todayLog.id);
     if (error) toast.error(error.message);
-    else { toast.success(`Clocked out! Total: ${totalHours}h, OT: ${overtimeHours}h`); fetchEmployeeData(); fetchAdminData(); }
+    else { toast.success(`Clocked out! Total: ${totalHours}h (breaks: ${breakMins}m), OT: ${overtimeHours}h`); fetchEmployeeData(); fetchAdminData(); }
+    setLoading(false);
+  };
+
+  const handleBreakStart = async () => {
+    if (!user || !todayLog) return;
+    setLoading(true);
+    const { error } = await supabase.from("attendance_logs").update({
+      break_start: new Date().toISOString(),
+      break_end: null,
+    }).eq("id", todayLog.id);
+    if (error) toast.error(error.message);
+    else { toast.success("Break started"); fetchEmployeeData(); }
+    setLoading(false);
+  };
+
+  const handleBreakEnd = async () => {
+    if (!user || !todayLog || !todayLog.break_start) return;
+    setLoading(true);
+    const now = new Date();
+    const breakStart = new Date(todayLog.break_start);
+    const breakDuration = Math.round((now.getTime() - breakStart.getTime()) / 60000);
+    const totalBreak = (todayLog.break_minutes || 0) + breakDuration;
+    const { error } = await supabase.from("attendance_logs").update({
+      break_end: now.toISOString(),
+      break_start: null,
+      break_minutes: totalBreak,
+    }).eq("id", todayLog.id);
+    if (error) toast.error(error.message);
+    else { toast.success(`Break ended (${breakDuration} min)`); fetchEmployeeData(); }
     setLoading(false);
   };
 
@@ -112,38 +148,48 @@ const Dashboard = () => {
 
   const handleManualEntry = async () => {
     if (!user) return;
-    // Look up user by email
     const { data: profile } = await supabase.from("profiles").select("id").eq("email", manualForm.employee_email).single();
     if (!profile) { toast.error("Employee not found"); return; }
-
     const clockInTime = new Date(`${manualForm.date}T${manualForm.clock_in}:00`);
     const clockOutTime = new Date(`${manualForm.date}T${manualForm.clock_out}:00`);
     const totalHours = Math.round(((clockOutTime.getTime() - clockInTime.getTime()) / 3600000) * 100) / 100;
-
     const { error } = await supabase.from("attendance_logs").insert({
-      user_id: profile.id,
-      date: manualForm.date,
-      clock_in: clockInTime.toISOString(),
-      clock_out: clockOutTime.toISOString(),
-      total_hours: totalHours,
-      overtime_hours: parseFloat(manualForm.overtime_hours) || 0,
+      user_id: profile.id, date: manualForm.date, clock_in: clockInTime.toISOString(), clock_out: clockOutTime.toISOString(),
+      total_hours: totalHours, overtime_hours: parseFloat(manualForm.overtime_hours) || 0,
     });
     if (error) toast.error(error.message);
     else { toast.success("Manual entry added"); setManualOpen(false); fetchAdminData(); }
   };
 
-  const getRunningDuration = (clockIn: string) => {
-    const diff = currentTime.getTime() - new Date(clockIn).getTime();
-    const h = Math.floor(diff / 3600000);
-    const m = Math.floor((diff % 3600000) / 60000);
-    const s = Math.floor((diff % 60000) / 1000);
+  const getRunningDuration = (clockIn: string, breakMins: number = 0, breakStartStr?: string | null) => {
+    let elapsed = currentTime.getTime() - new Date(clockIn).getTime();
+    // Subtract completed breaks
+    elapsed -= breakMins * 60000;
+    // Subtract current active break
+    if (breakStartStr) {
+      elapsed -= (currentTime.getTime() - new Date(breakStartStr).getTime());
+    }
+    if (elapsed < 0) elapsed = 0;
+    const h = Math.floor(elapsed / 3600000);
+    const m = Math.floor((elapsed % 3600000) / 60000);
+    const s = Math.floor((elapsed % 60000) / 1000);
     return `${h.toString().padStart(2, "0")}:${m.toString().padStart(2, "0")}:${s.toString().padStart(2, "0")}`;
   };
 
   const isClockedIn = todayLog && todayLog.clock_in && !todayLog.clock_out;
-  const workedHours = isClockedIn
-    ? Math.round(((currentTime.getTime() - new Date(todayLog.clock_in).getTime()) / 3600000) * 100) / 100
-    : (todayLog?.total_hours || 0);
+  const isOnBreak = isClockedIn && todayLog.break_start && !todayLog.break_end;
+
+  const getWorkedHours = () => {
+    if (!isClockedIn) return todayLog?.total_hours || 0;
+    let elapsed = currentTime.getTime() - new Date(todayLog.clock_in).getTime();
+    elapsed -= (todayLog.break_minutes || 0) * 60000;
+    if (isOnBreak) {
+      elapsed -= (currentTime.getTime() - new Date(todayLog.break_start).getTime());
+    }
+    return Math.max(0, Math.round((elapsed / 3600000) * 100) / 100);
+  };
+
+  const workedHours = getWorkedHours();
   const progressPercent = Math.min(100, (workedHours / 8) * 100);
 
   return (
@@ -163,10 +209,31 @@ const Dashboard = () => {
           <CardContent className="flex flex-col items-center gap-3">
             {isClockedIn ? (
               <>
-                <Badge variant="default" className="text-sm"><Timer className="mr-1 h-3 w-3" /> Working</Badge>
-                <Button size="lg" variant="destructive" onClick={handleClockOut} disabled={loading} className="w-full">
-                  <LogOut className="mr-2 h-5 w-5" /> Clock Out
-                </Button>
+                {isOnBreak ? (
+                  <Badge variant="secondary" className="text-sm"><Pause className="mr-1 h-3 w-3" /> On Break</Badge>
+                ) : (
+                  <Badge variant="default" className="text-sm"><Timer className="mr-1 h-3 w-3" /> Working</Badge>
+                )}
+                <div className="text-2xl font-mono font-bold">
+                  {getRunningDuration(todayLog.clock_in, todayLog.break_minutes || 0, isOnBreak ? todayLog.break_start : null)}
+                </div>
+                {(todayLog.break_minutes || 0) > 0 && (
+                  <p className="text-xs text-muted-foreground">Total breaks: {todayLog.break_minutes}m</p>
+                )}
+                <div className="flex gap-2 w-full">
+                  {isOnBreak ? (
+                    <Button size="sm" variant="outline" onClick={handleBreakEnd} disabled={loading} className="flex-1">
+                      <Play className="mr-1 h-4 w-4" /> Resume
+                    </Button>
+                  ) : (
+                    <Button size="sm" variant="outline" onClick={handleBreakStart} disabled={loading} className="flex-1">
+                      <Pause className="mr-1 h-4 w-4" /> Break
+                    </Button>
+                  )}
+                  <Button size="sm" variant="destructive" onClick={handleClockOut} disabled={loading || isOnBreak} className="flex-1">
+                    <LogOut className="mr-1 h-4 w-4" /> Clock Out
+                  </Button>
+                </div>
               </>
             ) : todayLog?.clock_out ? (
               <Badge variant="secondary" className="text-sm">Day Complete ✓</Badge>
@@ -197,7 +264,6 @@ const Dashboard = () => {
       {/* Admin/Manager Section */}
       {isManagerOrAdmin && (
         <>
-          {/* Stat Cards */}
           <div className="grid gap-4 md:grid-cols-3">
             <Card className="border-l-4 border-l-primary">
               <CardHeader className="pb-2"><CardDescription>Total OT Hours Today</CardDescription></CardHeader>
@@ -213,7 +279,6 @@ const Dashboard = () => {
             </Card>
           </div>
 
-          {/* Real-time Tracker */}
           <Card>
             <CardHeader className="flex flex-row items-center justify-between">
               <CardTitle className="flex items-center gap-2"><Clock className="h-5 w-5" /> Live Employee Tracker</CardTitle>
@@ -243,16 +308,24 @@ const Dashboard = () => {
                     <TableHead>Employee</TableHead>
                     <TableHead>Clock-in Time</TableHead>
                     <TableHead>Current Duration</TableHead>
+                    <TableHead>Status</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
                   {activeLogs.length === 0 ? (
-                    <TableRow><TableCell colSpan={3} className="text-center text-muted-foreground">No employees currently clocked in</TableCell></TableRow>
+                    <TableRow><TableCell colSpan={4} className="text-center text-muted-foreground">No employees currently clocked in</TableCell></TableRow>
                   ) : activeLogs.map((log) => (
                     <TableRow key={log.id}>
                       <TableCell className="font-medium">{(log.profiles as any)?.full_name || (log.profiles as any)?.email || "Unknown"}</TableCell>
                       <TableCell>{format(new Date(log.clock_in), "HH:mm:ss")}</TableCell>
-                      <TableCell><Badge variant="outline" className="font-mono"><Timer className="mr-1 h-3 w-3" />{getRunningDuration(log.clock_in)}</Badge></TableCell>
+                      <TableCell><Badge variant="outline" className="font-mono"><Timer className="mr-1 h-3 w-3" />{getRunningDuration(log.clock_in, log.break_minutes || 0, log.break_start)}</Badge></TableCell>
+                      <TableCell>
+                        {log.break_start && !log.break_end ? (
+                          <Badge variant="secondary"><Pause className="mr-1 h-3 w-3" />On Break</Badge>
+                        ) : (
+                          <Badge variant="default">Working</Badge>
+                        )}
+                      </TableCell>
                     </TableRow>
                   ))}
                 </TableBody>
@@ -260,7 +333,6 @@ const Dashboard = () => {
             </CardContent>
           </Card>
 
-          {/* Pending Approvals */}
           <Card>
             <CardHeader><CardTitle>Pending OT Approvals</CardTitle></CardHeader>
             <CardContent>
@@ -294,7 +366,6 @@ const Dashboard = () => {
             </CardContent>
           </Card>
 
-          {/* Approval History */}
           <Card>
             <CardHeader><CardTitle>Approval History</CardTitle></CardHeader>
             <CardContent>
@@ -340,18 +411,20 @@ const Dashboard = () => {
                 <TableHead>Clock In</TableHead>
                 <TableHead>Clock Out</TableHead>
                 <TableHead>Total Hours</TableHead>
+                <TableHead>Breaks</TableHead>
                 <TableHead>Overtime</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
               {recentLogs.length === 0 ? (
-                <TableRow><TableCell colSpan={5} className="text-center text-muted-foreground">No records yet</TableCell></TableRow>
+                <TableRow><TableCell colSpan={6} className="text-center text-muted-foreground">No records yet</TableCell></TableRow>
               ) : recentLogs.map((log) => (
                 <TableRow key={log.id}>
                   <TableCell>{format(new Date(log.date), "MMM d, yyyy")}</TableCell>
                   <TableCell>{log.clock_in ? format(new Date(log.clock_in), "HH:mm") : "—"}</TableCell>
                   <TableCell>{log.clock_out ? format(new Date(log.clock_out), "HH:mm") : "—"}</TableCell>
                   <TableCell>{log.total_hours?.toFixed(1) || "—"}</TableCell>
+                  <TableCell>{log.break_minutes ? `${log.break_minutes}m` : "0m"}</TableCell>
                   <TableCell>
                     {log.overtime_hours > 0 ? (
                       <Badge variant="destructive">{log.overtime_hours.toFixed(1)}h</Badge>
