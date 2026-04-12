@@ -16,6 +16,9 @@ export type Database = {
     Tables: {
       attendance_logs: {
         Row: {
+          break_end: string | null
+          break_minutes: number | null
+          break_start: string | null
           clock_in: string | null
           clock_out: string | null
           created_at: string
@@ -28,6 +31,9 @@ export type Database = {
           user_id: string
         }
         Insert: {
+          break_end?: string | null
+          break_minutes?: number | null
+          break_start?: string | null
           clock_in?: string | null
           clock_out?: string | null
           created_at?: string
@@ -40,6 +46,9 @@ export type Database = {
           user_id: string
         }
         Update: {
+          break_end?: string | null
+          break_minutes?: number | null
+          break_start?: string | null
           clock_in?: string | null
           clock_out?: string | null
           created_at?: string
@@ -225,7 +234,15 @@ export type Database = {
           role?: Database["public"]["Enums"]["app_role"]
           user_id?: string
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "user_roles_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
       }
     }
     Views: {
