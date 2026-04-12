@@ -26,19 +26,23 @@ const EmployeeManagement = () => {
   });
 
   const fetchEmployees = useCallback(async () => {
-    const { data } = await supabase
-      .from("profiles")
-      .select("*, user_roles(role)")
-      .order("created_at", { ascending: false });
-    setEmployees(data || []);
+    // Fetch profiles and roles separately to avoid FK join issues
+    const [{ data: profiles }, { data: roles }] = await Promise.all([
+      supabase.from("profiles").select("*").order("created_at", { ascending: false }),
+      supabase.from("user_roles").select("user_id, role"),
+    ]);
+
+    // Merge roles into profiles
+    const roleMap = new Map((roles || []).map(r => [r.user_id, r.role]));
+    const merged = (profiles || []).map(p => ({
+      ...p,
+      _role: roleMap.get(p.id) || "employee",
+    }));
+    setEmployees(merged);
 
     // Get managers/admins for the reporting dropdown
-    const { data: roleData } = await supabase
-      .from("user_roles")
-      .select("user_id, role")
-      .in("role", ["manager", "admin"]);
-    if (roleData) {
-      const managerIds = roleData.map(r => r.user_id);
+    const managerIds = (roles || []).filter(r => r.role === "manager" || r.role === "admin").map(r => r.user_id);
+    if (managerIds.length > 0) {
       const { data: managerProfiles } = await supabase
         .from("profiles")
         .select("id, full_name, email")
@@ -57,12 +61,11 @@ const EmployeeManagement = () => {
   const openCreate = () => { resetForm(); setDialogOpen(true); };
 
   const openEdit = (emp: any) => {
-    const empRole = emp.user_roles?.[0]?.role || "employee";
     setForm({
       full_name: emp.full_name || "",
       email: emp.email || "",
       department: emp.department || "",
-      role: empRole,
+      role: emp._role || "employee",
       reporting_manager_id: emp.reporting_manager_id || "",
       employment_type: emp.employment_type || "Permanent",
     });
@@ -91,7 +94,8 @@ const EmployeeManagement = () => {
       });
       if (error) { toast.error(error.message); return; }
 
-      await supabase.from("user_roles").insert({ user_id: newId, role: form.role as any });
+      const { error: roleError } = await supabase.from("user_roles").insert({ user_id: newId, role: form.role as any });
+      if (roleError) { toast.error(roleError.message); return; }
       toast.success("Employee created");
     }
 
@@ -183,8 +187,8 @@ const EmployeeManagement = () => {
                   <TableCell>{emp.email || "—"}</TableCell>
                   <TableCell>{emp.department || "—"}</TableCell>
                   <TableCell>
-                    <Badge variant={emp.user_roles?.[0]?.role === "admin" ? "default" : emp.user_roles?.[0]?.role === "manager" ? "secondary" : "outline"}>
-                      {emp.user_roles?.[0]?.role || "employee"}
+                    <Badge variant={emp._role === "admin" ? "default" : emp._role === "manager" ? "secondary" : "outline"}>
+                      {emp._role}
                     </Badge>
                   </TableCell>
                   <TableCell>
