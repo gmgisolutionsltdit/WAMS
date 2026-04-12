@@ -28,6 +28,7 @@ const managerItems = [
 ];
 
 const adminItems = [
+  { title: "Employees", url: "/employees", icon: Users },
   { title: "Settings", url: "/settings", icon: Settings },
 ];
 
