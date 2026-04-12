@@ -11,6 +11,7 @@ import OTRequests from "./pages/OTRequests";
 import Approvals from "./pages/Approvals";
 import Reports from "./pages/Reports";
 import SettingsPage from "./pages/SettingsPage";
+import EmployeeManagement from "./pages/EmployeeManagement";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -29,6 +30,7 @@ const App = () => (
             <Route path="/approvals" element={<AppLayout><Approvals /></AppLayout>} />
             <Route path="/reports" element={<AppLayout><Reports /></AppLayout>} />
             <Route path="/settings" element={<AppLayout><SettingsPage /></AppLayout>} />
+            <Route path="/employees" element={<AppLayout><EmployeeManagement /></AppLayout>} />
             <Route path="*" element={<NotFound />} />
           </Routes>
         </AuthProvider>
