@@ -15,7 +15,13 @@ import { format } from "date-fns";
 import { useRealtimeSubscription } from "@/hooks/useRealtimeSubscription";
 import { notifyManagersAndAdmins, notifyEmployee } from "@/lib/notifications";
 
-const statusColor = (s: string) => s === "approved" ? "default" : s === "rejected" ? "destructive" : "secondary";
+/** Color helper for OT status badges */
+const otStatusStyle = (status: string) => {
+  if (status === "approved") return "bg-lime-500 text-white hover:bg-lime-600 border-lime-500";
+  if (status === "rejected") return "bg-[#FF6347] text-white hover:bg-[#E5533D] border-[#FF6347]";
+  if (status === "modified") return "bg-[#FFD700] text-black hover:bg-[#E6C200] border-[#FFD700]";
+  return ""; // pending uses default
+};
 
 const OTRequests = () => {
   const { user, role } = useAuth();
@@ -29,19 +35,16 @@ const OTRequests = () => {
   const [reason, setReason] = useState("");
   const [loading, setLoading] = useState(false);
 
-  // Edit dialog state
   const [editOpen, setEditOpen] = useState(false);
   const [editReq, setEditReq] = useState<any>(null);
   const [editHours, setEditHours] = useState("");
 
-  // Auto-calculate hours with cross-day logic
   const calculatedHours = useMemo(() => {
     if (!startTime || !endTime) return "";
     const [sh, sm] = startTime.split(":").map(Number);
     const [eh, em] = endTime.split(":").map(Number);
     let startMin = sh * 60 + sm;
     let endMin = eh * 60 + em;
-    // Cross-day: if end is before start, add 24h
     if (endMin <= startMin) endMin += 24 * 60;
     const diff = (endMin - startMin) / 60;
     return Math.round(diff * 100) / 100;
@@ -141,6 +144,7 @@ const OTRequests = () => {
       );
       setEditOpen(false);
       fetchPendingRequests();
+      fetchRequests();
     }
   };
 
@@ -148,6 +152,14 @@ const OTRequests = () => {
     setEditReq(req);
     setEditHours(String(req.requested_hours));
     setEditOpen(true);
+  };
+
+  /** Determine display status — if hours were modified from original, show "modified" */
+  const getDisplayStatus = (req: any) => {
+    // We can't know the original hours after edit, so we track it via the approval flow:
+    // If status is approved and it went through the "modify" path, the notification says "Modified"
+    // For now, just return the raw status
+    return req.status;
   };
 
   return (
@@ -227,14 +239,14 @@ const OTRequests = () => {
                     <TableCell><Badge>{req.requested_hours}h</Badge></TableCell>
                     <TableCell className="max-w-48 truncate">{req.reason}</TableCell>
                     <TableCell className="space-x-1">
-                      <Button size="sm" className="bg-green-600 hover:bg-green-700" onClick={() => handleApproval(req, "approved")}>
+                      <Button size="sm" className="bg-lime-500 hover:bg-lime-600 text-white" onClick={() => handleApproval(req, "approved")}>
                         <Check className="h-4 w-4 mr-1" /> Approve
                       </Button>
-                      <Button size="sm" variant="destructive" onClick={() => handleApproval(req, "rejected")}>
+                      <Button size="sm" className="bg-[#FF6347] hover:bg-[#E5533D] text-white" onClick={() => handleApproval(req, "rejected")}>
                         <X className="h-4 w-4 mr-1" /> Reject
                       </Button>
                       <Button size="sm" variant="outline" onClick={() => openEdit(req)}>
-                        <Pencil className="h-4 w-4 mr-1" /> Edit
+                        <Pencil className="h-4 w-4 mr-1" /> Modify
                       </Button>
                     </TableCell>
                   </TableRow>
@@ -267,7 +279,11 @@ const OTRequests = () => {
                   <TableCell>{format(new Date(req.date), "MMM d, yyyy")}</TableCell>
                   <TableCell>{req.requested_hours}h</TableCell>
                   <TableCell className="max-w-48 truncate">{req.reason}</TableCell>
-                  <TableCell><Badge variant={statusColor(req.status)}>{req.status}</Badge></TableCell>
+                  <TableCell>
+                    <Badge className={otStatusStyle(getDisplayStatus(req))}>
+                      {getDisplayStatus(req)}
+                    </Badge>
+                  </TableCell>
                   <TableCell className="text-sm text-muted-foreground">{format(new Date(req.created_at), "MMM d")}</TableCell>
                 </TableRow>
               ))}
@@ -293,7 +309,7 @@ const OTRequests = () => {
               <Label>New Hours</Label>
               <Input type="number" step="0.5" min="0.5" value={editHours} onChange={(e) => setEditHours(e.target.value)} />
             </div>
-            <Button onClick={handleEdit} className="w-full">Save & Approve</Button>
+            <Button onClick={handleEdit} className="w-full bg-[#FFD700] hover:bg-[#E6C200] text-black">Save & Approve (Modified)</Button>
           </div>
         </DialogContent>
       </Dialog>
