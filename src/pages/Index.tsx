@@ -14,6 +14,9 @@ import { Clock, LogIn, LogOut, Timer, AlertCircle, Users, CheckSquare, Plus, Che
 import { toast } from "sonner";
 import { format } from "date-fns";
 
+/** Return today's date string in the user's local timezone (yyyy-MM-dd). */
+const localToday = () => format(new Date(), "yyyy-MM-dd");
+
 const Dashboard = () => {
   const { user, role } = useAuth();
   const [currentTime, setCurrentTime] = useState(new Date());
@@ -22,15 +25,13 @@ const Dashboard = () => {
   const [loading, setLoading] = useState(false);
   const isManagerOrAdmin = role === "manager" || role === "admin";
 
-  // Admin/Manager state
   const [activeLogs, setActiveLogs] = useState<any[]>([]);
   const [pendingRequests, setPendingRequests] = useState<any[]>([]);
   const [stats, setStats] = useState({ totalOTToday: 0, pendingCount: 0, activeEmployees: 0 });
   const [approvalHistory, setApprovalHistory] = useState<any[]>([]);
 
-  // Manual entry state
   const [manualOpen, setManualOpen] = useState(false);
-  const [manualForm, setManualForm] = useState({ employee_email: "", date: format(new Date(), "yyyy-MM-dd"), clock_in: "09:00", clock_out: "18:00", overtime_hours: "1" });
+  const [manualForm, setManualForm] = useState({ employee_email: "", date: localToday(), clock_in: "09:00", clock_out: "18:00", overtime_hours: "1" });
 
   useEffect(() => {
     const timer = setInterval(() => setCurrentTime(new Date()), 1000);
@@ -39,18 +40,24 @@ const Dashboard = () => {
 
   const fetchEmployeeData = useCallback(async () => {
     if (!user) return;
-    const today = format(new Date(), "yyyy-MM-dd");
+    const today = localToday();
     const [{ data: todayData }, { data: recent }] = await Promise.all([
-      supabase.from("attendance_logs").select("*").eq("user_id", user.id).eq("date", today).maybeSingle(),
+      supabase.from("attendance_logs").select("*").eq("user_id", user.id).eq("date", today).is("clock_out", null).maybeSingle(),
       supabase.from("attendance_logs").select("*").eq("user_id", user.id).order("date", { ascending: false }).limit(10),
     ]);
-    setTodayLog(todayData);
+    // If no active session, check for a completed one today
+    if (!todayData) {
+      const { data: completedToday } = await supabase.from("attendance_logs").select("*").eq("user_id", user.id).eq("date", today).order("created_at", { ascending: false }).limit(1).maybeSingle();
+      setTodayLog(completedToday);
+    } else {
+      setTodayLog(todayData);
+    }
     setRecentLogs(recent || []);
   }, [user]);
 
   const fetchAdminData = useCallback(async () => {
     if (!user || !isManagerOrAdmin) return;
-    const today = format(new Date(), "yyyy-MM-dd");
+    const today = localToday();
 
     const [{ data: active }, { data: pending }, { data: todayLogs }, { data: history }] = await Promise.all([
       supabase.from("attendance_logs").select("*, profiles!attendance_logs_user_id_fkey(full_name, email)").eq("date", today).is("clock_out", null),
@@ -82,7 +89,13 @@ const Dashboard = () => {
   const handleClockIn = async () => {
     if (!user) return;
     setLoading(true);
-    const { error } = await supabase.from("attendance_logs").insert({ user_id: user.id, clock_in: new Date().toISOString(), ip_address: "192.168.1.1 (simulated)" });
+    const now = new Date();
+    const { error } = await supabase.from("attendance_logs").insert({
+      user_id: user.id,
+      date: localToday(),
+      clock_in: now.toISOString(),
+      ip_address: "192.168.1.1 (simulated)",
+    });
     if (error) toast.error(error.message);
     else { toast.success("Clocked in!"); fetchEmployeeData(); fetchAdminData(); }
     setLoading(false);
@@ -163,9 +176,7 @@ const Dashboard = () => {
 
   const getRunningDuration = (clockIn: string, breakMins: number = 0, breakStartStr?: string | null) => {
     let elapsed = currentTime.getTime() - new Date(clockIn).getTime();
-    // Subtract completed breaks
     elapsed -= breakMins * 60000;
-    // Subtract current active break
     if (breakStartStr) {
       elapsed -= (currentTime.getTime() - new Date(breakStartStr).getTime());
     }
@@ -191,6 +202,14 @@ const Dashboard = () => {
 
   const workedHours = getWorkedHours();
   const progressPercent = Math.min(100, (workedHours / 8) * 100);
+
+  /** Color helper for OT status badges */
+  const otStatusStyle = (status: string) => {
+    if (status === "approved") return "bg-lime-500 text-white hover:bg-lime-600 border-lime-500";
+    if (status === "rejected") return "bg-[#FF6347] text-white hover:bg-[#E5533D] border-[#FF6347]";
+    // modified = approved with edited hours — we treat "modified" as a separate display concept
+    return ""; // pending uses default badge
+  };
 
   return (
     <div className="space-y-6">
@@ -356,8 +375,8 @@ const Dashboard = () => {
                       <TableCell><Badge>{req.requested_hours}h</Badge></TableCell>
                       <TableCell className="max-w-48 truncate">{req.reason}</TableCell>
                       <TableCell className="space-x-2">
-                        <Button size="sm" className="bg-green-600 hover:bg-green-700" onClick={() => handleApproval(req.id, "approved")}><Check className="h-4 w-4 mr-1" /> Approve</Button>
-                        <Button size="sm" variant="destructive" onClick={() => handleApproval(req.id, "rejected")}><X className="h-4 w-4 mr-1" /> Reject</Button>
+                        <Button size="sm" className="bg-lime-500 hover:bg-lime-600 text-white" onClick={() => handleApproval(req.id, "approved")}><Check className="h-4 w-4 mr-1" /> Approve</Button>
+                        <Button size="sm" className="bg-[#FF6347] hover:bg-[#E5533D] text-white" onClick={() => handleApproval(req.id, "rejected")}><X className="h-4 w-4 mr-1" /> Reject</Button>
                       </TableCell>
                     </TableRow>
                   ))}
@@ -387,7 +406,7 @@ const Dashboard = () => {
                       <TableCell>{format(new Date(req.date), "MMM d, yyyy")}</TableCell>
                       <TableCell>{req.requested_hours}h</TableCell>
                       <TableCell>
-                        <Badge variant={req.status === "approved" ? "default" : "destructive"}>
+                        <Badge className={otStatusStyle(req.status)}>
                           {req.status}
                         </Badge>
                       </TableCell>

@@ -10,7 +10,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Badge } from "@/components/ui/badge";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { toast } from "sonner";
-import { Plus, Pencil, Users } from "lucide-react";
+import { Plus, Pencil, Users, Search } from "lucide-react";
 
 const EMPLOYMENT_TYPES = ["Permanent", "Contractual", "Pay-per-Hour", "Short Term", "Intern"];
 
@@ -20,19 +20,20 @@ const EmployeeManagement = () => {
   const [managers, setManagers] = useState<any[]>([]);
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
+  const [searchQuery, setSearchQuery] = useState("");
+  const [filterRole, setFilterRole] = useState("all");
+  const [filterType, setFilterType] = useState("all");
   const [form, setForm] = useState({
     full_name: "", email: "", department: "", role: "employee" as string,
     reporting_manager_id: "" as string, employment_type: "Permanent",
   });
 
   const fetchEmployees = useCallback(async () => {
-    // Fetch profiles and roles separately to avoid FK join issues
     const [{ data: profiles }, { data: roles }] = await Promise.all([
       supabase.from("profiles").select("*").order("created_at", { ascending: false }),
       supabase.from("user_roles").select("user_id, role"),
     ]);
 
-    // Merge roles into profiles
     const roleMap = new Map((roles || []).map(r => [r.user_id, r.role]));
     const merged = (profiles || []).map(p => ({
       ...p,
@@ -40,7 +41,6 @@ const EmployeeManagement = () => {
     }));
     setEmployees(merged);
 
-    // Get managers/admins for the reporting dropdown
     const managerIds = (roles || []).filter(r => r.role === "manager" || r.role === "admin").map(r => r.user_id);
     if (managerIds.length > 0) {
       const { data: managerProfiles } = await supabase
@@ -83,7 +83,6 @@ const EmployeeManagement = () => {
       }).eq("id", editingId);
       if (error) { toast.error(error.message); return; }
 
-      // Update role
       await supabase.from("user_roles").update({ role: form.role as any }).eq("user_id", editingId);
       toast.success("Employee updated");
     } else {
@@ -103,6 +102,24 @@ const EmployeeManagement = () => {
     resetForm();
     fetchEmployees();
   };
+
+  // Get reporting manager name
+  const getManagerName = (managerId: string | null) => {
+    if (!managerId) return "—";
+    const mgr = employees.find(e => e.id === managerId);
+    return mgr?.full_name || mgr?.email || "—";
+  };
+
+  // Filter and search
+  const filteredEmployees = employees.filter(emp => {
+    const matchesSearch = !searchQuery || 
+      (emp.full_name || "").toLowerCase().includes(searchQuery.toLowerCase()) ||
+      (emp.email || "").toLowerCase().includes(searchQuery.toLowerCase()) ||
+      (emp.department || "").toLowerCase().includes(searchQuery.toLowerCase());
+    const matchesRole = filterRole === "all" || emp._role === filterRole;
+    const matchesType = filterType === "all" || (emp.employment_type || "Permanent") === filterType;
+    return matchesSearch && matchesRole && matchesType;
+  });
 
   if (role !== "admin") {
     return (
@@ -167,7 +184,37 @@ const EmployeeManagement = () => {
             </DialogContent>
           </Dialog>
         </CardHeader>
-        <CardContent>
+        <CardContent className="space-y-4">
+          {/* Search & Filters */}
+          <div className="flex flex-col sm:flex-row gap-3">
+            <div className="relative flex-1">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+              <Input
+                placeholder="Search by name, email, or department..."
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                className="pl-9"
+              />
+            </div>
+            <Select value={filterRole} onValueChange={setFilterRole}>
+              <SelectTrigger className="w-[160px]"><SelectValue placeholder="Filter Role" /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All Roles</SelectItem>
+                <SelectItem value="admin">Admin</SelectItem>
+                <SelectItem value="manager">Manager</SelectItem>
+                <SelectItem value="employee">Employee</SelectItem>
+              </SelectContent>
+            </Select>
+            <Select value={filterType} onValueChange={setFilterType}>
+              <SelectTrigger className="w-[180px]"><SelectValue placeholder="Filter Type" /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All Types</SelectItem>
+                {EMPLOYMENT_TYPES.map((t) => <SelectItem key={t} value={t}>{t}</SelectItem>)}
+              </SelectContent>
+            </Select>
+          </div>
+
+          {/* Table */}
           <Table>
             <TableHeader>
               <TableRow>
@@ -175,13 +222,16 @@ const EmployeeManagement = () => {
                 <TableHead>Email</TableHead>
                 <TableHead>Department</TableHead>
                 <TableHead>Role</TableHead>
+                <TableHead>Reporting Boss</TableHead>
+                <TableHead>Employee Type</TableHead>
+                <TableHead>Status</TableHead>
                 <TableHead>Actions</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
-              {employees.length === 0 ? (
-                <TableRow><TableCell colSpan={5} className="text-center text-muted-foreground">No employees</TableCell></TableRow>
-              ) : employees.map((emp) => (
+              {filteredEmployees.length === 0 ? (
+                <TableRow><TableCell colSpan={8} className="text-center text-muted-foreground">No employees found</TableCell></TableRow>
+              ) : filteredEmployees.map((emp) => (
                 <TableRow key={emp.id}>
                   <TableCell className="font-medium">{emp.full_name || "—"}</TableCell>
                   <TableCell>{emp.email || "—"}</TableCell>
@@ -190,6 +240,11 @@ const EmployeeManagement = () => {
                     <Badge variant={emp._role === "admin" ? "default" : emp._role === "manager" ? "secondary" : "outline"}>
                       {emp._role}
                     </Badge>
+                  </TableCell>
+                  <TableCell>{getManagerName(emp.reporting_manager_id)}</TableCell>
+                  <TableCell>{emp.employment_type || "Permanent"}</TableCell>
+                  <TableCell>
+                    <Badge variant="outline" className="bg-green-50 text-green-700 border-green-200">Active</Badge>
                   </TableCell>
                   <TableCell>
                     <Button size="sm" variant="outline" onClick={() => openEdit(emp)}>
