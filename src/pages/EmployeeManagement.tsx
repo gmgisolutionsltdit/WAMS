@@ -55,6 +55,9 @@ const EmployeeManagement = () => {
 
   useEffect(() => { fetchEmployees(); }, [fetchEmployees]);
 
+  useRealtimeSubscription("profiles", fetchEmployees, "emp-mgmt-profiles");
+  useRealtimeSubscription("user_roles", fetchEmployees, "emp-mgmt-roles");
+
   const resetForm = () => {
     setForm({ full_name: "", email: "", department: "", role: "employee", reporting_manager_id: "", employment_type: "Permanent" });
     setEditingId(null);
