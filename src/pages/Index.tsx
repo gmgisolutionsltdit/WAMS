@@ -61,18 +61,21 @@ const Dashboard = () => {
     if (!user || !isManagerOrAdmin) return;
     const today = localToday();
 
-    const [{ data: active }, { data: pending }, { data: todayLogs }, { data: history }] = await Promise.all([
+    const [{ data: active }, { data: pending }, { data: todayLogs }, { data: history }, { data: approvedOTToday }] = await Promise.all([
       supabase.from("attendance_logs").select("*, profiles!attendance_logs_user_id_fkey(full_name, email)").eq("date", today).is("clock_out", null),
       supabase.from("overtime_requests").select("*, profiles!overtime_requests_user_id_fkey(full_name, email)").eq("status", "pending"),
       supabase.from("attendance_logs").select("overtime_hours").eq("date", today),
       supabase.from("overtime_requests").select("*, profiles!overtime_requests_user_id_fkey(full_name, email)").neq("status", "pending").order("updated_at", { ascending: false }).limit(10),
+      supabase.from("overtime_requests").select("requested_hours").eq("date", today).in("status", ["approved", "modified"]),
     ]);
 
     setActiveLogs(active || []);
     setPendingRequests(pending || []);
     setApprovalHistory(history || []);
 
-    const totalOTToday = (todayLogs || []).reduce((sum: number, l: any) => sum + (l.overtime_hours || 0), 0);
+    const clockOT = (todayLogs || []).reduce((sum: number, l: any) => sum + (l.overtime_hours || 0), 0);
+    const requestOT = (approvedOTToday || []).reduce((sum: number, l: any) => sum + (l.requested_hours || 0), 0);
+    const totalOTToday = clockOT + requestOT;
     setStats({
       totalOTToday: Math.round(totalOTToday * 10) / 10,
       pendingCount: (pending || []).length,
