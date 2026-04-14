@@ -14,6 +14,7 @@ import { toast } from "sonner";
 import { format } from "date-fns";
 import { useRealtimeSubscription } from "@/hooks/useRealtimeSubscription";
 import { notifyManagersAndAdmins, notifyEmployee } from "@/lib/notifications";
+import { applyOTFulfillment } from "@/lib/otFulfillment";
 
 /** Color helper for OT status badges */
 const otStatusStyle = (status: string) => {
