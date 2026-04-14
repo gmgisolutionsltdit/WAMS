@@ -2,23 +2,28 @@ import { useAuth } from "@/contexts/AuthContext";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
 
+const roleEmoji: Record<string, string> = { admin: "👑", manager: "👔", employee: "👤" };
+
 export function DevUserSwitcher() {
-  const { role, profile, switchRole } = useAuth();
+  const { user, employees, switchUser } = useAuth();
+
+  if (employees.length === 0) return null;
 
   return (
     <div className="flex items-center gap-2">
       <Badge variant="outline" className="text-xs bg-yellow-100 text-yellow-800 border-yellow-300">DEV MODE</Badge>
-      <Select value={role} onValueChange={(v) => switchRole(v as any)}>
-        <SelectTrigger className="w-[180px] h-8 text-sm">
-          <SelectValue />
+      <Select value={user?.id || ""} onValueChange={switchUser}>
+        <SelectTrigger className="w-[220px] h-8 text-sm">
+          <SelectValue placeholder="Select user" />
         </SelectTrigger>
         <SelectContent>
-          <SelectItem value="admin">👑 Test Admin</SelectItem>
-          <SelectItem value="manager">👔 Test Manager</SelectItem>
-          <SelectItem value="employee">👤 Test Employee</SelectItem>
+          {employees.map((emp) => (
+            <SelectItem key={emp.user.id} value={emp.user.id}>
+              {roleEmoji[emp.role] || "👤"} {emp.profile.full_name || emp.user.email} ({emp.role})
+            </SelectItem>
+          ))}
         </SelectContent>
       </Select>
-      <span className="text-xs text-muted-foreground hidden md:inline">{profile?.full_name}</span>
     </div>
   );
 }
