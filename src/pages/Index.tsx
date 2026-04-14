@@ -434,25 +434,34 @@ const Dashboard = () => {
                 <TableHead>Total Hours</TableHead>
                 <TableHead>Breaks</TableHead>
                 <TableHead>Overtime</TableHead>
+                <TableHead>Approved OT</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
               {recentLogs.length === 0 ? (
-                <TableRow><TableCell colSpan={6} className="text-center text-muted-foreground">No records yet</TableCell></TableRow>
-              ) : recentLogs.map((log) => (
-                <TableRow key={log.id}>
-                  <TableCell>{format(new Date(log.date), "MMM d, yyyy")}</TableCell>
-                  <TableCell>{log.clock_in ? format(new Date(log.clock_in), "HH:mm") : "—"}</TableCell>
-                  <TableCell>{log.clock_out ? format(new Date(log.clock_out), "HH:mm") : "—"}</TableCell>
-                  <TableCell>{log.total_hours?.toFixed(1) || "—"}</TableCell>
-                  <TableCell>{log.break_minutes ? `${log.break_minutes}m` : "0m"}</TableCell>
-                  <TableCell>
-                    {log.overtime_hours > 0 ? (
-                      <Badge variant="destructive">{log.overtime_hours.toFixed(1)}h</Badge>
-                    ) : "0.0"}
-                  </TableCell>
-                </TableRow>
-              ))}
+                <TableRow><TableCell colSpan={7} className="text-center text-muted-foreground">No records yet</TableCell></TableRow>
+              ) : recentLogs.map((log) => {
+                const dayApprovedOT = approvedOT.filter(ot => ot.date === log.date).reduce((sum: number, ot: any) => sum + (ot.requested_hours || 0), 0);
+                return (
+                  <TableRow key={log.id}>
+                    <TableCell>{format(new Date(log.date), "MMM d, yyyy")}</TableCell>
+                    <TableCell>{log.clock_in ? format(new Date(log.clock_in), "HH:mm") : "—"}</TableCell>
+                    <TableCell>{log.clock_out ? format(new Date(log.clock_out), "HH:mm") : "—"}</TableCell>
+                    <TableCell>{log.total_hours?.toFixed(1) || "—"}</TableCell>
+                    <TableCell>{log.break_minutes ? `${log.break_minutes}m` : "0m"}</TableCell>
+                    <TableCell>
+                      {log.overtime_hours > 0 ? (
+                        <Badge variant="destructive">{log.overtime_hours.toFixed(1)}h</Badge>
+                      ) : "0.0"}
+                    </TableCell>
+                    <TableCell>
+                      {dayApprovedOT > 0 ? (
+                        <Badge className="bg-lime-500 text-white border-lime-500">{dayApprovedOT.toFixed(1)}h</Badge>
+                      ) : "—"}
+                    </TableCell>
+                  </TableRow>
+                );
+              })}
             </TableBody>
           </Table>
         </CardContent>
