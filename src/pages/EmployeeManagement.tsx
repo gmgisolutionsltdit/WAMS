@@ -12,6 +12,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from 
 import { toast } from "sonner";
 import { Plus, Pencil, Users, Search } from "lucide-react";
 import { BulkUploadDialog } from "@/components/BulkUploadDialog";
+import { useRealtimeSubscription } from "@/hooks/useRealtimeSubscription";
 
 const EMPLOYMENT_TYPES = ["Permanent", "Contractual", "Pay-per-Hour", "Short Term", "Intern"];
 
