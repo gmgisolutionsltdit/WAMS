@@ -11,6 +11,7 @@ import { Badge } from "@/components/ui/badge";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { toast } from "sonner";
 import { Plus, Pencil, Users, Search } from "lucide-react";
+import { BulkUploadDialog } from "@/components/BulkUploadDialog";
 
 const EMPLOYMENT_TYPES = ["Permanent", "Contractual", "Pay-per-Hour", "Short Term", "Intern"];
 
@@ -138,9 +139,12 @@ const EmployeeManagement = () => {
         <CardHeader className="flex flex-row items-center justify-between">
           <CardTitle className="flex items-center gap-2"><Users className="h-5 w-5" /> Employee Management</CardTitle>
           <Dialog open={dialogOpen} onOpenChange={(open) => { setDialogOpen(open); if (!open) resetForm(); }}>
-            <DialogTrigger asChild>
-              <Button size="sm" onClick={openCreate}><Plus className="mr-1 h-4 w-4" /> Add Employee</Button>
-            </DialogTrigger>
+            <div className="flex gap-2">
+              <BulkUploadDialog onComplete={fetchEmployees} />
+              <DialogTrigger asChild>
+                <Button size="sm" onClick={openCreate}><Plus className="mr-1 h-4 w-4" /> Add Employee</Button>
+              </DialogTrigger>
+            </div>
             <DialogContent className="max-w-md">
               <DialogHeader><DialogTitle>{editingId ? "Edit Employee" : "Add New Employee"}</DialogTitle></DialogHeader>
               <div className="space-y-4">

@@ -1,14 +1,16 @@
 import { supabase } from "@/integrations/supabase/client";
 
-const MOCK_IDS = {
-  admin: "00000000-0000-0000-0000-000000000001",
-  manager: "00000000-0000-0000-0000-000000000002",
-  employee: "00000000-0000-0000-0000-000000000003",
-};
-
 export async function notifyManagersAndAdmins(title: string, message: string, relatedId?: string) {
-  const notifications = [MOCK_IDS.admin, MOCK_IDS.manager].map((uid) => ({
-    user_id: uid,
+  // Fetch all admin and manager user IDs dynamically
+  const { data: roles } = await supabase
+    .from("user_roles")
+    .select("user_id")
+    .in("role", ["admin", "manager"]);
+
+  if (!roles || roles.length === 0) return;
+
+  const notifications = roles.map((r) => ({
+    user_id: r.user_id,
     type: "ot_request",
     title,
     message,
