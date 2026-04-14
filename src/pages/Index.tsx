@@ -42,11 +42,11 @@ const Dashboard = () => {
   const fetchEmployeeData = useCallback(async () => {
     if (!user) return;
     const today = localToday();
-    const [{ data: todayData }, { data: recent }] = await Promise.all([
+    const [{ data: todayData }, { data: recent }, { data: otData }] = await Promise.all([
       supabase.from("attendance_logs").select("*").eq("user_id", user.id).eq("date", today).is("clock_out", null).maybeSingle(),
       supabase.from("attendance_logs").select("*").eq("user_id", user.id).order("date", { ascending: false }).limit(10),
+      supabase.from("overtime_requests").select("*").eq("user_id", user.id).in("status", ["approved", "modified"]).order("date", { ascending: false }).limit(20),
     ]);
-    // If no active session, check for a completed one today
     if (!todayData) {
       const { data: completedToday } = await supabase.from("attendance_logs").select("*").eq("user_id", user.id).eq("date", today).order("created_at", { ascending: false }).limit(1).maybeSingle();
       setTodayLog(completedToday);
@@ -54,6 +54,7 @@ const Dashboard = () => {
       setTodayLog(todayData);
     }
     setRecentLogs(recent || []);
+    setApprovedOT(otData || []);
   }, [user]);
 
   const fetchAdminData = useCallback(async () => {
