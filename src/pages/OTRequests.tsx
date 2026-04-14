@@ -108,17 +108,26 @@ const OTRequests = () => {
 
   const handleApproval = async (req: any, status: "approved" | "rejected") => {
     if (!user) return;
+
+    let finalHours = req.requested_hours;
+    if (status === "approved") {
+      finalHours = await applyOTFulfillment(req.user_id, req.date, req.requested_hours);
+    }
+
     const { error } = await supabase
       .from("overtime_requests")
-      .update({ status, approved_by: user.id })
+      .update({ status, approved_by: user.id, requested_hours: finalHours })
       .eq("id", req.id);
     if (error) toast.error(error.message);
     else {
-      toast.success(`Request ${status}`);
+      const detail = status === "approved" && finalHours < req.requested_hours
+        ? ` (adjusted from ${req.requested_hours}h to ${finalHours}h after standard hours fulfillment)`
+        : "";
+      toast.success(`Request ${status}${detail}`);
       await notifyEmployee(
         req.user_id,
         `OT Request ${status.charAt(0).toUpperCase() + status.slice(1)}`,
-        `Your ${req.requested_hours}h OT request for ${format(new Date(req.date), "MMM d")} was ${status}.`,
+        `Your ${finalHours}h OT request for ${format(new Date(req.date), "MMM d")} was ${status}.${detail}`,
         req.id
       );
       fetchPendingRequests();
@@ -129,17 +138,24 @@ const OTRequests = () => {
     if (!editReq || !user) return;
     const newHours = parseFloat(editHours);
     if (isNaN(newHours) || newHours <= 0) { toast.error("Invalid hours"); return; }
+
+    // Intelligent OT fulfillment: check worked hours vs standard
+    const adjustedHours = await applyOTFulfillment(editReq.user_id, editReq.date, newHours);
+
     const { error } = await supabase
       .from("overtime_requests")
-      .update({ requested_hours: newHours, status: "approved" as any, approved_by: user.id })
+      .update({ requested_hours: adjustedHours, status: "modified" as any, approved_by: user.id })
       .eq("id", editReq.id);
     if (error) toast.error(error.message);
     else {
-      toast.success("Hours modified & approved");
+      const msg = adjustedHours < newHours
+        ? `Modified to ${newHours}h, adjusted to ${adjustedHours}h after fulfillment rule`
+        : `Hours modified to ${adjustedHours}h & approved`;
+      toast.success(msg);
       await notifyEmployee(
         editReq.user_id,
         "OT Hours Modified",
-        `Your OT request was modified to ${newHours}h and approved.`,
+        `Your OT request was modified to ${adjustedHours}h (adjusted for standard hours fulfillment).`,
         editReq.id
       );
       setEditOpen(false);
