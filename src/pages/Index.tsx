@@ -22,6 +22,7 @@ const Dashboard = () => {
   const [currentTime, setCurrentTime] = useState(new Date());
   const [todayLog, setTodayLog] = useState<any>(null);
   const [recentLogs, setRecentLogs] = useState<any[]>([]);
+  const [approvedOT, setApprovedOT] = useState<any[]>([]);
   const [loading, setLoading] = useState(false);
   const isManagerOrAdmin = role === "manager" || role === "admin";
 
