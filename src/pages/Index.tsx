@@ -22,6 +22,7 @@ const Dashboard = () => {
   const [currentTime, setCurrentTime] = useState(new Date());
   const [todayLog, setTodayLog] = useState<any>(null);
   const [recentLogs, setRecentLogs] = useState<any[]>([]);
+  const [approvedOT, setApprovedOT] = useState<any[]>([]);
   const [loading, setLoading] = useState(false);
   const isManagerOrAdmin = role === "manager" || role === "admin";
 
@@ -41,11 +42,11 @@ const Dashboard = () => {
   const fetchEmployeeData = useCallback(async () => {
     if (!user) return;
     const today = localToday();
-    const [{ data: todayData }, { data: recent }] = await Promise.all([
+    const [{ data: todayData }, { data: recent }, { data: otData }] = await Promise.all([
       supabase.from("attendance_logs").select("*").eq("user_id", user.id).eq("date", today).is("clock_out", null).maybeSingle(),
       supabase.from("attendance_logs").select("*").eq("user_id", user.id).order("date", { ascending: false }).limit(10),
+      supabase.from("overtime_requests").select("*").eq("user_id", user.id).in("status", ["approved", "modified"]).order("date", { ascending: false }).limit(20),
     ]);
-    // If no active session, check for a completed one today
     if (!todayData) {
       const { data: completedToday } = await supabase.from("attendance_logs").select("*").eq("user_id", user.id).eq("date", today).order("created_at", { ascending: false }).limit(1).maybeSingle();
       setTodayLog(completedToday);
@@ -53,24 +54,28 @@ const Dashboard = () => {
       setTodayLog(todayData);
     }
     setRecentLogs(recent || []);
+    setApprovedOT(otData || []);
   }, [user]);
 
   const fetchAdminData = useCallback(async () => {
     if (!user || !isManagerOrAdmin) return;
     const today = localToday();
 
-    const [{ data: active }, { data: pending }, { data: todayLogs }, { data: history }] = await Promise.all([
+    const [{ data: active }, { data: pending }, { data: todayLogs }, { data: history }, { data: approvedOTToday }] = await Promise.all([
       supabase.from("attendance_logs").select("*, profiles!attendance_logs_user_id_fkey(full_name, email)").eq("date", today).is("clock_out", null),
       supabase.from("overtime_requests").select("*, profiles!overtime_requests_user_id_fkey(full_name, email)").eq("status", "pending"),
       supabase.from("attendance_logs").select("overtime_hours").eq("date", today),
       supabase.from("overtime_requests").select("*, profiles!overtime_requests_user_id_fkey(full_name, email)").neq("status", "pending").order("updated_at", { ascending: false }).limit(10),
+      supabase.from("overtime_requests").select("requested_hours").eq("date", today).in("status", ["approved", "modified"]),
     ]);
 
     setActiveLogs(active || []);
     setPendingRequests(pending || []);
     setApprovalHistory(history || []);
 
-    const totalOTToday = (todayLogs || []).reduce((sum: number, l: any) => sum + (l.overtime_hours || 0), 0);
+    const clockOT = (todayLogs || []).reduce((sum: number, l: any) => sum + (l.overtime_hours || 0), 0);
+    const requestOT = (approvedOTToday || []).reduce((sum: number, l: any) => sum + (l.requested_hours || 0), 0);
+    const totalOTToday = clockOT + requestOT;
     setStats({
       totalOTToday: Math.round(totalOTToday * 10) / 10,
       pendingCount: (pending || []).length,
@@ -432,25 +437,34 @@ const Dashboard = () => {
                 <TableHead>Total Hours</TableHead>
                 <TableHead>Breaks</TableHead>
                 <TableHead>Overtime</TableHead>
+                <TableHead>Approved OT</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
               {recentLogs.length === 0 ? (
-                <TableRow><TableCell colSpan={6} className="text-center text-muted-foreground">No records yet</TableCell></TableRow>
-              ) : recentLogs.map((log) => (
-                <TableRow key={log.id}>
-                  <TableCell>{format(new Date(log.date), "MMM d, yyyy")}</TableCell>
-                  <TableCell>{log.clock_in ? format(new Date(log.clock_in), "HH:mm") : "—"}</TableCell>
-                  <TableCell>{log.clock_out ? format(new Date(log.clock_out), "HH:mm") : "—"}</TableCell>
-                  <TableCell>{log.total_hours?.toFixed(1) || "—"}</TableCell>
-                  <TableCell>{log.break_minutes ? `${log.break_minutes}m` : "0m"}</TableCell>
-                  <TableCell>
-                    {log.overtime_hours > 0 ? (
-                      <Badge variant="destructive">{log.overtime_hours.toFixed(1)}h</Badge>
-                    ) : "0.0"}
-                  </TableCell>
-                </TableRow>
-              ))}
+                <TableRow><TableCell colSpan={7} className="text-center text-muted-foreground">No records yet</TableCell></TableRow>
+              ) : recentLogs.map((log) => {
+                const dayApprovedOT = approvedOT.filter(ot => ot.date === log.date).reduce((sum: number, ot: any) => sum + (ot.requested_hours || 0), 0);
+                return (
+                  <TableRow key={log.id}>
+                    <TableCell>{format(new Date(log.date), "MMM d, yyyy")}</TableCell>
+                    <TableCell>{log.clock_in ? format(new Date(log.clock_in), "HH:mm") : "—"}</TableCell>
+                    <TableCell>{log.clock_out ? format(new Date(log.clock_out), "HH:mm") : "—"}</TableCell>
+                    <TableCell>{log.total_hours?.toFixed(1) || "—"}</TableCell>
+                    <TableCell>{log.break_minutes ? `${log.break_minutes}m` : "0m"}</TableCell>
+                    <TableCell>
+                      {log.overtime_hours > 0 ? (
+                        <Badge variant="destructive">{log.overtime_hours.toFixed(1)}h</Badge>
+                      ) : "0.0"}
+                    </TableCell>
+                    <TableCell>
+                      {dayApprovedOT > 0 ? (
+                        <Badge className="bg-lime-500 text-white border-lime-500">{dayApprovedOT.toFixed(1)}h</Badge>
+                      ) : "—"}
+                    </TableCell>
+                  </TableRow>
+                );
+              })}
             </TableBody>
           </Table>
         </CardContent>

@@ -12,6 +12,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from 
 import { toast } from "sonner";
 import { Plus, Pencil, Users, Search } from "lucide-react";
 import { BulkUploadDialog } from "@/components/BulkUploadDialog";
+import { useRealtimeSubscription } from "@/hooks/useRealtimeSubscription";
 
 const EMPLOYMENT_TYPES = ["Permanent", "Contractual", "Pay-per-Hour", "Short Term", "Intern"];
 
@@ -53,6 +54,9 @@ const EmployeeManagement = () => {
   }, []);
 
   useEffect(() => { fetchEmployees(); }, [fetchEmployees]);
+
+  useRealtimeSubscription("profiles", fetchEmployees, "emp-mgmt-profiles");
+  useRealtimeSubscription("user_roles", fetchEmployees, "emp-mgmt-roles");
 
   const resetForm = () => {
     setForm({ full_name: "", email: "", department: "", role: "employee", reporting_manager_id: "", employment_type: "Permanent" });
