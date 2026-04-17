@@ -34,6 +34,8 @@ const Dashboard = () => {
 
   const [manualOpen, setManualOpen] = useState(false);
   const [manualForm, setManualForm] = useState({ employee_email: "", date: localToday(), clock_in: "09:00", clock_out: "18:00", overtime_hours: "1" });
+  const [workLogOpen, setWorkLogOpen] = useState(false);
+  const [pendingClockOut, setPendingClockOut] = useState<{ clockOutTime: string; logId: string; totalHours: number; overtimeHours: number; breakMins: number } | null>(null);
 
   useEffect(() => {
     const timer = setInterval(() => setCurrentTime(new Date()), 1000);
