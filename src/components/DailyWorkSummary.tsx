@@ -179,6 +179,22 @@ const DailyWorkSummary = () => {
 
   const groups = buildGroups(attendance, workLogs);
 
+  // Compute total hours per month (yyyy-MM) from attendance.
+  const monthlyTotals = new Map<string, number>();
+  attendance.forEach((a) => {
+    const key = a.date.slice(0, 7); // yyyy-MM
+    monthlyTotals.set(key, (monthlyTotals.get(key) ?? 0) + (a.total_hours ?? 0));
+  });
+
+  // Group day-groups by month key, preserving descending date order.
+  const monthBuckets: { month: string; days: typeof groups }[] = [];
+  groups.forEach((g) => {
+    const key = g.date.slice(0, 7);
+    const last = monthBuckets[monthBuckets.length - 1];
+    if (last && last.month === key) last.days.push(g);
+    else monthBuckets.push({ month: key, days: [g] });
+  });
+
   return (
     <Card>
       <CardHeader>
@@ -186,13 +202,25 @@ const DailyWorkSummary = () => {
           <ClipboardList className="h-5 w-5" /> Daily Work Summary
         </CardTitle>
       </CardHeader>
-      <CardContent className="space-y-6">
+      <CardContent className="space-y-8">
         {groups.length === 0 ? (
           <p className="text-center text-sm text-muted-foreground py-6">
             No records yet. Clock in to get started.
           </p>
         ) : (
-          groups.map((g) => {
+          monthBuckets.map((bucket) => {
+            const monthTotal = monthlyTotals.get(bucket.month) ?? 0;
+            return (
+              <div key={bucket.month} className="space-y-4">
+                <div className="flex flex-wrap items-center justify-between gap-2 border-b pb-2">
+                  <h3 className="text-lg font-semibold">
+                    {format(parseISO(`${bucket.month}-01`), "MMMM yyyy")}
+                  </h3>
+                  <Badge className="bg-primary text-primary-foreground text-sm">
+                    Monthly Total: {monthTotal.toFixed(2)} hrs
+                  </Badge>
+                </div>
+                {bucket.days.map((g) => {
             const att = g.attendance;
             const clockIn = att?.clock_in
               ? format(new Date(att.clock_in), "HH:mm")
@@ -278,6 +306,9 @@ const DailyWorkSummary = () => {
                     )}
                   </TableBody>
                 </Table>
+              </div>
+            );
+          })}
               </div>
             );
           })
