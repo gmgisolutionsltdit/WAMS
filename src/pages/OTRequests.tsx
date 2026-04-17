@@ -15,6 +15,7 @@ import { format } from "date-fns";
 import { useRealtimeSubscription } from "@/hooks/useRealtimeSubscription";
 import { notifyManagersAndAdmins, notifyEmployee } from "@/lib/notifications";
 import { applyOTFulfillment } from "@/lib/otFulfillment";
+import DailyWorkLogDialog from "@/components/DailyWorkLogDialog";
 
 /** Color helper for OT status badges */
 const otStatusStyle = (status: string) => {
