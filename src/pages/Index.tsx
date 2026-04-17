@@ -13,6 +13,7 @@ import { Label } from "@/components/ui/label";
 import { Clock, LogIn, LogOut, Timer, AlertCircle, Users, CheckSquare, Plus, Check, X, Pause, Play } from "lucide-react";
 import { toast } from "sonner";
 import { format } from "date-fns";
+import DailyWorkLogDialog from "@/components/DailyWorkLogDialog";
 
 /** Return today's date string in the user's local timezone (yyyy-MM-dd). */
 const localToday = () => format(new Date(), "yyyy-MM-dd");
