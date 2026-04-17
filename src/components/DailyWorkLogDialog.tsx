@@ -35,11 +35,42 @@ type TaskRow = { task: string; status: string };
 
 const emptyRow = (): TaskRow => ({ task: "", status: "" });
 
-const DailyWorkLogDialog = () => {
+interface DailyWorkLogDialogProps {
+  /** Controlled open state. When omitted, the component manages its own state and renders a trigger button. */
+  open?: boolean;
+  onOpenChange?: (open: boolean) => void;
+  /** Called after a successful submit (or skip). Useful for chaining e.g. clock-out flow. */
+  onSubmitted?: () => void | Promise<void>;
+  /** Custom label for the submit button. */
+  submitLabel?: string;
+  /** Hide the default trigger button (e.g., when opened programmatically). */
+  hideTrigger?: boolean;
+  /** Custom title text. */
+  title?: string;
+  /** Custom description text. */
+  description?: string;
+}
+
+const DailyWorkLogDialog = ({
+  open: controlledOpen,
+  onOpenChange,
+  onSubmitted,
+  submitLabel = "Submit",
+  hideTrigger = false,
+  title = "Daily Work Log",
+  description = "Optionally list what you worked on today. You can submit this blank.",
+}: DailyWorkLogDialogProps) => {
   const { user } = useAuth();
-  const [open, setOpen] = useState(false);
+  const [internalOpen, setInternalOpen] = useState(false);
   const [rows, setRows] = useState<TaskRow[]>([emptyRow()]);
   const [submitting, setSubmitting] = useState(false);
+
+  const isControlled = controlledOpen !== undefined;
+  const open = isControlled ? controlledOpen : internalOpen;
+  const setOpen = (v: boolean) => {
+    if (!isControlled) setInternalOpen(v);
+    onOpenChange?.(v);
+  };
 
   const updateRow = (idx: number, patch: Partial<TaskRow>) => {
     setRows((prev) => prev.map((r, i) => (i === idx ? { ...r, ...patch } : r)));
@@ -74,29 +105,28 @@ const DailyWorkLogDialog = () => {
       return;
     }
 
-    toast.success(
-      cleanTasks.length === 0
-        ? "Blank work log submitted"
-        : `Submitted ${cleanTasks.length} task${cleanTasks.length === 1 ? "" : "s"}`,
-    );
+    if (cleanTasks.length > 0) {
+      toast.success(`Logged ${cleanTasks.length} task${cleanTasks.length === 1 ? "" : "s"}`);
+    }
     setRows([emptyRow()]);
     setOpen(false);
+    await onSubmitted?.();
   };
 
   return (
     <Dialog open={open} onOpenChange={setOpen}>
-      <DialogTrigger asChild>
-        <Button variant="outline">
-          <ClipboardList className="h-4 w-4 mr-2" />
-          Log End of Day Work
-        </Button>
-      </DialogTrigger>
+      {!hideTrigger && (
+        <DialogTrigger asChild>
+          <Button variant="outline">
+            <ClipboardList className="h-4 w-4 mr-2" />
+            Log End of Day Work
+          </Button>
+        </DialogTrigger>
+      )}
       <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
         <DialogHeader>
-          <DialogTitle>Daily Work Log</DialogTitle>
-          <DialogDescription>
-            Optionally list what you worked on today. You can submit this blank.
-          </DialogDescription>
+          <DialogTitle>{title}</DialogTitle>
+          <DialogDescription>{description}</DialogDescription>
         </DialogHeader>
 
         <div className="space-y-4">
@@ -154,11 +184,8 @@ const DailyWorkLogDialog = () => {
         </div>
 
         <DialogFooter className="gap-2">
-          <Button variant="outline" onClick={() => setOpen(false)} disabled={submitting}>
-            Cancel
-          </Button>
-          <Button onClick={handleSubmit} disabled={submitting}>
-            {submitting ? "Submitting..." : "Submit"}
+          <Button onClick={handleSubmit} disabled={submitting} className="w-full">
+            {submitting ? "Submitting..." : submitLabel}
           </Button>
         </DialogFooter>
       </DialogContent>

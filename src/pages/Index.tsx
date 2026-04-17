@@ -13,6 +13,7 @@ import { Label } from "@/components/ui/label";
 import { Clock, LogIn, LogOut, Timer, AlertCircle, Users, CheckSquare, Plus, Check, X, Pause, Play } from "lucide-react";
 import { toast } from "sonner";
 import { format } from "date-fns";
+import DailyWorkLogDialog from "@/components/DailyWorkLogDialog";
 
 /** Return today's date string in the user's local timezone (yyyy-MM-dd). */
 const localToday = () => format(new Date(), "yyyy-MM-dd");
@@ -33,6 +34,8 @@ const Dashboard = () => {
 
   const [manualOpen, setManualOpen] = useState(false);
   const [manualForm, setManualForm] = useState({ employee_email: "", date: localToday(), clock_in: "09:00", clock_out: "18:00", overtime_hours: "1" });
+  const [workLogOpen, setWorkLogOpen] = useState(false);
+  const [pendingClockOut, setPendingClockOut] = useState<{ clockOutTime: string; logId: string; totalHours: number; overtimeHours: number; breakMins: number } | null>(null);
 
   useEffect(() => {
     const timer = setInterval(() => setCurrentTime(new Date()), 1000);
@@ -106,9 +109,9 @@ const Dashboard = () => {
     setLoading(false);
   };
 
-  const handleClockOut = async () => {
+  /** Step 1: capture end-of-day time and prompt for the optional Daily Work Log. */
+  const handleClockOut = () => {
     if (!user || !todayLog) return;
-    setLoading(true);
     const now = new Date();
     const clockIn = new Date(todayLog.clock_in);
     const totalMinutes = (now.getTime() - clockIn.getTime()) / 60000;
@@ -116,17 +119,34 @@ const Dashboard = () => {
     const netMinutes = totalMinutes - breakMins;
     const totalHours = Math.round((netMinutes / 60) * 100) / 100;
     const overtimeHours = Math.max(0, Math.round((totalHours - 8) * 100) / 100);
+    setPendingClockOut({
+      clockOutTime: now.toISOString(),
+      logId: todayLog.id,
+      totalHours,
+      overtimeHours,
+      breakMins,
+    });
+    setWorkLogOpen(true);
+  };
+
+  /** Step 2: finalize the clock-out after the work log modal is submitted (or skipped blank). */
+  const finalizeClockOut = async () => {
+    if (!pendingClockOut) return;
+    setLoading(true);
+    const { clockOutTime, logId, totalHours, overtimeHours, breakMins } = pendingClockOut;
     const { error } = await supabase.from("attendance_logs").update({
-      clock_out: now.toISOString(),
+      clock_out: clockOutTime,
       total_hours: totalHours,
       overtime_hours: overtimeHours,
       break_start: null,
       break_end: null,
-    }).eq("id", todayLog.id);
+    }).eq("id", logId);
     if (error) toast.error(error.message);
     else { toast.success(`Clocked out! Total: ${totalHours}h (breaks: ${breakMins}m), OT: ${overtimeHours}h`); fetchEmployeeData(); fetchAdminData(); }
+    setPendingClockOut(null);
     setLoading(false);
   };
+
 
   const handleBreakStart = async () => {
     if (!user || !todayLog) return;
@@ -469,6 +489,24 @@ const Dashboard = () => {
           </Table>
         </CardContent>
       </Card>
+
+      {/* Daily Work Log modal — opens on Clock Out, finalizes the session on submit */}
+      <DailyWorkLogDialog
+        open={workLogOpen}
+        onOpenChange={(v) => {
+          setWorkLogOpen(v);
+          // If the user dismisses without submitting (e.g., ESC/overlay click) while a clock-out is pending,
+          // we still finalize so the session isn't left hanging.
+          if (!v && pendingClockOut) {
+            finalizeClockOut();
+          }
+        }}
+        onSubmitted={finalizeClockOut}
+        hideTrigger
+        submitLabel="Submit & Finish Clock-out"
+        title="Daily Work Log"
+        description="Optionally log what you worked on today, then finish your clock-out. You can submit this blank."
+      />
     </div>
   );
 };
