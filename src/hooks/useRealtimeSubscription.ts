@@ -1,7 +1,7 @@
 import { useEffect } from "react";
 import { supabase } from "@/integrations/supabase/client";
 
-type TableName = "overtime_requests" | "notifications" | "attendance_logs" | "profiles" | "user_roles";
+type TableName = "overtime_requests" | "notifications" | "attendance_logs" | "profiles" | "user_roles" | "daily_work_logs";
 
 export function useRealtimeSubscription(
   table: TableName,
