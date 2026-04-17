@@ -109,9 +109,9 @@ const Dashboard = () => {
     setLoading(false);
   };
 
-  const handleClockOut = async () => {
+  /** Step 1: capture end-of-day time and prompt for the optional Daily Work Log. */
+  const handleClockOut = () => {
     if (!user || !todayLog) return;
-    setLoading(true);
     const now = new Date();
     const clockIn = new Date(todayLog.clock_in);
     const totalMinutes = (now.getTime() - clockIn.getTime()) / 60000;
@@ -119,17 +119,34 @@ const Dashboard = () => {
     const netMinutes = totalMinutes - breakMins;
     const totalHours = Math.round((netMinutes / 60) * 100) / 100;
     const overtimeHours = Math.max(0, Math.round((totalHours - 8) * 100) / 100);
+    setPendingClockOut({
+      clockOutTime: now.toISOString(),
+      logId: todayLog.id,
+      totalHours,
+      overtimeHours,
+      breakMins,
+    });
+    setWorkLogOpen(true);
+  };
+
+  /** Step 2: finalize the clock-out after the work log modal is submitted (or skipped blank). */
+  const finalizeClockOut = async () => {
+    if (!pendingClockOut) return;
+    setLoading(true);
+    const { clockOutTime, logId, totalHours, overtimeHours, breakMins } = pendingClockOut;
     const { error } = await supabase.from("attendance_logs").update({
-      clock_out: now.toISOString(),
+      clock_out: clockOutTime,
       total_hours: totalHours,
       overtime_hours: overtimeHours,
       break_start: null,
       break_end: null,
-    }).eq("id", todayLog.id);
+    }).eq("id", logId);
     if (error) toast.error(error.message);
     else { toast.success(`Clocked out! Total: ${totalHours}h (breaks: ${breakMins}m), OT: ${overtimeHours}h`); fetchEmployeeData(); fetchAdminData(); }
+    setPendingClockOut(null);
     setLoading(false);
   };
+
 
   const handleBreakStart = async () => {
     if (!user || !todayLog) return;
