@@ -489,6 +489,24 @@ const Dashboard = () => {
           </Table>
         </CardContent>
       </Card>
+
+      {/* Daily Work Log modal — opens on Clock Out, finalizes the session on submit */}
+      <DailyWorkLogDialog
+        open={workLogOpen}
+        onOpenChange={(v) => {
+          setWorkLogOpen(v);
+          // If the user dismisses without submitting (e.g., ESC/overlay click) while a clock-out is pending,
+          // we still finalize so the session isn't left hanging.
+          if (!v && pendingClockOut) {
+            finalizeClockOut();
+          }
+        }}
+        onSubmitted={finalizeClockOut}
+        hideTrigger
+        submitLabel="Submit & Finish Clock-out"
+        title="Daily Work Log"
+        description="Optionally log what you worked on today, then finish your clock-out. You can submit this blank."
+      />
     </div>
   );
 };
