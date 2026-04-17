@@ -308,6 +308,9 @@ const DailyWorkSummary = () => {
                 </Table>
               </div>
             );
+          })}
+              </div>
+            );
           })
         )}
       </CardContent>
