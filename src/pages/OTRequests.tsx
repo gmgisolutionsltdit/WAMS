@@ -182,6 +182,10 @@ const OTRequests = () => {
 
   return (
     <div className="space-y-6">
+      <div className="flex justify-end">
+        <DailyWorkLogDialog />
+      </div>
+
       {/* Employee Submit Form */}
       <Card>
         <CardHeader><CardTitle>Submit Overtime Request</CardTitle></CardHeader>
