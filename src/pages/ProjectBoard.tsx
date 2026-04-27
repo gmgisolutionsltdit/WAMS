@@ -18,6 +18,7 @@ import {
   ArrowLeft, Plus, Settings as SettingsIcon, Calendar as CalendarIcon, MessageSquare, UserPlus,
 } from "lucide-react";
 import { useRealtimeSubscription } from "@/hooks/useRealtimeSubscription";
+import { EmployeePicker } from "@/components/EmployeePicker";
 
 type Column = { id: string; name: string; status: string; position: number; board_id: string };
 type Task = {
@@ -303,13 +304,12 @@ const ProjectBoard = () => {
             </div>
             <div>
               <Label>Assignee</Label>
-              <Select value={form.assignee_id || "none"} onValueChange={(v) => setForm((f) => ({ ...f, assignee_id: v === "none" ? "" : v }))}>
-                <SelectTrigger><SelectValue placeholder="Select assignee" /></SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="none">Unassigned</SelectItem>
-                  {memberProfiles.map((p) => <SelectItem key={p.id} value={p.id}>{p.full_name || p.email}</SelectItem>)}
-                </SelectContent>
-              </Select>
+              <EmployeePicker
+                value={form.assignee_id || null}
+                onChange={(id) => setForm((f) => ({ ...f, assignee_id: id || "" }))}
+                placeholder="Select assignee"
+                restrictToIds={memberProfiles.map((p) => p.id)}
+              />
             </div>
           </div>
           <DialogFooter><Button onClick={submitCreate}>Create</Button></DialogFooter>
@@ -380,13 +380,12 @@ const ProjectBoard = () => {
                   </div>
                   <div>
                     <Label>Assignee</Label>
-                    <Select value={activeTask.assignee_id || "none"} onValueChange={(v) => updateTask({ assignee_id: v === "none" ? null : v })}>
-                      <SelectTrigger><SelectValue placeholder="Unassigned" /></SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="none">Unassigned</SelectItem>
-                        {memberProfiles.map((p) => <SelectItem key={p.id} value={p.id}>{p.full_name || p.email}</SelectItem>)}
-                      </SelectContent>
-                    </Select>
+                    <EmployeePicker
+                      value={activeTask.assignee_id}
+                      onChange={(id) => updateTask({ assignee_id: id })}
+                      placeholder="Unassigned"
+                      restrictToIds={memberProfiles.map((p) => p.id)}
+                    />
                   </div>
                   <div><Label>Due Date</Label><Input type="date" value={activeTask.due_date || ""} onChange={(e) => updateTask({ due_date: e.target.value || null })} /></div>
                   <div className="text-xs text-muted-foreground pt-2">
