@@ -53,7 +53,6 @@ const ProjectBoard = () => {
   const [newComment, setNewComment] = useState("");
   const [createOpen, setCreateOpen] = useState(false);
   const [createColId, setCreateColId] = useState<string | null>(null);
-  const [memberOpen, setMemberOpen] = useState(false);
   const [taskCounter, setTaskCounter] = useState(0);
   const [form, setForm] = useState({
     title: "", description: "", priority: "medium", assignee_id: "", due_date: "",
