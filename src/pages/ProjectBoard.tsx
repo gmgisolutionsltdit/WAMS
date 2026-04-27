@@ -19,6 +19,7 @@ import {
 } from "lucide-react";
 import { useRealtimeSubscription } from "@/hooks/useRealtimeSubscription";
 import { EmployeePicker } from "@/components/EmployeePicker";
+import { ProjectMemberSelector } from "@/components/ProjectMemberSelector";
 
 type Column = { id: string; name: string; status: string; position: number; board_id: string };
 type Task = {
