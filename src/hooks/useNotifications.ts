@@ -10,6 +10,7 @@ export interface Notification {
   title: string;
   message: string | null;
   related_id: string | null;
+  route: string | null;
   is_read: boolean;
   created_at: string;
 }
