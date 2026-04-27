@@ -71,8 +71,11 @@ const LeaveManagement = () => {
   const [holidays, setHolidays] = useState<Holiday[]>([]);
   const [settings, setSettings] = useState<Settings>({ weekend_days: [5, 6] });
   const [open, setOpen] = useState(false);
-  const [form, setForm] = useState({
-    leave_type_id: "", start_date: "", end_date: "", day_type: "full" as const, reason: "",
+  const [form, setForm] = useState<{
+    leave_type_id: string; start_date: string; end_date: string;
+    day_type: "full" | "first_half" | "second_half"; reason: string;
+  }>({
+    leave_type_id: "", start_date: "", end_date: "", day_type: "full", reason: "",
   });
   const [tab, setTab] = useState("calendar");
   const [selectedDay, setSelectedDay] = useState<Date | undefined>(new Date());
