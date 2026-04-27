@@ -480,11 +480,14 @@ const EmployeeManagement = () => {
               </DialogFooter>
             </DialogContent>
           </Dialog>
-        </div>
+          </div>
+        )}
       </CardHeader>
       <CardContent className="space-y-4">
         <p className="text-xs text-muted-foreground">
-          Admin can create accounts directly with a temporary password, reset passwords, and bulk-upload via CSV.
+          {isAdmin
+            ? "Admin can create accounts directly with a temporary password, reset passwords, and bulk-upload via CSV."
+            : "You are viewing your direct reports. Contact an Admin to add or modify employee accounts."}
         </p>
         <div className="flex flex-col sm:flex-row gap-3">
           <div className="relative flex-1">
