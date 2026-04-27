@@ -355,29 +355,33 @@ const EmployeeManagement = () => {
   return (
     <Card>
       <CardHeader className="flex flex-row items-center justify-between flex-wrap gap-2">
-        <CardTitle className="flex items-center gap-2"><Users className="h-5 w-5" /> Employee Management</CardTitle>
-        <div className="flex items-center gap-2">
-          <Button size="sm" variant="outline" onClick={downloadTemplate}>
-            <Download className="mr-1 h-4 w-4" /> Template
-          </Button>
-          <Button size="sm" variant="outline" onClick={() => csvInputRef.current?.click()}>
-            <Upload className="mr-1 h-4 w-4" /> Bulk Upload
-          </Button>
-          <input
-            ref={csvInputRef}
-            type="file"
-            accept=".csv"
-            className="hidden"
-            onChange={(e) => {
-              const f = e.target.files?.[0];
-              if (f) { setBulkOpen(true); handleBulkUpload(f); }
-              if (csvInputRef.current) csvInputRef.current.value = "";
-            }}
-          />
-          <Dialog open={dialogOpen} onOpenChange={(o) => { setDialogOpen(o); if (!o) resetForm(); }}>
-            <DialogTrigger asChild>
-              <Button size="sm" onClick={openCreate}><Plus className="mr-1 h-4 w-4" /> Add Employee</Button>
-            </DialogTrigger>
+        <CardTitle className="flex items-center gap-2">
+          <Users className="h-5 w-5" /> Employee Management
+          {!isAdmin && <Badge variant="outline" className="ml-2 text-[10px]">My Team</Badge>}
+        </CardTitle>
+        {isAdmin && (
+          <div className="flex items-center gap-2">
+            <Button size="sm" variant="outline" onClick={downloadTemplate}>
+              <Download className="mr-1 h-4 w-4" /> Template
+            </Button>
+            <Button size="sm" variant="outline" onClick={() => csvInputRef.current?.click()}>
+              <Upload className="mr-1 h-4 w-4" /> Bulk Upload
+            </Button>
+            <input
+              ref={csvInputRef}
+              type="file"
+              accept=".csv"
+              className="hidden"
+              onChange={(e) => {
+                const f = e.target.files?.[0];
+                if (f) { setBulkOpen(true); handleBulkUpload(f); }
+                if (csvInputRef.current) csvInputRef.current.value = "";
+              }}
+            />
+            <Dialog open={dialogOpen} onOpenChange={(o) => { setDialogOpen(o); if (!o) resetForm(); }}>
+              <DialogTrigger asChild>
+                <Button size="sm" onClick={openCreate}><Plus className="mr-1 h-4 w-4" /> Add Employee</Button>
+              </DialogTrigger>
             <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto">
               <DialogHeader>
                 <DialogTitle>{editingId ? "Edit Employee" : "Add New Employee"}</DialogTitle>
