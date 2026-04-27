@@ -45,7 +45,7 @@ const Login = () => {
           <div className="mx-auto mb-2 flex h-12 w-12 items-center justify-center rounded-full bg-primary/10">
             <Clock className="h-6 w-6 text-primary" />
           </div>
-          <CardTitle className="text-2xl">Overtime Tracker</CardTitle>
+          <CardTitle className="text-2xl">Office Management System</CardTitle>
           <CardDescription>Sign in to your account</CardDescription>
         </CardHeader>
         <form onSubmit={handleLogin}>
