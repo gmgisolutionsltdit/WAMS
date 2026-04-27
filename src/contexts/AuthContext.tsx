@@ -1,108 +1,136 @@
 import { createContext, useContext, useState, useEffect, useCallback, ReactNode } from "react";
 import { supabase } from "@/integrations/supabase/client";
+import type { Session, User } from "@supabase/supabase-js";
 
 type AppRole = "admin" | "manager" | "employee";
-
-interface MockUser {
-  id: string;
-  email: string;
-}
+type CompanyWing = "GMGI" | "MORU";
+type ServiceStatus = "Permanent" | "Contractual" | "Intern" | "Short-Term" | "Consultant";
+type EmployeeStatus = "Active" | "Inactive" | "Resigned";
 
 interface ProfileData {
+  id: string | null;
   full_name: string | null;
   email: string | null;
   department: string | null;
+  designation: string | null;
+  phone: string | null;
+  photo_url: string | null;
+  company_wing: CompanyWing;
+  service_status: ServiceStatus;
+  employee_status: EmployeeStatus;
+  joining_date: string | null;
+  promotion_date: string | null;
+  resign_date: string | null;
+  daily_ot_cap: number;
+  monthly_ot_cap: number;
+  reporting_manager_id: string | null;
 }
 
-interface EmployeeEntry {
-  user: MockUser;
-  profile: ProfileData;
-  role: AppRole;
-}
+const EMPTY_PROFILE: ProfileData = {
+  id: null, full_name: null, email: null, department: null, designation: null,
+  phone: null, photo_url: null, company_wing: "GMGI", service_status: "Permanent",
+  employee_status: "Active", joining_date: null, promotion_date: null,
+  resign_date: null, daily_ot_cap: 4, monthly_ot_cap: 40, reporting_manager_id: null,
+};
 
 interface AuthContextType {
-  user: MockUser | null;
-  session: any;
+  user: User | null;
+  session: Session | null;
   loading: boolean;
   role: AppRole;
   profile: ProfileData;
   signOut: () => Promise<void>;
-  switchRole: (role: AppRole) => void;
-  switchUser: (userId: string) => void;
-  employees: EmployeeEntry[];
-  refreshEmployees: () => void;
+  refreshProfile: () => Promise<void>;
 }
 
 const AuthContext = createContext<AuthContextType>({
-  user: null, session: null, loading: true, role: "admin",
-  profile: { full_name: null, email: null, department: null },
-  signOut: async () => {}, switchRole: () => {}, switchUser: () => {},
-  employees: [], refreshEmployees: () => {},
+  user: null, session: null, loading: true, role: "employee", profile: EMPTY_PROFILE,
+  signOut: async () => {}, refreshProfile: async () => {},
 });
 
 export const useAuth = () => useContext(AuthContext);
 
 export const AuthProvider = ({ children }: { children: ReactNode }) => {
-  const [employees, setEmployees] = useState<EmployeeEntry[]>([]);
-  const [selectedUserId, setSelectedUserId] = useState<string | null>(null);
+  const [session, setSession] = useState<Session | null>(null);
+  const [user, setUser] = useState<User | null>(null);
+  const [profile, setProfile] = useState<ProfileData>(EMPTY_PROFILE);
+  const [role, setRole] = useState<AppRole>("employee");
   const [loading, setLoading] = useState(true);
 
-  const fetchEmployees = useCallback(async () => {
-    const [{ data: profiles }, { data: roles }] = await Promise.all([
-      supabase.from("profiles").select("id, full_name, email, department").order("full_name"),
-      supabase.from("user_roles").select("user_id, role"),
+  const loadProfileAndRole = useCallback(async (userId: string) => {
+    const [{ data: profileData }, { data: rolesData }] = await Promise.all([
+      supabase.from("profiles").select("*").eq("id", userId).maybeSingle(),
+      supabase.from("user_roles").select("role").eq("user_id", userId),
     ]);
 
-    const roleMap = new Map((roles || []).map(r => [r.user_id, r.role as AppRole]));
-    const list: EmployeeEntry[] = (profiles || []).map(p => ({
-      user: { id: p.id, email: p.email || "" },
-      profile: { full_name: p.full_name, email: p.email, department: p.department },
-      role: roleMap.get(p.id) || "employee",
-    }));
-
-    setEmployees(list);
-
-    // Auto-select first user if none selected
-    if (!selectedUserId && list.length > 0) {
-      setSelectedUserId(list[0].user.id);
+    if (profileData) {
+      setProfile({
+        id: profileData.id,
+        full_name: profileData.full_name,
+        email: profileData.email,
+        department: profileData.department,
+        designation: profileData.designation,
+        phone: profileData.phone,
+        photo_url: profileData.photo_url,
+        company_wing: profileData.company_wing as CompanyWing,
+        service_status: profileData.service_status as ServiceStatus,
+        employee_status: profileData.employee_status as EmployeeStatus,
+        joining_date: profileData.joining_date,
+        promotion_date: profileData.promotion_date,
+        resign_date: profileData.resign_date,
+        daily_ot_cap: Number(profileData.daily_ot_cap),
+        monthly_ot_cap: Number(profileData.monthly_ot_cap),
+        reporting_manager_id: profileData.reporting_manager_id,
+      });
     }
-    setLoading(false);
-  }, [selectedUserId]);
 
-  useEffect(() => { fetchEmployees(); }, []);
+    // Pick highest role: admin > manager > employee
+    const roles = (rolesData || []).map(r => r.role as AppRole);
+    if (roles.includes("admin")) setRole("admin");
+    else if (roles.includes("manager")) setRole("manager");
+    else setRole("employee");
+  }, []);
 
-  // Realtime subscription for profiles changes
   useEffect(() => {
-    const channel = supabase
-      .channel("auth-profiles-sync")
-      .on("postgres_changes", { event: "*", schema: "public", table: "profiles" }, () => fetchEmployees())
-      .on("postgres_changes", { event: "*", schema: "public", table: "user_roles" }, () => fetchEmployees())
-      .subscribe();
-    return () => { supabase.removeChannel(channel); };
-  }, [fetchEmployees]);
+    // Listener FIRST
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, newSession) => {
+      setSession(newSession);
+      setUser(newSession?.user ?? null);
+      if (newSession?.user) {
+        // Defer Supabase calls outside the callback
+        setTimeout(() => { loadProfileAndRole(newSession.user.id); }, 0);
+      } else {
+        setProfile(EMPTY_PROFILE);
+        setRole("employee");
+      }
+    });
 
-  const current = employees.find(e => e.user.id === selectedUserId) || employees[0];
+    // Then check existing session
+    supabase.auth.getSession().then(({ data: { session: existing } }) => {
+      setSession(existing);
+      setUser(existing?.user ?? null);
+      if (existing?.user) {
+        loadProfileAndRole(existing.user.id).finally(() => setLoading(false));
+      } else {
+        setLoading(false);
+      }
+    });
 
-  const switchUser = (userId: string) => setSelectedUserId(userId);
-  const switchRole = (_role: AppRole) => {
-    // Find first employee with this role
-    const match = employees.find(e => e.role === _role);
-    if (match) setSelectedUserId(match.user.id);
+    return () => { subscription.unsubscribe(); };
+  }, [loadProfileAndRole]);
+
+  const refreshProfile = useCallback(async () => {
+    if (user) await loadProfileAndRole(user.id);
+  }, [user, loadProfileAndRole]);
+
+  const signOut = async () => {
+    await supabase.auth.signOut();
+    setProfile(EMPTY_PROFILE);
+    setRole("employee");
   };
 
   return (
-    <AuthContext.Provider value={{
-      user: current?.user || null,
-      session: current ? { user: current.user } : null,
-      loading,
-      role: current?.role || "admin",
-      profile: current?.profile || { full_name: null, email: null, department: null },
-      signOut: async () => {},
-      switchRole,
-      switchUser,
-      employees,
-      refreshEmployees: fetchEmployees,
-    }}>
+    <AuthContext.Provider value={{ user, session, loading, role, profile, signOut, refreshProfile }}>
       {children}
     </AuthContext.Provider>
   );
