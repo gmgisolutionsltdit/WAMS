@@ -1,4 +1,4 @@
-import { Clock, LayoutDashboard, CalendarDays, FileText, CheckSquare, BarChart3, Settings, LogOut, Users, CalendarHeart } from "lucide-react";
+import { Clock, LayoutDashboard, CalendarDays, FileText, CheckSquare, BarChart3, Settings, LogOut, Users, CalendarHeart, FolderKanban, Plane } from "lucide-react";
 import { NavLink } from "@/components/NavLink";
 import { useLocation } from "react-router-dom";
 import { useAuth } from "@/contexts/AuthContext";
@@ -20,6 +20,8 @@ const employeeItems = [
   { title: "Dashboard", url: "/", icon: LayoutDashboard },
   { title: "My Attendance", url: "/attendance", icon: CalendarDays },
   { title: "OT Requests", url: "/ot-requests", icon: FileText },
+  { title: "Leave", url: "/leave", icon: Plane },
+  { title: "Projects", url: "/projects", icon: FolderKanban },
 ];
 
 const managerItems = [
