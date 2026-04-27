@@ -89,7 +89,7 @@ const OTRequests = () => {
     setLoading(true);
     const { data, error } = await supabase
       .from("overtime_requests")
-      .insert({ user_id: user.id, date, requested_hours: calculatedHours, reason })
+      .insert({ user_id: user.id, date, requested_hours: calculatedHours, original_hours: calculatedHours, reason })
       .select()
       .single();
     if (error) toast.error(error.message);
@@ -98,7 +98,8 @@ const OTRequests = () => {
       await notifyManagersAndAdmins(
         "New OT Request",
         `${user.email} requested ${calculatedHours}h overtime for ${date}`,
-        data?.id
+        data?.id,
+        { route: "/approvals", type: "ot_request", requesterId: user.id }
       );
       setStartTime("");
       setEndTime("");
