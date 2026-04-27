@@ -1,10 +1,11 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { BrowserRouter, Route, Routes } from "react-router-dom";
+import { BrowserRouter, Route, Routes, Navigate } from "react-router-dom";
 import { Toaster as Sonner } from "@/components/ui/sonner";
 import { Toaster } from "@/components/ui/toaster";
 import { TooltipProvider } from "@/components/ui/tooltip";
-import { AuthProvider } from "@/contexts/AuthContext";
+import { AuthProvider, useAuth } from "@/contexts/AuthContext";
 import { AppLayout } from "@/components/AppLayout";
+import { ReactNode } from "react";
 import Index from "./pages/Index";
 import Attendance from "./pages/Attendance";
 import OTRequests from "./pages/OTRequests";
@@ -12,9 +13,58 @@ import Approvals from "./pages/Approvals";
 import Reports from "./pages/Reports";
 import SettingsPage from "./pages/SettingsPage";
 import EmployeeManagement from "./pages/EmployeeManagement";
+import Login from "./pages/Login";
+import Signup from "./pages/Signup";
+import ForgotPassword from "./pages/ForgotPassword";
+import ResetPassword from "./pages/ResetPassword";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
+
+const ProtectedRoute = ({ children }: { children: ReactNode }) => {
+  const { user, loading } = useAuth();
+  if (loading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center">
+        <div className="text-muted-foreground text-sm">Loading…</div>
+      </div>
+    );
+  }
+  if (!user) return <Navigate to="/login" replace />;
+  return <AppLayout>{children}</AppLayout>;
+};
+
+const PublicOnlyRoute = ({ children }: { children: ReactNode }) => {
+  const { user, loading } = useAuth();
+  if (loading) return null;
+  if (user) return <Navigate to="/" replace />;
+  return <>{children}</>;
+};
+
+const RoleGate = ({ children, allow }: { children: ReactNode; allow: ("admin" | "manager" | "employee")[] }) => {
+  const { role } = useAuth();
+  if (!allow.includes(role)) return <Navigate to="/" replace />;
+  return <>{children}</>;
+};
+
+const AppRoutes = () => (
+  <Routes>
+    <Route path="/login" element={<PublicOnlyRoute><Login /></PublicOnlyRoute>} />
+    <Route path="/signup" element={<PublicOnlyRoute><Signup /></PublicOnlyRoute>} />
+    <Route path="/forgot-password" element={<PublicOnlyRoute><ForgotPassword /></PublicOnlyRoute>} />
+    <Route path="/reset-password" element={<ResetPassword />} />
+
+    <Route path="/" element={<ProtectedRoute><Index /></ProtectedRoute>} />
+    <Route path="/attendance" element={<ProtectedRoute><Attendance /></ProtectedRoute>} />
+    <Route path="/ot-requests" element={<ProtectedRoute><OTRequests /></ProtectedRoute>} />
+    <Route path="/approvals" element={<ProtectedRoute><RoleGate allow={["admin", "manager"]}><Approvals /></RoleGate></ProtectedRoute>} />
+    <Route path="/reports" element={<ProtectedRoute><RoleGate allow={["admin", "manager"]}><Reports /></RoleGate></ProtectedRoute>} />
+    <Route path="/settings" element={<ProtectedRoute><RoleGate allow={["admin"]}><SettingsPage /></RoleGate></ProtectedRoute>} />
+    <Route path="/employees" element={<ProtectedRoute><RoleGate allow={["admin"]}><EmployeeManagement /></RoleGate></ProtectedRoute>} />
+
+    <Route path="*" element={<NotFound />} />
+  </Routes>
+);
 
 const App = () => (
   <QueryClientProvider client={queryClient}>
@@ -23,16 +73,7 @@ const App = () => (
       <Sonner />
       <BrowserRouter>
         <AuthProvider>
-          <Routes>
-            <Route path="/" element={<AppLayout><Index /></AppLayout>} />
-            <Route path="/attendance" element={<AppLayout><Attendance /></AppLayout>} />
-            <Route path="/ot-requests" element={<AppLayout><OTRequests /></AppLayout>} />
-            <Route path="/approvals" element={<AppLayout><Approvals /></AppLayout>} />
-            <Route path="/reports" element={<AppLayout><Reports /></AppLayout>} />
-            <Route path="/settings" element={<AppLayout><SettingsPage /></AppLayout>} />
-            <Route path="/employees" element={<AppLayout><EmployeeManagement /></AppLayout>} />
-            <Route path="*" element={<NotFound />} />
-          </Routes>
+          <AppRoutes />
         </AuthProvider>
       </BrowserRouter>
     </TooltipProvider>
