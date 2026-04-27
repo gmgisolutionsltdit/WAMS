@@ -336,14 +336,15 @@ const EmployeeManagement = () => {
     return matchesSearch && matchesRole && matchesWing && matchesStatus;
   });
 
-  if (role !== "admin") {
+  if (role !== "admin" && role !== "manager") {
     return (
       <Card><CardContent className="p-8 text-center text-muted-foreground">
         <Users className="h-12 w-12 mx-auto mb-4 opacity-50" />
-        <p>Only Admins can access Employee Management.</p>
+        <p>Only Admins and Reporting Managers can access Employee Management.</p>
       </CardContent></Card>
     );
   }
+  const isAdmin = role === "admin";
 
   const statusBadge = (s: string) => {
     if (s === "Active") return "bg-green-100 text-green-700 border-green-300";
