@@ -61,6 +61,10 @@ const OTRequests = () => {
       .eq("user_id", user.id)
       .order("created_at", { ascending: false });
     setRequests(data || []);
+    const { data: pf } = await supabase.from("profiles").select("id, full_name, email");
+    const map: Record<string, string> = {};
+    (pf || []).forEach((p: any) => { map[p.id] = p.full_name || p.email || "—"; });
+    setProfilesMap(map);
   }, [user]);
 
   const fetchPendingRequests = useCallback(async () => {
