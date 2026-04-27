@@ -13,6 +13,7 @@ import Approvals from "./pages/Approvals";
 import Reports from "./pages/Reports";
 import SettingsPage from "./pages/SettingsPage";
 import EmployeeManagement from "./pages/EmployeeManagement";
+import Holidays from "./pages/Holidays";
 import Login from "./pages/Login";
 import Signup from "./pages/Signup";
 import ForgotPassword from "./pages/ForgotPassword";
@@ -61,6 +62,7 @@ const AppRoutes = () => (
     <Route path="/reports" element={<ProtectedRoute><RoleGate allow={["admin", "manager"]}><Reports /></RoleGate></ProtectedRoute>} />
     <Route path="/settings" element={<ProtectedRoute><RoleGate allow={["admin"]}><SettingsPage /></RoleGate></ProtectedRoute>} />
     <Route path="/employees" element={<ProtectedRoute><RoleGate allow={["admin"]}><EmployeeManagement /></RoleGate></ProtectedRoute>} />
+    <Route path="/holidays" element={<ProtectedRoute><RoleGate allow={["admin"]}><Holidays /></RoleGate></ProtectedRoute>} />
 
     <Route path="*" element={<NotFound />} />
   </Routes>
