@@ -47,7 +47,7 @@ type EmployeeRow = {
 };
 
 const EmployeeManagement = () => {
-  const { role } = useAuth();
+  const { role, user } = useAuth();
   const [employees, setEmployees] = useState<EmployeeRow[]>([]);
   const [managers, setManagers] = useState<EmployeeRow[]>([]);
   const [dialogOpen, setDialogOpen] = useState(false);
@@ -61,6 +61,8 @@ const EmployeeManagement = () => {
   const [bulkOpen, setBulkOpen] = useState(false);
   const [bulkResults, setBulkResults] = useState<any[] | null>(null);
   const [uploadingPhoto, setUploadingPhoto] = useState(false);
+  const [loadingList, setLoadingList] = useState(true);
+  const [fetchError, setFetchError] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const csvInputRef = useRef<HTMLInputElement>(null);
 
@@ -75,17 +77,41 @@ const EmployeeManagement = () => {
   const [form, setForm] = useState(initialForm);
 
   const fetchEmployees = useCallback(async () => {
-    const [{ data: profiles }, { data: roles }] = await Promise.all([
-      supabase.from("profiles").select("*").order("created_at", { ascending: false }),
+    setLoadingList(true);
+    setFetchError(null);
+    // Role-aware query: admins see all, managers see their direct reports only.
+    let profilesQuery = supabase
+      .from("profiles")
+      .select("*")
+      .order("created_at", { ascending: false });
+    if (role === "manager" && user) {
+      profilesQuery = profilesQuery.eq("reporting_manager_id", user.id);
+    }
+    const [{ data: profiles, error: pErr }, { data: roles, error: rErr }] = await Promise.all([
+      profilesQuery,
       supabase.from("user_roles").select("user_id, role"),
     ]);
+    if (pErr || rErr) {
+      const msg = pErr?.message || rErr?.message || "Failed to load employees";
+      console.error("[EmployeeManagement] Fetch error:", { pErr, rErr });
+      setFetchError(msg);
+      setLoadingList(false);
+      return;
+    }
     const roleMap = new Map((roles || []).map((r) => [r.user_id, r.role as string]));
     const merged = (profiles || []).map((p: any) => ({ ...p, _role: roleMap.get(p.id) || "employee" })) as EmployeeRow[];
     setEmployees(merged);
 
-    const managerIds = (roles || []).filter((r) => r.role === "manager" || r.role === "admin").map((r) => r.user_id);
-    setManagers(merged.filter((m) => managerIds.includes(m.id)));
-  }, []);
+    // Managers list = anyone in this scope who is admin/manager (used for "Reporting To" dropdown).
+    // Admins additionally need full picker; fetch all when admin.
+    if (role === "admin") {
+      const managerIds = (roles || []).filter((r) => r.role === "manager" || r.role === "admin").map((r) => r.user_id);
+      setManagers(merged.filter((m) => managerIds.includes(m.id)));
+    } else {
+      setManagers([]);
+    }
+    setLoadingList(false);
+  }, [role, user]);
 
   useEffect(() => { fetchEmployees(); }, [fetchEmployees]);
   useRealtimeSubscription("profiles", fetchEmployees, "emp-mgmt-profiles");
