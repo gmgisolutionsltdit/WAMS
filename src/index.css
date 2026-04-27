@@ -46,6 +46,24 @@ All colors MUST be HSL.
     --sidebar-accent-foreground: 210 40% 98%;
     --sidebar-border: 217.2 32.6% 17.5%;
     --sidebar-ring: 217.2 91.2% 59.8%;
+
+    /* Brand & dashboard tokens */
+    --brand: 217.2 91.2% 59.8%;
+    --brand-foreground: 0 0% 100%;
+    --brand-2: 262 83% 62%;
+    --success: 142 71% 45%;
+    --warning: 38 92% 50%;
+    --info: 199 89% 48%;
+
+    --gradient-hero: linear-gradient(135deg, hsl(217 91% 60%) 0%, hsl(262 83% 62%) 100%);
+    --gradient-success: linear-gradient(135deg, hsl(142 71% 45%) 0%, hsl(160 84% 39%) 100%);
+    --gradient-warning: linear-gradient(135deg, hsl(38 92% 50%) 0%, hsl(25 95% 53%) 100%);
+    --gradient-info: linear-gradient(135deg, hsl(199 89% 48%) 0%, hsl(217 91% 60%) 100%);
+    --gradient-subtle: linear-gradient(180deg, hsl(210 40% 98%) 0%, hsl(210 40% 96%) 100%);
+
+    --shadow-soft: 0 2px 8px -2px hsl(222 47% 11% / 0.06), 0 4px 16px -4px hsl(222 47% 11% / 0.08);
+    --shadow-glow: 0 8px 32px -8px hsl(217 91% 60% / 0.35);
+    --shadow-card: 0 1px 3px 0 hsl(222 47% 11% / 0.05), 0 4px 12px -2px hsl(222 47% 11% / 0.08);
   }
 
   .dark {
