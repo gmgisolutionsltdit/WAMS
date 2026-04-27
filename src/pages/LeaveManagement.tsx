@@ -516,8 +516,11 @@ const LeaveManagement = () => {
                         <TableCell>{statusBadge(r.status)}</TableCell>
                         <TableCell className="text-right">
                           {r.status === "pending" && (
-                            <div className="flex gap-1 justify-end">
+                            <div className="flex gap-1 justify-end flex-wrap">
                               <Button size="sm" variant="default" onClick={() => decide(r, "approved")}>Approve</Button>
+                              <Button size="sm" variant="outline" onClick={() => openModify(r)}>
+                                <Pencil className="h-3 w-3 mr-1" /> Modify
+                              </Button>
                               <Button size="sm" variant="destructive" onClick={() => decide(r, "rejected")}>Reject</Button>
                             </div>
                           )}
@@ -531,6 +534,70 @@ const LeaveManagement = () => {
           </TabsContent>
         )}
       </Tabs>
+
+      {/* Modify & Approve Leave dialog */}
+      <Dialog open={modOpen} onOpenChange={setModOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Modify &amp; Approve Leave</DialogTitle>
+            <DialogDescription>
+              Adjust the leave type, dates or day type before approving. The employee will be notified of the changes.
+            </DialogDescription>
+          </DialogHeader>
+          {modReq && (
+            <div className="space-y-3">
+              <div className="text-sm text-muted-foreground">
+                Original: <strong>{typeName(modReq.leave_type_id)}</strong> · {modReq.start_date} → {modReq.end_date} ({modReq.total_days}d)
+              </div>
+              <div>
+                <Label>Leave Type</Label>
+                <Select value={modForm.leave_type_id} onValueChange={(v) => setModForm((f) => ({ ...f, leave_type_id: v }))}>
+                  <SelectTrigger><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    {leaveTypes.map((t) => (
+                      <SelectItem key={t.id} value={t.id}>{t.name}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <Label>Start Date</Label>
+                  <Input type="date" value={modForm.start_date} onChange={(e) => setModForm((f) => ({ ...f, start_date: e.target.value }))} />
+                </div>
+                <div>
+                  <Label>End Date</Label>
+                  <Input type="date" value={modForm.end_date} onChange={(e) => setModForm((f) => ({ ...f, end_date: e.target.value }))} />
+                </div>
+              </div>
+              <div>
+                <Label>Day Type</Label>
+                <Select value={modForm.day_type} onValueChange={(v: any) => setModForm((f) => ({ ...f, day_type: v }))}>
+                  <SelectTrigger><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="full">Full Day</SelectItem>
+                    <SelectItem value="first_half">First Half</SelectItem>
+                    <SelectItem value="second_half">Second Half</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              <div>
+                <Label>Note to employee (optional)</Label>
+                <Textarea value={modForm.note} onChange={(e) => setModForm((f) => ({ ...f, note: e.target.value }))} />
+              </div>
+              <div className="text-sm text-muted-foreground">
+                New working days: <strong>
+                  {computeWorkingDays(modForm.start_date, modForm.end_date, modForm.day_type, settings.weekend_days, holidaySet)}
+                </strong>
+              </div>
+            </div>
+          )}
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setModOpen(false)}>Cancel</Button>
+            <Button onClick={submitModify}>Save &amp; Approve</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 };
