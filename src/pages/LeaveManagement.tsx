@@ -123,7 +123,7 @@ const LeaveManagement = () => {
     if (!form.leave_type_id || !form.start_date || !form.end_date) { toast.error("Fill leave type and dates"); return; }
     const days = computeWorkingDays(form.start_date, form.end_date, form.day_type, settings.weekend_days, holidaySet);
     if (days <= 0) { toast.error("No working days in this range (weekends/holidays excluded)"); return; }
-    const { error } = await supabase.from("leave_requests").insert({
+    const { data, error } = await supabase.from("leave_requests").insert({
       user_id: user!.id,
       leave_type_id: form.leave_type_id,
       start_date: form.start_date,
@@ -131,11 +131,41 @@ const LeaveManagement = () => {
       day_type: form.day_type,
       total_days: days,
       reason: form.reason || null,
-    });
+    }).select().single();
     if (error) { toast.error(error.message); return; }
     toast.success(`Leave applied (${days} working day${days !== 1 ? "s" : ""})`);
+    const lt = leaveTypes.find((t) => t.id === form.leave_type_id);
+    await notifyManagersAndAdmins(
+      "New Leave Request",
+      `${user?.email} requested ${lt?.name || "leave"} from ${form.start_date} to ${form.end_date} (${days}d)`,
+      data?.id,
+      { route: "/leave", type: "leave_request", requesterId: user?.id }
+    );
     setOpen(false);
     setForm({ leave_type_id: "", start_date: "", end_date: "", day_type: "full", reason: "" });
+  };
+
+  /** Apply a leave-balance debit. */
+  const applyBalance = async (req: { user_id: string; leave_type_id: string; start_date: string; total_days: number }) => {
+    const { data: bal } = await supabase
+      .from("leave_balances")
+      .select("*")
+      .eq("user_id", req.user_id)
+      .eq("leave_type_id", req.leave_type_id)
+      .eq("year", new Date(req.start_date).getFullYear())
+      .maybeSingle();
+    const lt = leaveTypes.find((l) => l.id === req.leave_type_id);
+    const allocated = bal?.allocated ?? lt?.annual_quota ?? 0;
+    const used = (bal?.used ?? 0) + Number(req.total_days);
+    const carried = bal?.carried_forward ?? 0;
+    if (bal) {
+      await supabase.from("leave_balances").update({ used }).eq("id", bal.id);
+    } else {
+      await supabase.from("leave_balances").insert({
+        user_id: req.user_id, leave_type_id: req.leave_type_id, year: new Date(req.start_date).getFullYear(),
+        allocated, used, carried_forward: carried,
+      });
+    }
   };
 
   const decide = async (req: LeaveRequest, status: "approved" | "rejected", note?: string) => {
@@ -145,27 +175,70 @@ const LeaveManagement = () => {
     if (error) { toast.error(error.message); return; }
 
     if (status === "approved") {
-      const { data: bal } = await supabase
-        .from("leave_balances")
-        .select("*")
-        .eq("user_id", req.user_id)
-        .eq("leave_type_id", req.leave_type_id)
-        .eq("year", new Date(req.start_date).getFullYear())
-        .maybeSingle();
-      const lt = leaveTypes.find((l) => l.id === req.leave_type_id);
-      const allocated = bal?.allocated ?? lt?.annual_quota ?? 0;
-      const used = (bal?.used ?? 0) + Number(req.total_days);
-      const carried = bal?.carried_forward ?? 0;
-      if (bal) {
-        await supabase.from("leave_balances").update({ used }).eq("id", bal.id);
-      } else {
-        await supabase.from("leave_balances").insert({
-          user_id: req.user_id, leave_type_id: req.leave_type_id, year: new Date(req.start_date).getFullYear(),
-          allocated, used, carried_forward: carried,
-        });
-      }
+      await applyBalance(req);
     }
     toast.success(`Leave ${status}`);
+    const lt = leaveTypes.find((l) => l.id === req.leave_type_id);
+    await notifyEmployee(
+      req.user_id,
+      `Leave Request ${status.charAt(0).toUpperCase() + status.slice(1)}`,
+      `Your ${lt?.name || "leave"} request (${req.start_date} → ${req.end_date}) was ${status}.`,
+      req.id,
+      { route: "/leave", type: "leave_update" }
+    );
+  };
+
+  const openModify = (req: LeaveRequest) => {
+    setModReq(req);
+    setModForm({
+      leave_type_id: req.leave_type_id,
+      start_date: req.start_date,
+      end_date: req.end_date,
+      day_type: req.day_type,
+      note: "",
+    });
+    setModOpen(true);
+  };
+
+  const submitModify = async () => {
+    if (!modReq || !user) return;
+    if (!modForm.leave_type_id || !modForm.start_date || !modForm.end_date) { toast.error("Fill all fields"); return; }
+    const days = computeWorkingDays(modForm.start_date, modForm.end_date, modForm.day_type, settings.weekend_days, holidaySet);
+    if (days <= 0) { toast.error("No working days in modified range"); return; }
+    const { error } = await supabase.from("leave_requests").update({
+      leave_type_id: modForm.leave_type_id,
+      start_date: modForm.start_date,
+      end_date: modForm.end_date,
+      day_type: modForm.day_type,
+      total_days: days,
+      status: "approved",
+      approver_id: user.id,
+      approver_note: modForm.note || null,
+      approved_at: new Date().toISOString(),
+      modified_by: user.id,
+      modified_at: new Date().toISOString(),
+      original_start_date: modReq.original_start_date ?? modReq.start_date,
+      original_end_date: modReq.original_end_date ?? modReq.end_date,
+      original_leave_type_id: modReq.original_leave_type_id ?? modReq.leave_type_id,
+      original_day_type: modReq.original_day_type ?? modReq.day_type,
+      original_total_days: modReq.original_total_days ?? modReq.total_days,
+    }).eq("id", modReq.id);
+    if (error) { toast.error(error.message); return; }
+    await applyBalance({
+      user_id: modReq.user_id, leave_type_id: modForm.leave_type_id,
+      start_date: modForm.start_date, total_days: days,
+    });
+    const lt = leaveTypes.find((l) => l.id === modForm.leave_type_id);
+    await notifyEmployee(
+      modReq.user_id,
+      "Leave Modified & Approved",
+      `Your leave was modified to ${lt?.name} (${modForm.start_date} → ${modForm.end_date}, ${days}d) and approved.`,
+      modReq.id,
+      { route: "/leave", type: "leave_update" }
+    );
+    toast.success("Leave modified & approved");
+    setModOpen(false);
+    setModReq(null);
   };
 
   const cancel = async (req: LeaveRequest) => {
