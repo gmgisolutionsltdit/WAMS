@@ -57,7 +57,22 @@ export default {
           border: "hsl(var(--sidebar-border))",
           ring: "hsl(var(--sidebar-ring))",
         },
+        brand: { DEFAULT: "hsl(var(--brand))", foreground: "hsl(var(--brand-foreground))" },
+        success: { DEFAULT: "hsl(var(--success))", foreground: "hsl(0 0% 100%)" },
+        warning: { DEFAULT: "hsl(var(--warning))", foreground: "hsl(0 0% 100%)" },
+        info: { DEFAULT: "hsl(var(--info))", foreground: "hsl(0 0% 100%)" },
       },
+      backgroundImage: {
+        "gradient-hero": "var(--gradient-hero)",
+        "gradient-success": "var(--gradient-success)",
+        "gradient-warning": "var(--gradient-warning)",
+        "gradient-info": "var(--gradient-info)",
+        "gradient-subtle": "var(--gradient-subtle)",
+      },
+      boxShadow: {
+        soft: "var(--shadow-soft)",
+        glow: "var(--shadow-glow)",
+        card: "var(--shadow-card)",
       borderRadius: {
         lg: "var(--radius)",
         md: "calc(var(--radius) - 2px)",
