@@ -97,6 +97,33 @@ export type Database = {
         }
         Relationships: []
       }
+      holidays: {
+        Row: {
+          created_at: string
+          holiday_date: string
+          id: string
+          name: string
+          updated_at: string
+          wing: Database["public"]["Enums"]["company_wing"] | null
+        }
+        Insert: {
+          created_at?: string
+          holiday_date: string
+          id?: string
+          name: string
+          updated_at?: string
+          wing?: Database["public"]["Enums"]["company_wing"] | null
+        }
+        Update: {
+          created_at?: string
+          holiday_date?: string
+          id?: string
+          name?: string
+          updated_at?: string
+          wing?: Database["public"]["Enums"]["company_wing"] | null
+        }
+        Relationships: []
+      }
       notifications: {
         Row: {
           created_at: string
@@ -176,30 +203,63 @@ export type Database = {
       }
       profiles: {
         Row: {
+          company_wing: Database["public"]["Enums"]["company_wing"]
           created_at: string
+          daily_ot_cap: number
           department: string | null
+          designation: string | null
           email: string | null
+          employee_status: Database["public"]["Enums"]["employee_status"]
           full_name: string | null
           id: string
+          joining_date: string | null
+          monthly_ot_cap: number
+          phone: string | null
+          photo_url: string | null
+          promotion_date: string | null
           reporting_manager_id: string | null
+          resign_date: string | null
+          service_status: Database["public"]["Enums"]["service_status"]
           updated_at: string
         }
         Insert: {
+          company_wing?: Database["public"]["Enums"]["company_wing"]
           created_at?: string
+          daily_ot_cap?: number
           department?: string | null
+          designation?: string | null
           email?: string | null
+          employee_status?: Database["public"]["Enums"]["employee_status"]
           full_name?: string | null
           id: string
+          joining_date?: string | null
+          monthly_ot_cap?: number
+          phone?: string | null
+          photo_url?: string | null
+          promotion_date?: string | null
           reporting_manager_id?: string | null
+          resign_date?: string | null
+          service_status?: Database["public"]["Enums"]["service_status"]
           updated_at?: string
         }
         Update: {
+          company_wing?: Database["public"]["Enums"]["company_wing"]
           created_at?: string
+          daily_ot_cap?: number
           department?: string | null
+          designation?: string | null
           email?: string | null
+          employee_status?: Database["public"]["Enums"]["employee_status"]
           full_name?: string | null
           id?: string
+          joining_date?: string | null
+          monthly_ot_cap?: number
+          phone?: string | null
+          photo_url?: string | null
+          promotion_date?: string | null
           reporting_manager_id?: string | null
+          resign_date?: string | null
+          service_status?: Database["public"]["Enums"]["service_status"]
           updated_at?: string
         }
         Relationships: [
@@ -217,27 +277,36 @@ export type Database = {
           created_at: string
           holiday_ot_multiplier: number
           id: string
+          office_end_time: string
+          office_start_time: string
           standard_shift_hours: number
           updated_at: string
           weekday_ot_multiplier: number
+          weekend_days: number[]
           weekend_ot_multiplier: number
         }
         Insert: {
           created_at?: string
           holiday_ot_multiplier?: number
           id?: string
+          office_end_time?: string
+          office_start_time?: string
           standard_shift_hours?: number
           updated_at?: string
           weekday_ot_multiplier?: number
+          weekend_days?: number[]
           weekend_ot_multiplier?: number
         }
         Update: {
           created_at?: string
           holiday_ot_multiplier?: number
           id?: string
+          office_end_time?: string
+          office_start_time?: string
           standard_shift_hours?: number
           updated_at?: string
           weekday_ot_multiplier?: number
+          weekend_days?: number[]
           weekend_ot_multiplier?: number
         }
         Relationships: []
@@ -283,6 +352,10 @@ export type Database = {
         }
         Returns: boolean
       }
+      is_in_management_chain: {
+        Args: { _employee_id: string; _manager_id: string }
+        Returns: boolean
+      }
       is_manager_of: {
         Args: { _employee_id: string; _manager_id: string }
         Returns: boolean
@@ -290,7 +363,15 @@ export type Database = {
     }
     Enums: {
       app_role: "admin" | "manager" | "employee"
+      company_wing: "GMGI" | "MORU"
+      employee_status: "Active" | "Inactive" | "Resigned"
       ot_status: "pending" | "approved" | "rejected" | "modified"
+      service_status:
+        | "Permanent"
+        | "Contractual"
+        | "Intern"
+        | "Short-Term"
+        | "Consultant"
     }
     CompositeTypes: {
       [_ in never]: never
@@ -419,7 +500,16 @@ export const Constants = {
   public: {
     Enums: {
       app_role: ["admin", "manager", "employee"],
+      company_wing: ["GMGI", "MORU"],
+      employee_status: ["Active", "Inactive", "Resigned"],
       ot_status: ["pending", "approved", "rejected", "modified"],
+      service_status: [
+        "Permanent",
+        "Contractual",
+        "Intern",
+        "Short-Term",
+        "Consultant",
+      ],
     },
   },
 } as const
