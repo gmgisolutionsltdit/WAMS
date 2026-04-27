@@ -386,7 +386,7 @@ const LeaveManagement = () => {
           <div className="grid lg:grid-cols-2 gap-4">
             <Card>
               <CardHeader>
-                <CardTitle>{role === "manager" || role === "admin" ? "Team Leave Calendar" : "My Approved Leaves"}</CardTitle>
+                <CardTitle>Team Leave Calendar</CardTitle>
               </CardHeader>
               <CardContent>
                 <Calendar
