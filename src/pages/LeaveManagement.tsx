@@ -461,7 +461,17 @@ const LeaveManagement = () => {
                       <TableCell>{r.end_date}</TableCell>
                       <TableCell>{r.total_days}</TableCell>
                       <TableCell className="max-w-xs truncate">{r.reason || "—"}</TableCell>
-                      <TableCell>{statusBadge(r.status)}</TableCell>
+                      <TableCell>
+                        {statusBadge(r.status)}
+                        {r.modified_by && (
+                          <div className="text-[10px] text-muted-foreground mt-1">
+                            Modified by {profiles[r.modified_by]?.full_name || profiles[r.modified_by]?.email || "Manager"}
+                            {r.original_start_date && r.original_end_date && (
+                              <> · was {r.original_start_date} → {r.original_end_date}</>
+                            )}
+                          </div>
+                        )}
+                      </TableCell>
                       <TableCell>
                         {r.status === "pending" && (
                           <Button size="sm" variant="ghost" onClick={() => cancel(r)}>Cancel</Button>
