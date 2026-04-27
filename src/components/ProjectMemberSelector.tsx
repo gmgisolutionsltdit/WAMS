@@ -160,6 +160,11 @@ export const ProjectMemberSelector = ({ projectId, project, members, onChanged }
             <div className="flex items-center justify-center py-12 text-muted-foreground">
               <Loader2 className="h-5 w-5 animate-spin mr-2" /> Loading employees…
             </div>
+          ) : error ? (
+            <div className="text-center py-12 text-destructive">
+              <p className="text-sm font-medium">Failed to load employees</p>
+              <p className="text-xs mt-1 text-muted-foreground">{error}</p>
+            </div>
           ) : totalVisible === 0 ? (
             <div className="text-center py-12 text-muted-foreground">
               <Users className="h-10 w-10 mx-auto mb-2 opacity-50" />
