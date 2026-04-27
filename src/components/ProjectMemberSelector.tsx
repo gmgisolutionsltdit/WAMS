@@ -30,7 +30,7 @@ const initials = (name?: string | null, email?: string | null) =>
 
 export const ProjectMemberSelector = ({ projectId, project, members, onChanged }: Props) => {
   const { user } = useAuth();
-  const { groups, flat, loading } = useVisibleEmployees();
+  const { groups, flat, loading, error } = useVisibleEmployees();
   const [open, setOpen] = useState(false);
   const [search, setSearch] = useState("");
   const [busyId, setBusyId] = useState<string | null>(null);
