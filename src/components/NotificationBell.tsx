@@ -5,9 +5,16 @@ import { Badge } from "@/components/ui/badge";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { useNotifications } from "@/hooks/useNotifications";
 import { formatDistanceToNow } from "date-fns";
+import { useNavigate } from "react-router-dom";
 
 export function NotificationBell() {
   const { notifications, unreadCount, markAsRead, markAllAsRead } = useNotifications();
+  const navigate = useNavigate();
+
+  const handleClick = (n: { id: string; is_read: boolean; route: string | null }) => {
+    if (!n.is_read) markAsRead(n.id);
+    if (n.route) navigate(n.route);
+  };
 
   return (
     <Popover>
