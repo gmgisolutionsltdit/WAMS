@@ -148,7 +148,14 @@ const OTRequests = () => {
 
     const { error } = await supabase
       .from("overtime_requests")
-      .update({ requested_hours: adjustedHours, status: "modified" as any, approved_by: user.id })
+      .update({
+        requested_hours: adjustedHours,
+        original_hours: editReq.original_hours ?? editReq.requested_hours,
+        status: "modified" as any,
+        approved_by: user.id,
+        modified_by: user.id,
+        modified_at: new Date().toISOString(),
+      })
       .eq("id", editReq.id);
     if (error) toast.error(error.message);
     else {
@@ -160,7 +167,8 @@ const OTRequests = () => {
         editReq.user_id,
         "OT Hours Modified",
         `Your OT request was modified to ${adjustedHours}h (adjusted for standard hours fulfillment).`,
-        editReq.id
+        editReq.id,
+        { route: "/ot-requests", type: "ot_update" }
       );
       setEditOpen(false);
       fetchPendingRequests();
