@@ -175,15 +175,6 @@ const ProjectBoard = () => {
     setDraggingTask(null);
   };
 
-  const addMember = async (userId: string, role: string) => {
-    const { error } = await supabase
-      .from("project_members")
-      .upsert({ project_id: projectId!, user_id: userId, role: role as any }, { onConflict: "project_id,user_id" });
-    if (error) { toast.error(error.message); return; }
-    toast.success("Member added");
-    fetchAll();
-  };
-
   if (!project) return <div className="p-6 text-muted-foreground">Loading project…</div>;
 
   return (
