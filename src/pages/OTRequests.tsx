@@ -314,12 +314,22 @@ const OTRequests = () => {
               ) : requests.map((req) => (
                 <TableRow key={req.id}>
                   <TableCell>{format(new Date(req.date), "MMM d, yyyy")}</TableCell>
-                  <TableCell>{req.requested_hours}h</TableCell>
+                  <TableCell>
+                    {req.requested_hours}h
+                    {req.original_hours != null && Number(req.original_hours) !== Number(req.requested_hours) && (
+                      <span className="ml-1 text-xs text-muted-foreground line-through">{req.original_hours}h</span>
+                    )}
+                  </TableCell>
                   <TableCell className="max-w-48 truncate">{req.reason}</TableCell>
                   <TableCell>
                     <Badge className={otStatusStyle(getDisplayStatus(req))}>
                       {getDisplayStatus(req)}
                     </Badge>
+                    {req.modified_by && (
+                      <div className="text-[10px] text-muted-foreground mt-1">
+                        Modified by {profilesMap[req.modified_by] || "Manager"}
+                      </div>
+                    )}
                   </TableCell>
                   <TableCell className="text-sm text-muted-foreground">{format(new Date(req.created_at), "MMM d")}</TableCell>
                 </TableRow>
