@@ -47,7 +47,7 @@ type EmployeeRow = {
 };
 
 const EmployeeManagement = () => {
-  const { role } = useAuth();
+  const { role, user } = useAuth();
   const [employees, setEmployees] = useState<EmployeeRow[]>([]);
   const [managers, setManagers] = useState<EmployeeRow[]>([]);
   const [dialogOpen, setDialogOpen] = useState(false);
@@ -61,6 +61,8 @@ const EmployeeManagement = () => {
   const [bulkOpen, setBulkOpen] = useState(false);
   const [bulkResults, setBulkResults] = useState<any[] | null>(null);
   const [uploadingPhoto, setUploadingPhoto] = useState(false);
+  const [loadingList, setLoadingList] = useState(true);
+  const [fetchError, setFetchError] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const csvInputRef = useRef<HTMLInputElement>(null);
 
@@ -75,17 +77,41 @@ const EmployeeManagement = () => {
   const [form, setForm] = useState(initialForm);
 
   const fetchEmployees = useCallback(async () => {
-    const [{ data: profiles }, { data: roles }] = await Promise.all([
-      supabase.from("profiles").select("*").order("created_at", { ascending: false }),
+    setLoadingList(true);
+    setFetchError(null);
+    // Role-aware query: admins see all, managers see their direct reports only.
+    let profilesQuery = supabase
+      .from("profiles")
+      .select("*")
+      .order("created_at", { ascending: false });
+    if (role === "manager" && user) {
+      profilesQuery = profilesQuery.eq("reporting_manager_id", user.id);
+    }
+    const [{ data: profiles, error: pErr }, { data: roles, error: rErr }] = await Promise.all([
+      profilesQuery,
       supabase.from("user_roles").select("user_id, role"),
     ]);
+    if (pErr || rErr) {
+      const msg = pErr?.message || rErr?.message || "Failed to load employees";
+      console.error("[EmployeeManagement] Fetch error:", { pErr, rErr });
+      setFetchError(msg);
+      setLoadingList(false);
+      return;
+    }
     const roleMap = new Map((roles || []).map((r) => [r.user_id, r.role as string]));
     const merged = (profiles || []).map((p: any) => ({ ...p, _role: roleMap.get(p.id) || "employee" })) as EmployeeRow[];
     setEmployees(merged);
 
-    const managerIds = (roles || []).filter((r) => r.role === "manager" || r.role === "admin").map((r) => r.user_id);
-    setManagers(merged.filter((m) => managerIds.includes(m.id)));
-  }, []);
+    // Managers list = anyone in this scope who is admin/manager (used for "Reporting To" dropdown).
+    // Admins additionally need full picker; fetch all when admin.
+    if (role === "admin") {
+      const managerIds = (roles || []).filter((r) => r.role === "manager" || r.role === "admin").map((r) => r.user_id);
+      setManagers(merged.filter((m) => managerIds.includes(m.id)));
+    } else {
+      setManagers([]);
+    }
+    setLoadingList(false);
+  }, [role, user]);
 
   useEffect(() => { fetchEmployees(); }, [fetchEmployees]);
   useRealtimeSubscription("profiles", fetchEmployees, "emp-mgmt-profiles");
@@ -310,14 +336,15 @@ const EmployeeManagement = () => {
     return matchesSearch && matchesRole && matchesWing && matchesStatus;
   });
 
-  if (role !== "admin") {
+  if (role !== "admin" && role !== "manager") {
     return (
       <Card><CardContent className="p-8 text-center text-muted-foreground">
         <Users className="h-12 w-12 mx-auto mb-4 opacity-50" />
-        <p>Only Admins can access Employee Management.</p>
+        <p>Only Admins and Reporting Managers can access Employee Management.</p>
       </CardContent></Card>
     );
   }
+  const isAdmin = role === "admin";
 
   const statusBadge = (s: string) => {
     if (s === "Active") return "bg-green-100 text-green-700 border-green-300";
@@ -328,29 +355,33 @@ const EmployeeManagement = () => {
   return (
     <Card>
       <CardHeader className="flex flex-row items-center justify-between flex-wrap gap-2">
-        <CardTitle className="flex items-center gap-2"><Users className="h-5 w-5" /> Employee Management</CardTitle>
-        <div className="flex items-center gap-2">
-          <Button size="sm" variant="outline" onClick={downloadTemplate}>
-            <Download className="mr-1 h-4 w-4" /> Template
-          </Button>
-          <Button size="sm" variant="outline" onClick={() => csvInputRef.current?.click()}>
-            <Upload className="mr-1 h-4 w-4" /> Bulk Upload
-          </Button>
-          <input
-            ref={csvInputRef}
-            type="file"
-            accept=".csv"
-            className="hidden"
-            onChange={(e) => {
-              const f = e.target.files?.[0];
-              if (f) { setBulkOpen(true); handleBulkUpload(f); }
-              if (csvInputRef.current) csvInputRef.current.value = "";
-            }}
-          />
-          <Dialog open={dialogOpen} onOpenChange={(o) => { setDialogOpen(o); if (!o) resetForm(); }}>
-            <DialogTrigger asChild>
-              <Button size="sm" onClick={openCreate}><Plus className="mr-1 h-4 w-4" /> Add Employee</Button>
-            </DialogTrigger>
+        <CardTitle className="flex items-center gap-2">
+          <Users className="h-5 w-5" /> Employee Management
+          {!isAdmin && <Badge variant="outline" className="ml-2 text-[10px]">My Team</Badge>}
+        </CardTitle>
+        {isAdmin && (
+          <div className="flex items-center gap-2">
+            <Button size="sm" variant="outline" onClick={downloadTemplate}>
+              <Download className="mr-1 h-4 w-4" /> Template
+            </Button>
+            <Button size="sm" variant="outline" onClick={() => csvInputRef.current?.click()}>
+              <Upload className="mr-1 h-4 w-4" /> Bulk Upload
+            </Button>
+            <input
+              ref={csvInputRef}
+              type="file"
+              accept=".csv"
+              className="hidden"
+              onChange={(e) => {
+                const f = e.target.files?.[0];
+                if (f) { setBulkOpen(true); handleBulkUpload(f); }
+                if (csvInputRef.current) csvInputRef.current.value = "";
+              }}
+            />
+            <Dialog open={dialogOpen} onOpenChange={(o) => { setDialogOpen(o); if (!o) resetForm(); }}>
+              <DialogTrigger asChild>
+                <Button size="sm" onClick={openCreate}><Plus className="mr-1 h-4 w-4" /> Add Employee</Button>
+              </DialogTrigger>
             <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto">
               <DialogHeader>
                 <DialogTitle>{editingId ? "Edit Employee" : "Add New Employee"}</DialogTitle>
@@ -449,11 +480,14 @@ const EmployeeManagement = () => {
               </DialogFooter>
             </DialogContent>
           </Dialog>
-        </div>
+          </div>
+        )}
       </CardHeader>
       <CardContent className="space-y-4">
         <p className="text-xs text-muted-foreground">
-          Admin can create accounts directly with a temporary password, reset passwords, and bulk-upload via CSV.
+          {isAdmin
+            ? "Admin can create accounts directly with a temporary password, reset passwords, and bulk-upload via CSV."
+            : "You are viewing your direct reports. Contact an Admin to add or modify employee accounts."}
         </p>
         <div className="flex flex-col sm:flex-row gap-3">
           <div className="relative flex-1">
@@ -501,7 +535,23 @@ const EmployeeManagement = () => {
             </TableRow>
           </TableHeader>
           <TableBody>
-            {filtered.length === 0 ? (
+            {loadingList ? (
+              <TableRow>
+                <TableCell colSpan={10} className="text-center py-8 text-muted-foreground">
+                  <div className="flex items-center justify-center gap-2">
+                    <span className="inline-block h-4 w-4 border-2 border-primary border-t-transparent rounded-full animate-spin" />
+                    Loading employees…
+                  </div>
+                </TableCell>
+              </TableRow>
+            ) : fetchError ? (
+              <TableRow>
+                <TableCell colSpan={10} className="text-center py-8 text-destructive">
+                  <div className="font-medium">Failed to load employees</div>
+                  <div className="text-xs text-muted-foreground mt-1">{fetchError}</div>
+                </TableCell>
+              </TableRow>
+            ) : filtered.length === 0 ? (
               <TableRow><TableCell colSpan={10} className="text-center text-muted-foreground">No employees found</TableCell></TableRow>
             ) : filtered.map((emp) => (
               <TableRow key={emp.id}>
@@ -531,49 +581,55 @@ const EmployeeManagement = () => {
                 <TableCell className="text-xs">{emp.daily_ot_cap}h / {emp.monthly_ot_cap}h</TableCell>
                 <TableCell className="text-right">
                   <div className="flex items-center gap-1 justify-end">
-                    <Button size="sm" variant="outline" onClick={() => openEdit(emp)} title="Edit">
-                      <Pencil className="h-4 w-4" />
-                    </Button>
-                    <AlertDialog>
-                      <AlertDialogTrigger asChild>
-                        <Button size="sm" variant="outline" title="Reset password">
-                          <KeyRound className="h-4 w-4" />
+                    {isAdmin ? (
+                      <>
+                        <Button size="sm" variant="outline" onClick={() => openEdit(emp)} title="Edit">
+                          <Pencil className="h-4 w-4" />
                         </Button>
-                      </AlertDialogTrigger>
-                      <AlertDialogContent>
-                        <AlertDialogHeader>
-                          <AlertDialogTitle>Reset password?</AlertDialogTitle>
-                          <AlertDialogDescription>
-                            A new temporary password will be generated for <strong>{emp.email}</strong>.
-                            You'll see it once and need to share it securely.
-                          </AlertDialogDescription>
-                        </AlertDialogHeader>
-                        <AlertDialogFooter>
-                          <AlertDialogCancel>Cancel</AlertDialogCancel>
-                          <AlertDialogAction onClick={() => handleResetPassword(emp)}>Reset</AlertDialogAction>
-                        </AlertDialogFooter>
-                      </AlertDialogContent>
-                    </AlertDialog>
-                    <AlertDialog>
-                      <AlertDialogTrigger asChild>
-                        <Button size="sm" variant="outline" title="Delete">
-                          <Trash2 className="h-4 w-4 text-destructive" />
-                        </Button>
-                      </AlertDialogTrigger>
-                      <AlertDialogContent>
-                        <AlertDialogHeader>
-                          <AlertDialogTitle>Delete employee?</AlertDialogTitle>
-                          <AlertDialogDescription>
-                            This permanently removes <strong>{emp.full_name || emp.email}</strong> and their login.
-                            This cannot be undone.
-                          </AlertDialogDescription>
-                        </AlertDialogHeader>
-                        <AlertDialogFooter>
-                          <AlertDialogCancel>Cancel</AlertDialogCancel>
-                          <AlertDialogAction onClick={() => handleDelete(emp)}>Delete</AlertDialogAction>
-                        </AlertDialogFooter>
-                      </AlertDialogContent>
-                    </AlertDialog>
+                        <AlertDialog>
+                          <AlertDialogTrigger asChild>
+                            <Button size="sm" variant="outline" title="Reset password">
+                              <KeyRound className="h-4 w-4" />
+                            </Button>
+                          </AlertDialogTrigger>
+                          <AlertDialogContent>
+                            <AlertDialogHeader>
+                              <AlertDialogTitle>Reset password?</AlertDialogTitle>
+                              <AlertDialogDescription>
+                                A new temporary password will be generated for <strong>{emp.email}</strong>.
+                                You'll see it once and need to share it securely.
+                              </AlertDialogDescription>
+                            </AlertDialogHeader>
+                            <AlertDialogFooter>
+                              <AlertDialogCancel>Cancel</AlertDialogCancel>
+                              <AlertDialogAction onClick={() => handleResetPassword(emp)}>Reset</AlertDialogAction>
+                            </AlertDialogFooter>
+                          </AlertDialogContent>
+                        </AlertDialog>
+                        <AlertDialog>
+                          <AlertDialogTrigger asChild>
+                            <Button size="sm" variant="outline" title="Delete">
+                              <Trash2 className="h-4 w-4 text-destructive" />
+                            </Button>
+                          </AlertDialogTrigger>
+                          <AlertDialogContent>
+                            <AlertDialogHeader>
+                              <AlertDialogTitle>Delete employee?</AlertDialogTitle>
+                              <AlertDialogDescription>
+                                This permanently removes <strong>{emp.full_name || emp.email}</strong> and their login.
+                                This cannot be undone.
+                              </AlertDialogDescription>
+                            </AlertDialogHeader>
+                            <AlertDialogFooter>
+                              <AlertDialogCancel>Cancel</AlertDialogCancel>
+                              <AlertDialogAction onClick={() => handleDelete(emp)}>Delete</AlertDialogAction>
+                            </AlertDialogFooter>
+                          </AlertDialogContent>
+                        </AlertDialog>
+                      </>
+                    ) : (
+                      <span className="text-xs text-muted-foreground">View only</span>
+                    )}
                   </div>
                 </TableCell>
               </TableRow>

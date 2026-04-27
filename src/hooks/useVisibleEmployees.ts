@@ -30,6 +30,7 @@ export const useVisibleEmployees = () => {
   const { user, role, profile } = useAuth();
   const [employees, setEmployees] = useState<VisibleEmployee[]>([]);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
 
   const fetchEmployees = useCallback(async () => {
     if (!user) {
@@ -37,11 +38,19 @@ export const useVisibleEmployees = () => {
       setLoading(false);
       return;
     }
-    const { data, error } = await supabase
+    setLoading(true);
+    const { data, error: fetchErr } = await supabase
       .from("profiles")
       .select("id, full_name, email, photo_url, department, designation, company_wing, reporting_manager_id")
       .order("full_name", { ascending: true });
-    if (!error) setEmployees((data || []) as VisibleEmployee[]);
+    if (fetchErr) {
+      console.error("[useVisibleEmployees] Profile fetch failed:", fetchErr);
+      setError(fetchErr.message);
+      setEmployees([]);
+    } else {
+      setError(null);
+      setEmployees((data || []) as VisibleEmployee[]);
+    }
     setLoading(false);
   }, [user]);
 
@@ -68,5 +77,5 @@ export const useVisibleEmployees = () => {
 
   const flat = useMemo(() => groups.flatMap((g) => g.employees), [groups]);
 
-  return { employees, groups, flat, loading, refetch: fetchEmployees };
+  return { employees, groups, flat, loading, error, refetch: fetchEmployees };
 };

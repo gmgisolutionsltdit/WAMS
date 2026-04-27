@@ -30,7 +30,7 @@ const initials = (name?: string | null, email?: string | null) =>
 
 export const ProjectMemberSelector = ({ projectId, project, members, onChanged }: Props) => {
   const { user } = useAuth();
-  const { groups, flat, loading } = useVisibleEmployees();
+  const { groups, flat, loading, error } = useVisibleEmployees();
   const [open, setOpen] = useState(false);
   const [search, setSearch] = useState("");
   const [busyId, setBusyId] = useState<string | null>(null);
@@ -159,6 +159,11 @@ export const ProjectMemberSelector = ({ projectId, project, members, onChanged }
           {loading ? (
             <div className="flex items-center justify-center py-12 text-muted-foreground">
               <Loader2 className="h-5 w-5 animate-spin mr-2" /> Loading employees…
+            </div>
+          ) : error ? (
+            <div className="text-center py-12 text-destructive">
+              <p className="text-sm font-medium">Failed to load employees</p>
+              <p className="text-xs mt-1 text-muted-foreground">{error}</p>
             </div>
           ) : totalVisible === 0 ? (
             <div className="text-center py-12 text-muted-foreground">
