@@ -223,7 +223,7 @@ const LeaveManagement = () => {
       original_start_date: modReq.original_start_date ?? modReq.start_date,
       original_end_date: modReq.original_end_date ?? modReq.end_date,
       original_leave_type_id: modReq.original_leave_type_id ?? modReq.leave_type_id,
-      original_day_type: modReq.original_day_type ?? modReq.day_type,
+      original_day_type: (modReq.original_day_type ?? modReq.day_type) as "full" | "first_half" | "second_half",
       original_total_days: modReq.original_total_days ?? modReq.total_days,
     }).eq("id", modReq.id);
     if (error) { toast.error(error.message); return; }
