@@ -78,6 +78,14 @@ const LeaveManagement = () => {
   const [selectedDay, setSelectedDay] = useState<Date | undefined>(new Date());
   const year = new Date().getFullYear();
 
+  // Modify & Approve modal state
+  const [modOpen, setModOpen] = useState(false);
+  const [modReq, setModReq] = useState<LeaveRequest | null>(null);
+  const [modForm, setModForm] = useState({
+    leave_type_id: "", start_date: "", end_date: "",
+    day_type: "full" as "full" | "first_half" | "second_half", note: "",
+  });
+
   const fetchAll = useCallback(async () => {
     const [{ data: types }, { data: reqs }, { data: bals }, { data: pf }, { data: hols }, { data: cfg }] = await Promise.all([
       supabase.from("leave_types").select("*").eq("active", true).order("name"),
