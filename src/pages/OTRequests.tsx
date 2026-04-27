@@ -131,7 +131,8 @@ const OTRequests = () => {
         req.user_id,
         `OT Request ${status.charAt(0).toUpperCase() + status.slice(1)}`,
         `Your ${finalHours}h OT request for ${format(new Date(req.date), "MMM d")} was ${status}.${detail}`,
-        req.id
+        req.id,
+        { route: "/ot-requests", type: "ot_update" }
       );
       fetchPendingRequests();
     }
