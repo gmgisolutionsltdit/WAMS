@@ -15,10 +15,11 @@ import {
 } from "@/components/ui/dialog";
 import { toast } from "sonner";
 import {
-  ArrowLeft, Plus, Settings as SettingsIcon, Calendar as CalendarIcon, MessageSquare, UserPlus,
+  ArrowLeft, Plus, Settings as SettingsIcon, Calendar as CalendarIcon, MessageSquare,
 } from "lucide-react";
 import { useRealtimeSubscription } from "@/hooks/useRealtimeSubscription";
 import { EmployeePicker } from "@/components/EmployeePicker";
+import { ProjectMemberSelector } from "@/components/ProjectMemberSelector";
 
 type Column = { id: string; name: string; status: string; position: number; board_id: string };
 type Task = {
@@ -52,7 +53,6 @@ const ProjectBoard = () => {
   const [newComment, setNewComment] = useState("");
   const [createOpen, setCreateOpen] = useState(false);
   const [createColId, setCreateColId] = useState<string | null>(null);
-  const [memberOpen, setMemberOpen] = useState(false);
   const [taskCounter, setTaskCounter] = useState(0);
   const [form, setForm] = useState({
     title: "", description: "", priority: "medium", assignee_id: "", due_date: "",
@@ -175,15 +175,6 @@ const ProjectBoard = () => {
     setDraggingTask(null);
   };
 
-  const addMember = async (userId: string, role: string) => {
-    const { error } = await supabase
-      .from("project_members")
-      .upsert({ project_id: projectId!, user_id: userId, role: role as any }, { onConflict: "project_id,user_id" });
-    if (error) { toast.error(error.message); return; }
-    toast.success("Member added");
-    fetchAll();
-  };
-
   if (!project) return <div className="p-6 text-muted-foreground">Loading project…</div>;
 
   return (
@@ -200,38 +191,12 @@ const ProjectBoard = () => {
           </div>
         </div>
         <div className="flex gap-2">
-          <Dialog open={memberOpen} onOpenChange={setMemberOpen}>
-            <DialogTrigger asChild>
-              <Button variant="outline" size="sm"><UserPlus className="mr-1 h-4 w-4" /> Members ({memberProfiles.length})</Button>
-            </DialogTrigger>
-            <DialogContent>
-              <DialogHeader><DialogTitle>Project Members</DialogTitle></DialogHeader>
-              <div className="space-y-2 max-h-80 overflow-y-auto">
-                {profiles.map((p) => {
-                  const m = members.find((mm) => mm.user_id === p.id);
-                  const isOwner = project.owner_id === p.id;
-                  return (
-                    <div key={p.id} className="flex items-center justify-between gap-2">
-                      <div className="flex items-center gap-2 min-w-0">
-                        <Avatar className="h-7 w-7"><AvatarImage src={p.photo_url || undefined} /><AvatarFallback>{(p.full_name || "?").slice(0, 2)}</AvatarFallback></Avatar>
-                        <span className="text-sm truncate">{p.full_name || p.email}</span>
-                      </div>
-                      {isOwner ? <Badge>Owner</Badge> : (
-                        <Select value={m?.role || "none"} onValueChange={(v) => v === "none" ? supabase.from("project_members").delete().eq("project_id", projectId!).eq("user_id", p.id).then(fetchAll) : addMember(p.id, v)}>
-                          <SelectTrigger className="w-[120px] h-8"><SelectValue /></SelectTrigger>
-                          <SelectContent>
-                            <SelectItem value="none">— None —</SelectItem>
-                            <SelectItem value="member">Member</SelectItem>
-                            <SelectItem value="viewer">Viewer</SelectItem>
-                          </SelectContent>
-                        </Select>
-                      )}
-                    </div>
-                  );
-                })}
-              </div>
-            </DialogContent>
-          </Dialog>
+          <ProjectMemberSelector
+            projectId={projectId!}
+            project={project}
+            members={members}
+            onChanged={fetchAll}
+          />
         </div>
       </div>
 
