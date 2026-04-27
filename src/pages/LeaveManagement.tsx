@@ -15,8 +15,9 @@ import {
 } from "@/components/ui/dialog";
 import { Calendar } from "@/components/ui/calendar";
 import { toast } from "sonner";
-import { CalendarHeart, Plus, CheckCircle2, XCircle, Clock } from "lucide-react";
+import { CalendarHeart, Plus, CheckCircle2, XCircle, Clock, Users } from "lucide-react";
 import { useRealtimeSubscription } from "@/hooks/useRealtimeSubscription";
+import { format } from "date-fns";
 
 type LeaveType = {
   id: string; name: string; code: string; color: string; annual_quota: number;
@@ -31,13 +32,30 @@ type LeaveRequest = {
 };
 
 type Balance = { id: string; user_id: string; leave_type_id: string; year: number; allocated: number; used: number; carried_forward: number; };
+type Holiday = { id: string; holiday_date: string; name: string; wing: string | null };
+type Settings = { weekend_days: number[] };
 
-const computeDays = (start: string, end: string, dayType: string): number => {
+/** Compute leave days, excluding weekends and holidays. Half-day always = 0.5. */
+const computeWorkingDays = (
+  start: string,
+  end: string,
+  dayType: string,
+  weekendDays: number[],
+  holidaySet: Set<string>,
+): number => {
   if (dayType !== "full") return 0.5;
   const s = new Date(start + "T00:00:00");
   const e = new Date(end + "T00:00:00");
-  const diff = Math.floor((e.getTime() - s.getTime()) / (1000 * 60 * 60 * 24)) + 1;
-  return diff > 0 ? diff : 0;
+  if (e < s) return 0;
+  let count = 0;
+  for (let d = new Date(s); d <= e; d.setDate(d.getDate() + 1)) {
+    const dow = d.getDay();
+    const iso = format(d, "yyyy-MM-dd");
+    if (weekendDays.includes(dow)) continue;
+    if (holidaySet.has(iso)) continue;
+    count += 1;
+  }
+  return count;
 };
 
 const LeaveManagement = () => {
@@ -46,19 +64,24 @@ const LeaveManagement = () => {
   const [requests, setRequests] = useState<LeaveRequest[]>([]);
   const [balances, setBalances] = useState<Balance[]>([]);
   const [profiles, setProfiles] = useState<Record<string, { full_name: string | null; email: string | null }>>({});
+  const [holidays, setHolidays] = useState<Holiday[]>([]);
+  const [settings, setSettings] = useState<Settings>({ weekend_days: [5, 6] });
   const [open, setOpen] = useState(false);
   const [form, setForm] = useState({
     leave_type_id: "", start_date: "", end_date: "", day_type: "full" as const, reason: "",
   });
   const [tab, setTab] = useState("calendar");
+  const [selectedDay, setSelectedDay] = useState<Date | undefined>(new Date());
   const year = new Date().getFullYear();
 
   const fetchAll = useCallback(async () => {
-    const [{ data: types }, { data: reqs }, { data: bals }, { data: pf }] = await Promise.all([
+    const [{ data: types }, { data: reqs }, { data: bals }, { data: pf }, { data: hols }, { data: cfg }] = await Promise.all([
       supabase.from("leave_types").select("*").eq("active", true).order("name"),
       supabase.from("leave_requests").select("*").order("start_date", { ascending: false }),
       supabase.from("leave_balances").select("*").eq("year", year),
       supabase.from("profiles").select("id, full_name, email"),
+      supabase.from("holidays").select("*"),
+      supabase.from("settings").select("weekend_days").limit(1).maybeSingle(),
     ]);
     setLeaveTypes((types || []) as LeaveType[]);
     setRequests((reqs || []) as LeaveRequest[]);
@@ -66,11 +89,16 @@ const LeaveManagement = () => {
     const map: Record<string, any> = {};
     (pf || []).forEach((p: any) => { map[p.id] = { full_name: p.full_name, email: p.email }; });
     setProfiles(map);
+    setHolidays((hols || []) as Holiday[]);
+    if (cfg?.weekend_days) setSettings({ weekend_days: cfg.weekend_days as number[] });
   }, [year]);
 
   useEffect(() => { fetchAll(); }, [fetchAll]);
   useRealtimeSubscription("leave_requests", fetchAll, "leave-reqs");
   useRealtimeSubscription("leave_balances", fetchAll, "leave-bals");
+  useRealtimeSubscription("leave_types", fetchAll, "leave-types");
+
+  const holidaySet = useMemo(() => new Set(holidays.map((h) => h.holiday_date)), [holidays]);
 
   const myBalances = useMemo(() => balances.filter((b) => b.user_id === user?.id), [balances, user]);
   const myRequests = useMemo(() => requests.filter((r) => r.user_id === user?.id), [requests, user]);
@@ -81,8 +109,8 @@ const LeaveManagement = () => {
 
   const submit = async () => {
     if (!form.leave_type_id || !form.start_date || !form.end_date) { toast.error("Fill leave type and dates"); return; }
-    const days = computeDays(form.start_date, form.end_date, form.day_type);
-    if (days <= 0) { toast.error("End date must be on/after start date"); return; }
+    const days = computeWorkingDays(form.start_date, form.end_date, form.day_type, settings.weekend_days, holidaySet);
+    if (days <= 0) { toast.error("No working days in this range (weekends/holidays excluded)"); return; }
     const { error } = await supabase.from("leave_requests").insert({
       user_id: user!.id,
       leave_type_id: form.leave_type_id,
@@ -93,7 +121,7 @@ const LeaveManagement = () => {
       reason: form.reason || null,
     });
     if (error) { toast.error(error.message); return; }
-    toast.success("Leave applied");
+    toast.success(`Leave applied (${days} working day${days !== 1 ? "s" : ""})`);
     setOpen(false);
     setForm({ leave_type_id: "", start_date: "", end_date: "", day_type: "full", reason: "" });
   };
@@ -105,7 +133,6 @@ const LeaveManagement = () => {
     if (error) { toast.error(error.message); return; }
 
     if (status === "approved") {
-      // Increment used in balance (upsert)
       const { data: bal } = await supabase
         .from("leave_balances")
         .select("*")
@@ -138,25 +165,44 @@ const LeaveManagement = () => {
   const typeColor = (id: string) => leaveTypes.find((t) => t.id === id)?.color || "#3b82f6";
   const typeName = (id: string) => leaveTypes.find((t) => t.id === id)?.name || "—";
 
-  // Calendar markers: compute approved dates for visual highlight
+  /** Approved leave dates relevant to the viewer (self + team for managers/admin). */
+  const visibleApproved = useMemo(() => {
+    if (role === "admin" || role === "manager") return requests.filter((r) => r.status === "approved");
+    return requests.filter((r) => r.status === "approved" && r.user_id === user?.id);
+  }, [requests, role, user]);
+
   const leaveDays: Date[] = useMemo(() => {
     const days: Date[] = [];
-    requests.filter((r) => r.status === "approved").forEach((r) => {
+    visibleApproved.forEach((r) => {
       const s = new Date(r.start_date + "T00:00:00");
       const e = new Date(r.end_date + "T00:00:00");
       for (let d = new Date(s); d <= e; d.setDate(d.getDate() + 1)) {
+        const dow = d.getDay();
+        if (settings.weekend_days.includes(dow)) continue;
+        if (holidaySet.has(format(d, "yyyy-MM-dd"))) continue;
         days.push(new Date(d));
       }
     });
     return days;
-  }, [requests]);
+  }, [visibleApproved, settings, holidaySet]);
+
+  /** Who is on leave on the selected calendar day. */
+  const peopleOnSelectedDay = useMemo(() => {
+    if (!selectedDay) return [];
+    const iso = format(selectedDay, "yyyy-MM-dd");
+    return visibleApproved.filter((r) => r.start_date <= iso && iso <= r.end_date);
+  }, [selectedDay, visibleApproved]);
 
   const statusBadge = (s: string) => {
-    if (s === "approved") return <Badge className="bg-green-100 text-green-700 border-green-300" variant="outline"><CheckCircle2 className="mr-1 h-3 w-3" />Approved</Badge>;
-    if (s === "rejected") return <Badge className="bg-red-100 text-red-700 border-red-300" variant="outline"><XCircle className="mr-1 h-3 w-3" />Rejected</Badge>;
+    if (s === "approved") return <Badge className="bg-success/15 text-success border-success/30" variant="outline"><CheckCircle2 className="mr-1 h-3 w-3" />Approved</Badge>;
+    if (s === "rejected") return <Badge className="bg-destructive/15 text-destructive border-destructive/30" variant="outline"><XCircle className="mr-1 h-3 w-3" />Rejected</Badge>;
     if (s === "cancelled") return <Badge variant="outline">Cancelled</Badge>;
-    return <Badge className="bg-yellow-100 text-yellow-700 border-yellow-300" variant="outline"><Clock className="mr-1 h-3 w-3" />Pending</Badge>;
+    return <Badge className="bg-warning/15 text-warning border-warning/30" variant="outline"><Clock className="mr-1 h-3 w-3" />Pending</Badge>;
   };
+
+  const previewDays = form.start_date && form.end_date
+    ? computeWorkingDays(form.start_date, form.end_date, form.day_type, settings.weekend_days, holidaySet)
+    : 0;
 
   return (
     <div className="space-y-4">
@@ -171,7 +217,7 @@ const LeaveManagement = () => {
           <DialogContent>
             <DialogHeader>
               <DialogTitle>Apply for Leave</DialogTitle>
-              <DialogDescription>Submit a leave request. Your reporting manager will be notified.</DialogDescription>
+              <DialogDescription>Weekends and holidays are automatically excluded from the day count.</DialogDescription>
             </DialogHeader>
             <div className="space-y-3">
               <div>
@@ -205,7 +251,7 @@ const LeaveManagement = () => {
               </div>
               <div><Label>Reason</Label><Textarea value={form.reason} onChange={(e) => setForm((f) => ({ ...f, reason: e.target.value }))} /></div>
               <div className="text-sm text-muted-foreground">
-                Total days: <strong>{form.start_date && form.end_date ? computeDays(form.start_date, form.end_date, form.day_type) : 0}</strong>
+                Working days (excl. weekends &amp; holidays): <strong>{previewDays}</strong>
               </div>
             </div>
             <DialogFooter><Button onClick={submit}>Submit</Button></DialogFooter>
@@ -220,7 +266,7 @@ const LeaveManagement = () => {
           const used = bal?.used ?? 0;
           const remaining = Math.max(0, allocated + (bal?.carried_forward ?? 0) - used);
           return (
-            <Card key={t.id}>
+            <Card key={t.id} className="shadow-card">
               <CardHeader className="pb-2">
                 <CardTitle className="text-sm flex items-center gap-2">
                   <span className="inline-block w-3 h-3 rounded-full" style={{ background: t.color }} />
@@ -246,17 +292,59 @@ const LeaveManagement = () => {
         </TabsList>
 
         <TabsContent value="calendar">
-          <Card>
-            <CardHeader><CardTitle>Approved Leave Calendar</CardTitle></CardHeader>
-            <CardContent>
-              <Calendar
-                mode="multiple"
-                selected={leaveDays}
-                className="rounded-md border w-fit"
-              />
-              <p className="text-xs text-muted-foreground mt-2">Highlighted dates indicate approved leave for the visible team scope.</p>
-            </CardContent>
-          </Card>
+          <div className="grid lg:grid-cols-2 gap-4">
+            <Card>
+              <CardHeader>
+                <CardTitle>{role === "manager" || role === "admin" ? "Team Leave Calendar" : "My Approved Leaves"}</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <Calendar
+                  mode="single"
+                  selected={selectedDay}
+                  onSelect={setSelectedDay}
+                  modifiers={{ onLeave: leaveDays, holiday: Array.from(holidaySet).map((d) => new Date(d + "T00:00:00")) }}
+                  modifiersClassNames={{
+                    onLeave: "bg-brand/15 text-brand font-semibold ring-1 ring-brand/30",
+                    holiday: "bg-warning/15 text-warning",
+                  }}
+                  className="rounded-md border w-fit"
+                />
+                <div className="flex gap-3 mt-3 text-xs text-muted-foreground">
+                  <span className="flex items-center gap-1"><span className="w-3 h-3 rounded bg-brand/30" /> On leave</span>
+                  <span className="flex items-center gap-1"><span className="w-3 h-3 rounded bg-warning/30" /> Holiday</span>
+                </div>
+              </CardContent>
+            </Card>
+
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  <Users className="h-5 w-5" />
+                  {selectedDay ? format(selectedDay, "EEEE, MMM d, yyyy") : "Pick a date"}
+                </CardTitle>
+              </CardHeader>
+              <CardContent>
+                {peopleOnSelectedDay.length === 0 ? (
+                  <p className="text-sm text-muted-foreground">No one is on leave on this day.</p>
+                ) : (
+                  <div className="space-y-2">
+                    {peopleOnSelectedDay.map((r) => (
+                      <div key={r.id} className="flex items-center justify-between rounded-md border p-2.5">
+                        <div className="flex items-center gap-3">
+                          <span className="inline-block w-2.5 h-2.5 rounded-full" style={{ background: typeColor(r.leave_type_id) }} />
+                          <div>
+                            <div className="font-medium text-sm">{profiles[r.user_id]?.full_name || profiles[r.user_id]?.email || "—"}</div>
+                            <div className="text-xs text-muted-foreground">{typeName(r.leave_type_id)} · {r.start_date} → {r.end_date}</div>
+                          </div>
+                        </div>
+                        <Badge variant="outline" className="text-xs">{r.day_type === "full" ? "Full" : r.day_type === "first_half" ? "AM" : "PM"}</Badge>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+          </div>
         </TabsContent>
 
         <TabsContent value="my">
