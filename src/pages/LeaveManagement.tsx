@@ -253,11 +253,13 @@ const LeaveManagement = () => {
   const typeColor = (id: string) => leaveTypes.find((t) => t.id === id)?.color || "#3b82f6";
   const typeName = (id: string) => leaveTypes.find((t) => t.id === id)?.name || "—";
 
-  /** Approved leave dates relevant to the viewer (self + team for managers/admin). */
-  const visibleApproved = useMemo(() => {
-    if (role === "admin" || role === "manager") return requests.filter((r) => r.status === "approved");
-    return requests.filter((r) => r.status === "approved" && r.user_id === user?.id);
-  }, [requests, role, user]);
+  /** Approved leave dates visible to the viewer. RLS already restricts the rows
+   *  returned (admin: all, manager: management chain, employee: same wing+department),
+   *  so we simply surface every approved request the user can read. */
+  const visibleApproved = useMemo(
+    () => requests.filter((r) => r.status === "approved"),
+    [requests]
+  );
 
   const leaveDays: Date[] = useMemo(() => {
     const days: Date[] = [];
