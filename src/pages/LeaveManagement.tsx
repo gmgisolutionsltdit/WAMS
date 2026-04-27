@@ -28,8 +28,11 @@ type LeaveType = {
 type LeaveRequest = {
   id: string; user_id: string; leave_type_id: string; start_date: string; end_date: string;
   day_type: "full" | "first_half" | "second_half"; total_days: number;
-  reason: string | null; status: "pending" | "approved" | "rejected" | "cancelled";
+  reason: string | null; status: "pending" | "approved" | "rejected" | "cancelled" | "modified";
   approver_id: string | null; approver_note: string | null; created_at: string;
+  modified_by: string | null; modified_at: string | null;
+  original_start_date: string | null; original_end_date: string | null;
+  original_leave_type_id: string | null; original_day_type: string | null; original_total_days: number | null;
 };
 
 type Balance = { id: string; user_id: string; leave_type_id: string; year: number; allocated: number; used: number; carried_forward: number; };
