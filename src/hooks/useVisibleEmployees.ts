@@ -77,5 +77,5 @@ export const useVisibleEmployees = () => {
 
   const flat = useMemo(() => groups.flatMap((g) => g.employees), [groups]);
 
-  return { employees, groups, flat, loading, refetch: fetchEmployees };
+  return { employees, groups, flat, loading, error, refetch: fetchEmployees };
 };
