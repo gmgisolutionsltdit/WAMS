@@ -15,7 +15,7 @@ import {
 } from "@/components/ui/dialog";
 import { toast } from "sonner";
 import {
-  ArrowLeft, Plus, Settings as SettingsIcon, Calendar as CalendarIcon, MessageSquare, UserPlus,
+  ArrowLeft, Plus, Settings as SettingsIcon, Calendar as CalendarIcon, MessageSquare,
 } from "lucide-react";
 import { useRealtimeSubscription } from "@/hooks/useRealtimeSubscription";
 import { EmployeePicker } from "@/components/EmployeePicker";
