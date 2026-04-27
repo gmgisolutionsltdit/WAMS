@@ -283,6 +283,7 @@ const LeaveManagement = () => {
 
   const statusBadge = (s: string) => {
     if (s === "approved") return <Badge className="bg-success/15 text-success border-success/30" variant="outline"><CheckCircle2 className="mr-1 h-3 w-3" />Approved</Badge>;
+    if (s === "modified") return <Badge className="bg-[#FFD700]/20 text-yellow-700 border-yellow-500/40" variant="outline"><Pencil className="mr-1 h-3 w-3" />Modified</Badge>;
     if (s === "rejected") return <Badge className="bg-destructive/15 text-destructive border-destructive/30" variant="outline"><XCircle className="mr-1 h-3 w-3" />Rejected</Badge>;
     if (s === "cancelled") return <Badge variant="outline">Cancelled</Badge>;
     return <Badge className="bg-warning/15 text-warning border-warning/30" variant="outline"><Clock className="mr-1 h-3 w-3" />Pending</Badge>;
