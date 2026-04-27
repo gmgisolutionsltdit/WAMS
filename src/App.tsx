@@ -14,6 +14,9 @@ import Reports from "./pages/Reports";
 import SettingsPage from "./pages/SettingsPage";
 import EmployeeManagement from "./pages/EmployeeManagement";
 import Holidays from "./pages/Holidays";
+import LeaveManagement from "./pages/LeaveManagement";
+import Projects from "./pages/Projects";
+import ProjectBoard from "./pages/ProjectBoard";
 import Login from "./pages/Login";
 import Signup from "./pages/Signup";
 import ForgotPassword from "./pages/ForgotPassword";
@@ -63,6 +66,9 @@ const AppRoutes = () => (
     <Route path="/settings" element={<ProtectedRoute><RoleGate allow={["admin"]}><SettingsPage /></RoleGate></ProtectedRoute>} />
     <Route path="/employees" element={<ProtectedRoute><RoleGate allow={["admin"]}><EmployeeManagement /></RoleGate></ProtectedRoute>} />
     <Route path="/holidays" element={<ProtectedRoute><RoleGate allow={["admin"]}><Holidays /></RoleGate></ProtectedRoute>} />
+    <Route path="/leave" element={<ProtectedRoute><LeaveManagement /></ProtectedRoute>} />
+    <Route path="/projects" element={<ProtectedRoute><Projects /></ProtectedRoute>} />
+    <Route path="/projects/:id" element={<ProtectedRoute><ProjectBoard /></ProtectedRoute>} />
 
     <Route path="*" element={<NotFound />} />
   </Routes>
