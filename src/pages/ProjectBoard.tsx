@@ -201,38 +201,12 @@ const ProjectBoard = () => {
           </div>
         </div>
         <div className="flex gap-2">
-          <Dialog open={memberOpen} onOpenChange={setMemberOpen}>
-            <DialogTrigger asChild>
-              <Button variant="outline" size="sm"><UserPlus className="mr-1 h-4 w-4" /> Members ({memberProfiles.length})</Button>
-            </DialogTrigger>
-            <DialogContent>
-              <DialogHeader><DialogTitle>Project Members</DialogTitle></DialogHeader>
-              <div className="space-y-2 max-h-80 overflow-y-auto">
-                {profiles.map((p) => {
-                  const m = members.find((mm) => mm.user_id === p.id);
-                  const isOwner = project.owner_id === p.id;
-                  return (
-                    <div key={p.id} className="flex items-center justify-between gap-2">
-                      <div className="flex items-center gap-2 min-w-0">
-                        <Avatar className="h-7 w-7"><AvatarImage src={p.photo_url || undefined} /><AvatarFallback>{(p.full_name || "?").slice(0, 2)}</AvatarFallback></Avatar>
-                        <span className="text-sm truncate">{p.full_name || p.email}</span>
-                      </div>
-                      {isOwner ? <Badge>Owner</Badge> : (
-                        <Select value={m?.role || "none"} onValueChange={(v) => v === "none" ? supabase.from("project_members").delete().eq("project_id", projectId!).eq("user_id", p.id).then(fetchAll) : addMember(p.id, v)}>
-                          <SelectTrigger className="w-[120px] h-8"><SelectValue /></SelectTrigger>
-                          <SelectContent>
-                            <SelectItem value="none">— None —</SelectItem>
-                            <SelectItem value="member">Member</SelectItem>
-                            <SelectItem value="viewer">Viewer</SelectItem>
-                          </SelectContent>
-                        </Select>
-                      )}
-                    </div>
-                  );
-                })}
-              </div>
-            </DialogContent>
-          </Dialog>
+          <ProjectMemberSelector
+            projectId={projectId!}
+            project={project}
+            members={members}
+            onChanged={fetchAll}
+          />
         </div>
       </div>
 
