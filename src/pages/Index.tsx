@@ -239,17 +239,33 @@ const Dashboard = () => {
 
   return (
     <div className="space-y-6">
+      {/* Hero greeting */}
+      <div className="relative overflow-hidden rounded-2xl bg-gradient-hero p-6 md:p-8 shadow-glow">
+        <div className="relative z-10 flex flex-col md:flex-row md:items-center md:justify-between gap-4 text-brand-foreground">
+          <div>
+            <p className="text-sm/6 opacity-80">{format(currentTime, "EEEE, MMMM d, yyyy")}</p>
+            <h1 className="text-2xl md:text-3xl font-semibold mt-1">
+              {(() => {
+                const h = currentTime.getHours();
+                const greet = h < 12 ? "Good morning" : h < 18 ? "Good afternoon" : "Good evening";
+                const name = (user?.user_metadata as any)?.full_name || user?.email?.split("@")[0] || "there";
+                return `${greet}, ${name} 👋`;
+              })()}
+            </h1>
+            <p className="text-sm/6 opacity-90 mt-1 capitalize">{role} dashboard · live updates enabled</p>
+          </div>
+          <div className="text-right">
+            <div className="text-4xl md:text-5xl font-bold font-mono tracking-tight">{format(currentTime, "HH:mm:ss")}</div>
+            <p className="text-xs opacity-80 mt-1">Local time</p>
+          </div>
+        </div>
+        <div className="pointer-events-none absolute -right-20 -top-20 h-64 w-64 rounded-full bg-white/10 blur-3xl" />
+        <div className="pointer-events-none absolute -left-10 -bottom-10 h-48 w-48 rounded-full bg-white/10 blur-3xl" />
+      </div>
+
       {/* Employee Section */}
       <div className="grid gap-4 md:grid-cols-3">
-        <Card>
-          <CardHeader className="pb-2"><CardDescription>Current Time</CardDescription></CardHeader>
-          <CardContent>
-            <div className="text-3xl font-bold font-mono text-center">{format(currentTime, "HH:mm:ss")}</div>
-            <p className="text-center text-sm text-muted-foreground mt-1">{format(currentTime, "EEEE, MMMM d, yyyy")}</p>
-          </CardContent>
-        </Card>
-
-        <Card>
+        <Card className="shadow-card border-l-4 border-l-info">
           <CardHeader className="pb-2"><CardDescription>Today's Status</CardDescription></CardHeader>
           <CardContent className="flex flex-col items-center gap-3">
             {isClockedIn ? (
@@ -257,9 +273,9 @@ const Dashboard = () => {
                 {isOnBreak ? (
                   <Badge variant="secondary" className="text-sm"><Pause className="mr-1 h-3 w-3" /> On Break</Badge>
                 ) : (
-                  <Badge variant="default" className="text-sm"><Timer className="mr-1 h-3 w-3" /> Working</Badge>
+                  <Badge className="bg-success text-success-foreground hover:bg-success/90 text-sm"><Timer className="mr-1 h-3 w-3" /> Working</Badge>
                 )}
-                <div className="text-2xl font-mono font-bold">
+                <div className="text-3xl font-mono font-bold">
                   {getRunningDuration(todayLog.clock_in, todayLog.break_minutes || 0, isOnBreak ? todayLog.break_start : null)}
                 </div>
                 {(todayLog.break_minutes || 0) > 0 && (
@@ -281,27 +297,43 @@ const Dashboard = () => {
                 </div>
               </>
             ) : todayLog?.clock_out ? (
-              <Badge variant="secondary" className="text-sm">Day Complete ✓</Badge>
+              <Badge className="bg-success text-success-foreground hover:bg-success/90 text-sm">Day Complete ✓</Badge>
             ) : (
-              <Button size="lg" onClick={handleClockIn} disabled={loading} className="w-full">
+              <Button size="lg" onClick={handleClockIn} disabled={loading} className="w-full bg-gradient-hero hover:opacity-90">
                 <LogIn className="mr-2 h-5 w-5" /> Clock In
               </Button>
             )}
           </CardContent>
         </Card>
 
-        <Card>
+        <Card className="shadow-card border-l-4 border-l-brand">
           <CardHeader className="pb-2"><CardDescription>Daily Progress (8h standard)</CardDescription></CardHeader>
           <CardContent>
             <Progress value={progressPercent} className="h-4" />
-            <p className="text-center text-sm mt-2 font-medium">
-              {workedHours.toFixed(1)} / 8.0 hours
-              {workedHours > 8 && (
-                <span className="text-destructive ml-2">
-                  <AlertCircle className="inline h-3 w-3 mr-1" />+{(workedHours - 8).toFixed(1)}h OT
-                </span>
-              )}
+            <p className="text-center text-sm mt-3 font-medium">
+              <span className="text-2xl font-bold tabular-nums">{workedHours.toFixed(1)}</span>
+              <span className="text-muted-foreground"> / 8.0 hours</span>
             </p>
+            {workedHours > 8 && (
+              <p className="text-center text-xs text-warning mt-1">
+                <AlertCircle className="inline h-3 w-3 mr-1" />+{(workedHours - 8).toFixed(1)}h overtime
+              </p>
+            )}
+          </CardContent>
+        </Card>
+
+        <Card className="shadow-card border-l-4 border-l-success">
+          <CardHeader className="pb-2"><CardDescription>Recent Sessions</CardDescription></CardHeader>
+          <CardContent>
+            <div className="text-3xl font-bold tabular-nums">{recentLogs.length}</div>
+            <p className="text-xs text-muted-foreground mt-1">days logged in last 10</p>
+            <div className="mt-3 flex items-end gap-1 h-10">
+              {recentLogs.slice(0, 10).reverse().map((l, i) => {
+                const h = Number(l.total_hours || 0);
+                const pct = Math.min(100, (h / 10) * 100);
+                return <div key={i} title={`${l.date}: ${h}h`} className="flex-1 rounded-sm bg-gradient-hero opacity-80 hover:opacity-100 transition" style={{ height: `${pct}%` }} />;
+              })}
+            </div>
           </CardContent>
         </Card>
       </div>
@@ -310,19 +342,38 @@ const Dashboard = () => {
       {isManagerOrAdmin && (
         <>
           <div className="grid gap-4 md:grid-cols-3">
-            <Card className="border-l-4 border-l-primary">
-              <CardHeader className="pb-2"><CardDescription>Total OT Hours Today</CardDescription></CardHeader>
-              <CardContent><div className="flex items-center gap-2"><Timer className="h-5 w-5 text-primary" /><span className="text-2xl font-bold">{stats.totalOTToday}h</span></div></CardContent>
+            <Card className="shadow-card overflow-hidden relative">
+              <div className="absolute inset-0 bg-gradient-info opacity-10" />
+              <CardHeader className="pb-2 relative"><CardDescription>Total OT Hours Today</CardDescription></CardHeader>
+              <CardContent className="relative">
+                <div className="flex items-center gap-3">
+                  <div className="rounded-lg bg-gradient-info p-2.5 shadow-soft"><Timer className="h-5 w-5 text-info-foreground" /></div>
+                  <span className="text-3xl font-bold tabular-nums">{stats.totalOTToday}h</span>
+                </div>
+              </CardContent>
             </Card>
-            <Card className="border-l-4 border-l-destructive">
-              <CardHeader className="pb-2"><CardDescription>Pending Approvals</CardDescription></CardHeader>
-              <CardContent><div className="flex items-center gap-2"><CheckSquare className="h-5 w-5 text-destructive" /><span className="text-2xl font-bold">{stats.pendingCount}</span></div></CardContent>
+            <Card className="shadow-card overflow-hidden relative">
+              <div className="absolute inset-0 bg-gradient-warning opacity-10" />
+              <CardHeader className="pb-2 relative"><CardDescription>Pending Approvals</CardDescription></CardHeader>
+              <CardContent className="relative">
+                <div className="flex items-center gap-3">
+                  <div className="rounded-lg bg-gradient-warning p-2.5 shadow-soft"><CheckSquare className="h-5 w-5 text-warning-foreground" /></div>
+                  <span className="text-3xl font-bold tabular-nums">{stats.pendingCount}</span>
+                </div>
+              </CardContent>
             </Card>
-            <Card className="border-l-4 border-l-green-500">
-              <CardHeader className="pb-2"><CardDescription>Active Employees (Clocked In)</CardDescription></CardHeader>
-              <CardContent><div className="flex items-center gap-2"><Users className="h-5 w-5 text-green-500" /><span className="text-2xl font-bold">{stats.activeEmployees}</span></div></CardContent>
+            <Card className="shadow-card overflow-hidden relative">
+              <div className="absolute inset-0 bg-gradient-success opacity-10" />
+              <CardHeader className="pb-2 relative"><CardDescription>Active Employees</CardDescription></CardHeader>
+              <CardContent className="relative">
+                <div className="flex items-center gap-3">
+                  <div className="rounded-lg bg-gradient-success p-2.5 shadow-soft"><Users className="h-5 w-5 text-success-foreground" /></div>
+                  <span className="text-3xl font-bold tabular-nums">{stats.activeEmployees}</span>
+                </div>
+              </CardContent>
             </Card>
           </div>
+
 
           <Card>
             <CardHeader className="flex flex-row items-center justify-between">
