@@ -214,6 +214,15 @@ export type Database = {
           end_date: string
           id: string
           leave_type_id: string
+          modified_at: string | null
+          modified_by: string | null
+          original_day_type:
+            | Database["public"]["Enums"]["leave_day_type"]
+            | null
+          original_end_date: string | null
+          original_leave_type_id: string | null
+          original_start_date: string | null
+          original_total_days: number | null
           reason: string | null
           start_date: string
           status: Database["public"]["Enums"]["leave_status"]
@@ -230,6 +239,15 @@ export type Database = {
           end_date: string
           id?: string
           leave_type_id: string
+          modified_at?: string | null
+          modified_by?: string | null
+          original_day_type?:
+            | Database["public"]["Enums"]["leave_day_type"]
+            | null
+          original_end_date?: string | null
+          original_leave_type_id?: string | null
+          original_start_date?: string | null
+          original_total_days?: number | null
           reason?: string | null
           start_date: string
           status?: Database["public"]["Enums"]["leave_status"]
@@ -246,6 +264,15 @@ export type Database = {
           end_date?: string
           id?: string
           leave_type_id?: string
+          modified_at?: string | null
+          modified_by?: string | null
+          original_day_type?:
+            | Database["public"]["Enums"]["leave_day_type"]
+            | null
+          original_end_date?: string | null
+          original_leave_type_id?: string | null
+          original_start_date?: string | null
+          original_total_days?: number | null
           reason?: string | null
           start_date?: string
           status?: Database["public"]["Enums"]["leave_status"]
@@ -321,6 +348,7 @@ export type Database = {
           is_read: boolean
           message: string | null
           related_id: string | null
+          route: string | null
           title: string
           type: string
           user_id: string
@@ -331,6 +359,7 @@ export type Database = {
           is_read?: boolean
           message?: string | null
           related_id?: string | null
+          route?: string | null
           title: string
           type?: string
           user_id: string
@@ -341,6 +370,7 @@ export type Database = {
           is_read?: boolean
           message?: string | null
           related_id?: string | null
+          route?: string | null
           title?: string
           type?: string
           user_id?: string
@@ -353,6 +383,9 @@ export type Database = {
           created_at: string
           date: string
           id: string
+          modified_at: string | null
+          modified_by: string | null
+          original_hours: number | null
           reason: string | null
           requested_hours: number
           status: Database["public"]["Enums"]["ot_status"]
@@ -364,6 +397,9 @@ export type Database = {
           created_at?: string
           date: string
           id?: string
+          modified_at?: string | null
+          modified_by?: string | null
+          original_hours?: number | null
           reason?: string | null
           requested_hours: number
           status?: Database["public"]["Enums"]["ot_status"]
@@ -375,6 +411,9 @@ export type Database = {
           created_at?: string
           date?: string
           id?: string
+          modified_at?: string | null
+          modified_by?: string | null
+          original_hours?: number | null
           reason?: string | null
           requested_hours?: number
           status?: Database["public"]["Enums"]["ot_status"]
@@ -946,7 +985,12 @@ export type Database = {
       company_wing: "GMGI" | "MORU"
       employee_status: "Active" | "Inactive" | "Resigned"
       leave_day_type: "full" | "first_half" | "second_half"
-      leave_status: "pending" | "approved" | "rejected" | "cancelled"
+      leave_status:
+        | "pending"
+        | "approved"
+        | "rejected"
+        | "cancelled"
+        | "modified"
       ot_status: "pending" | "approved" | "rejected" | "modified"
       project_role: "owner" | "member" | "viewer"
       service_status:
@@ -1088,7 +1132,13 @@ export const Constants = {
       company_wing: ["GMGI", "MORU"],
       employee_status: ["Active", "Inactive", "Resigned"],
       leave_day_type: ["full", "first_half", "second_half"],
-      leave_status: ["pending", "approved", "rejected", "cancelled"],
+      leave_status: [
+        "pending",
+        "approved",
+        "rejected",
+        "cancelled",
+        "modified",
+      ],
       ot_status: ["pending", "approved", "rejected", "modified"],
       project_role: ["owner", "member", "viewer"],
       service_status: [

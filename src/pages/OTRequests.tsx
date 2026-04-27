@@ -31,6 +31,7 @@ const OTRequests = () => {
 
   const [requests, setRequests] = useState<any[]>([]);
   const [pendingRequests, setPendingRequests] = useState<any[]>([]);
+  const [profilesMap, setProfilesMap] = useState<Record<string, string>>({});
   const [date, setDate] = useState(format(new Date(), "yyyy-MM-dd"));
   const [startTime, setStartTime] = useState("");
   const [endTime, setEndTime] = useState("");
@@ -60,6 +61,10 @@ const OTRequests = () => {
       .eq("user_id", user.id)
       .order("created_at", { ascending: false });
     setRequests(data || []);
+    const { data: pf } = await supabase.from("profiles").select("id, full_name, email");
+    const map: Record<string, string> = {};
+    (pf || []).forEach((p: any) => { map[p.id] = p.full_name || p.email || "—"; });
+    setProfilesMap(map);
   }, [user]);
 
   const fetchPendingRequests = useCallback(async () => {
@@ -89,7 +94,7 @@ const OTRequests = () => {
     setLoading(true);
     const { data, error } = await supabase
       .from("overtime_requests")
-      .insert({ user_id: user.id, date, requested_hours: calculatedHours, reason })
+      .insert({ user_id: user.id, date, requested_hours: calculatedHours, original_hours: calculatedHours, reason })
       .select()
       .single();
     if (error) toast.error(error.message);
@@ -98,7 +103,8 @@ const OTRequests = () => {
       await notifyManagersAndAdmins(
         "New OT Request",
         `${user.email} requested ${calculatedHours}h overtime for ${date}`,
-        data?.id
+        data?.id,
+        { route: "/approvals", type: "ot_request", requesterId: user.id }
       );
       setStartTime("");
       setEndTime("");
@@ -130,7 +136,8 @@ const OTRequests = () => {
         req.user_id,
         `OT Request ${status.charAt(0).toUpperCase() + status.slice(1)}`,
         `Your ${finalHours}h OT request for ${format(new Date(req.date), "MMM d")} was ${status}.${detail}`,
-        req.id
+        req.id,
+        { route: "/ot-requests", type: "ot_update" }
       );
       fetchPendingRequests();
     }
@@ -146,7 +153,14 @@ const OTRequests = () => {
 
     const { error } = await supabase
       .from("overtime_requests")
-      .update({ requested_hours: adjustedHours, status: "modified" as any, approved_by: user.id })
+      .update({
+        requested_hours: adjustedHours,
+        original_hours: editReq.original_hours ?? editReq.requested_hours,
+        status: "modified" as any,
+        approved_by: user.id,
+        modified_by: user.id,
+        modified_at: new Date().toISOString(),
+      })
       .eq("id", editReq.id);
     if (error) toast.error(error.message);
     else {
@@ -158,7 +172,8 @@ const OTRequests = () => {
         editReq.user_id,
         "OT Hours Modified",
         `Your OT request was modified to ${adjustedHours}h (adjusted for standard hours fulfillment).`,
-        editReq.id
+        editReq.id,
+        { route: "/ot-requests", type: "ot_update" }
       );
       setEditOpen(false);
       fetchPendingRequests();
@@ -299,12 +314,22 @@ const OTRequests = () => {
               ) : requests.map((req) => (
                 <TableRow key={req.id}>
                   <TableCell>{format(new Date(req.date), "MMM d, yyyy")}</TableCell>
-                  <TableCell>{req.requested_hours}h</TableCell>
+                  <TableCell>
+                    {req.requested_hours}h
+                    {req.original_hours != null && Number(req.original_hours) !== Number(req.requested_hours) && (
+                      <span className="ml-1 text-xs text-muted-foreground line-through">{req.original_hours}h</span>
+                    )}
+                  </TableCell>
                   <TableCell className="max-w-48 truncate">{req.reason}</TableCell>
                   <TableCell>
                     <Badge className={otStatusStyle(getDisplayStatus(req))}>
                       {getDisplayStatus(req)}
                     </Badge>
+                    {req.modified_by && (
+                      <div className="text-[10px] text-muted-foreground mt-1">
+                        Modified by {profilesMap[req.modified_by] || "Manager"}
+                      </div>
+                    )}
                   </TableCell>
                   <TableCell className="text-sm text-muted-foreground">{format(new Date(req.created_at), "MMM d")}</TableCell>
                 </TableRow>

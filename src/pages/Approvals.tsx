@@ -79,7 +79,8 @@ const Approvals = () => {
         req.user_id,
         `OT Request ${status.charAt(0).toUpperCase() + status.slice(1)}`,
         `Your ${finalHours}h OT request for ${format(new Date(req.date), "MMM d")} was ${status}.${detail}`,
-        req.id
+        req.id,
+        { route: "/ot-requests", type: "ot_update" }
       );
       fetchData();
     }
@@ -98,7 +99,14 @@ const Approvals = () => {
     const adjustedHours = await applyOTFulfillment(editReq.user_id, editReq.date, newHours);
     const { error } = await supabase
       .from("overtime_requests")
-      .update({ requested_hours: adjustedHours, status: "modified" as any, approved_by: user.id })
+      .update({
+        requested_hours: adjustedHours,
+        original_hours: editReq.original_hours ?? editReq.requested_hours,
+        status: "modified" as any,
+        approved_by: user.id,
+        modified_by: user.id,
+        modified_at: new Date().toISOString(),
+      })
       .eq("id", editReq.id);
     if (error) toast.error(error.message);
     else {
@@ -110,7 +118,8 @@ const Approvals = () => {
         editReq.user_id,
         "OT Hours Modified",
         `Your OT request was modified to ${adjustedHours}h (adjusted for standard hours fulfillment).`,
-        editReq.id
+        editReq.id,
+        { route: "/ot-requests", type: "ot_update" }
       );
       setEditOpen(false);
       fetchData();
