@@ -15,9 +15,10 @@ import {
 } from "@/components/ui/dialog";
 import { Calendar } from "@/components/ui/calendar";
 import { toast } from "sonner";
-import { CalendarHeart, Plus, CheckCircle2, XCircle, Clock, Users } from "lucide-react";
+import { CalendarHeart, Plus, CheckCircle2, XCircle, Clock, Users, Pencil } from "lucide-react";
 import { useRealtimeSubscription } from "@/hooks/useRealtimeSubscription";
 import { format } from "date-fns";
+import { notifyManagersAndAdmins, notifyEmployee } from "@/lib/notifications";
 
 type LeaveType = {
   id: string; name: string; code: string; color: string; annual_quota: number;
