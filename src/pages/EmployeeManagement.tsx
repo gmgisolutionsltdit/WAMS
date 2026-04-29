@@ -189,6 +189,11 @@ const EmployeeManagement = () => {
         monthly_ot_cap: parseFloat(form.monthly_ot_cap) || 40,
         photo_url: form.photo_url || null,
       };
+      if (canEditPayroll) {
+        profilePayload.base_salary = parseFloat(form.base_salary) || 0;
+        profilePayload.hourly_overtime_rate = parseFloat(form.hourly_overtime_rate) || 0;
+        profilePayload.pf_contribution_pct = parseFloat(form.pf_contribution_pct) || 0;
+      }
 
       if (editingId) {
         const { error } = await supabase.from("profiles").update(profilePayload).eq("id", editingId);
