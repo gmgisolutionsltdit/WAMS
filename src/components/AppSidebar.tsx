@@ -1,4 +1,4 @@
-import { Clock, LayoutDashboard, CalendarDays, FileText, CheckSquare, BarChart3, Settings, LogOut, Users, CalendarHeart, FolderKanban, Plane } from "lucide-react";
+import { Clock, LayoutDashboard, CalendarDays, FileText, CheckSquare, BarChart3, Settings, LogOut, Users, CalendarHeart, FolderKanban, Plane, Wallet } from "lucide-react";
 import { NavLink } from "@/components/NavLink";
 import { useLocation } from "react-router-dom";
 import { useAuth } from "@/contexts/AuthContext";
@@ -44,6 +44,7 @@ export function AppSidebar() {
   const isActive = (path: string) => location.pathname === path;
   const isManagerOrAdmin = role === "manager" || role === "admin";
   const isAdmin = role === "admin";
+  const canPayroll = role === "admin" || role === "hr" || role === "executive";
 
   return (
     <Sidebar collapsible="icon">
@@ -104,6 +105,24 @@ export function AppSidebar() {
                     </SidebarMenuButton>
                   </SidebarMenuItem>
                 ))}
+              </SidebarMenu>
+            </SidebarGroupContent>
+          </SidebarGroup>
+        )}
+
+        {canPayroll && (
+          <SidebarGroup>
+            <SidebarGroupLabel>{!collapsed && "HR"}</SidebarGroupLabel>
+            <SidebarGroupContent>
+              <SidebarMenu>
+                <SidebarMenuItem>
+                  <SidebarMenuButton asChild isActive={isActive("/payroll")}>
+                    <NavLink to="/payroll" end className="hover:bg-muted/50" activeClassName="bg-muted text-primary font-medium">
+                      <Wallet className="mr-2 h-4 w-4" />
+                      {!collapsed && <span>Payroll</span>}
+                    </NavLink>
+                  </SidebarMenuButton>
+                </SidebarMenuItem>
               </SidebarMenu>
             </SidebarGroupContent>
           </SidebarGroup>

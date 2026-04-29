@@ -5,7 +5,7 @@ import { NotificationBell } from "@/components/NotificationBell";
 import { Badge } from "@/components/ui/badge";
 import { useAuth } from "@/contexts/AuthContext";
 
-const roleLabel: Record<string, string> = { admin: "Admin", manager: "Manager", employee: "Employee" };
+const roleLabel: Record<string, string> = { admin: "Admin", manager: "Manager", employee: "Employee", hr: "HR", executive: "Executive" };
 
 export function AppLayout({ children }: { children: ReactNode }) {
   const { profile, role } = useAuth();

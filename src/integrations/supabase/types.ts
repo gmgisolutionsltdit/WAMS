@@ -430,8 +430,117 @@ export type Database = {
           },
         ]
       }
+      payroll_incentives: {
+        Row: {
+          amount: number
+          created_at: string
+          created_by: string | null
+          id: string
+          label: string
+          note: string | null
+          period_month: number
+          period_year: number
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          amount?: number
+          created_at?: string
+          created_by?: string | null
+          id?: string
+          label: string
+          note?: string | null
+          period_month: number
+          period_year: number
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          amount?: number
+          created_at?: string
+          created_by?: string | null
+          id?: string
+          label?: string
+          note?: string | null
+          period_month?: number
+          period_year?: number
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
+      payroll_records: {
+        Row: {
+          base_salary: number
+          breakdown: Json
+          created_at: string
+          currency: string
+          generated_at: string
+          generated_by: string | null
+          gross_pay: number
+          id: string
+          incentives_amount: number
+          net_pay: number
+          ot_amount: number
+          ot_hours: number
+          other_deductions: number
+          period_month: number
+          period_year: number
+          pf_employee: number
+          pf_employer: number
+          status: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          base_salary?: number
+          breakdown?: Json
+          created_at?: string
+          currency?: string
+          generated_at?: string
+          generated_by?: string | null
+          gross_pay?: number
+          id?: string
+          incentives_amount?: number
+          net_pay?: number
+          ot_amount?: number
+          ot_hours?: number
+          other_deductions?: number
+          period_month: number
+          period_year: number
+          pf_employee?: number
+          pf_employer?: number
+          status?: string
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          base_salary?: number
+          breakdown?: Json
+          created_at?: string
+          currency?: string
+          generated_at?: string
+          generated_by?: string | null
+          gross_pay?: number
+          id?: string
+          incentives_amount?: number
+          net_pay?: number
+          ot_amount?: number
+          ot_hours?: number
+          other_deductions?: number
+          period_month?: number
+          period_year?: number
+          pf_employee?: number
+          pf_employer?: number
+          status?: string
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
       profiles: {
         Row: {
+          base_salary: number
           company_wing: Database["public"]["Enums"]["company_wing"]
           created_at: string
           daily_ot_cap: number
@@ -440,9 +549,11 @@ export type Database = {
           email: string | null
           employee_status: Database["public"]["Enums"]["employee_status"]
           full_name: string | null
+          hourly_overtime_rate: number
           id: string
           joining_date: string | null
           monthly_ot_cap: number
+          pf_contribution_pct: number
           phone: string | null
           photo_url: string | null
           promotion_date: string | null
@@ -452,6 +563,7 @@ export type Database = {
           updated_at: string
         }
         Insert: {
+          base_salary?: number
           company_wing?: Database["public"]["Enums"]["company_wing"]
           created_at?: string
           daily_ot_cap?: number
@@ -460,9 +572,11 @@ export type Database = {
           email?: string | null
           employee_status?: Database["public"]["Enums"]["employee_status"]
           full_name?: string | null
+          hourly_overtime_rate?: number
           id: string
           joining_date?: string | null
           monthly_ot_cap?: number
+          pf_contribution_pct?: number
           phone?: string | null
           photo_url?: string | null
           promotion_date?: string | null
@@ -472,6 +586,7 @@ export type Database = {
           updated_at?: string
         }
         Update: {
+          base_salary?: number
           company_wing?: Database["public"]["Enums"]["company_wing"]
           created_at?: string
           daily_ot_cap?: number
@@ -480,9 +595,11 @@ export type Database = {
           email?: string | null
           employee_status?: Database["public"]["Enums"]["employee_status"]
           full_name?: string | null
+          hourly_overtime_rate?: number
           id?: string
           joining_date?: string | null
           monthly_ot_cap?: number
+          pf_contribution_pct?: number
           phone?: string | null
           photo_url?: string | null
           promotion_date?: string | null
@@ -572,6 +689,7 @@ export type Database = {
       settings: {
         Row: {
           created_at: string
+          currency: string
           holiday_ot_multiplier: number
           id: string
           office_end_time: string
@@ -584,6 +702,7 @@ export type Database = {
         }
         Insert: {
           created_at?: string
+          currency?: string
           holiday_ot_multiplier?: number
           id?: string
           office_end_time?: string
@@ -596,6 +715,7 @@ export type Database = {
         }
         Update: {
           created_at?: string
+          currency?: string
           holiday_ot_multiplier?: number
           id?: string
           office_end_time?: string
@@ -956,6 +1076,7 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
+      can_access_payroll: { Args: { _user_id: string }; Returns: boolean }
       current_user_department: { Args: never; Returns: string }
       current_user_wing: {
         Args: never
@@ -986,7 +1107,7 @@ export type Database = {
       }
     }
     Enums: {
-      app_role: "admin" | "manager" | "employee"
+      app_role: "admin" | "manager" | "employee" | "hr" | "executive"
       company_wing: "GMGI" | "MORU"
       employee_status: "Active" | "Inactive" | "Resigned"
       leave_day_type: "full" | "first_half" | "second_half"
@@ -1133,7 +1254,7 @@ export type CompositeTypes<
 export const Constants = {
   public: {
     Enums: {
-      app_role: ["admin", "manager", "employee"],
+      app_role: ["admin", "manager", "employee", "hr", "executive"],
       company_wing: ["GMGI", "MORU"],
       employee_status: ["Active", "Inactive", "Resigned"],
       leave_day_type: ["full", "first_half", "second_half"],
