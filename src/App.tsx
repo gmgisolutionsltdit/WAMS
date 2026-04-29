@@ -22,6 +22,7 @@ import Signup from "./pages/Signup";
 import ForgotPassword from "./pages/ForgotPassword";
 import ResetPassword from "./pages/ResetPassword";
 import NotFound from "./pages/NotFound";
+import Payroll from "./pages/Payroll";
 
 const queryClient = new QueryClient();
 
@@ -69,6 +70,7 @@ const AppRoutes = () => (
     <Route path="/leave" element={<ProtectedRoute><LeaveManagement /></ProtectedRoute>} />
     <Route path="/projects" element={<ProtectedRoute><Projects /></ProtectedRoute>} />
     <Route path="/projects/:id" element={<ProtectedRoute><ProjectBoard /></ProtectedRoute>} />
+    <Route path="/payroll" element={<ProtectedRoute><RoleGate allow={["admin", "hr", "executive"]}><Payroll /></RoleGate></ProtectedRoute>} />
 
     <Route path="*" element={<NotFound />} />
   </Routes>
