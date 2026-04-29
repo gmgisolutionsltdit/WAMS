@@ -372,129 +372,161 @@ const EmployeeManagement = () => {
           <Users className="h-5 w-5" /> Employee Management
           {!isAdmin && <Badge variant="outline" className="ml-2 text-[10px]">My Team</Badge>}
         </CardTitle>
-        {isAdmin && (
-          <div className="flex items-center gap-2">
-            <Button size="sm" variant="outline" onClick={downloadTemplate}>
-              <Download className="mr-1 h-4 w-4" /> Template
-            </Button>
-            <Button size="sm" variant="outline" onClick={() => csvInputRef.current?.click()}>
-              <Upload className="mr-1 h-4 w-4" /> Bulk Upload
-            </Button>
-            <input
-              ref={csvInputRef}
-              type="file"
-              accept=".csv"
-              className="hidden"
-              onChange={(e) => {
-                const f = e.target.files?.[0];
-                if (f) { setBulkOpen(true); handleBulkUpload(f); }
-                if (csvInputRef.current) csvInputRef.current.value = "";
-              }}
-            />
-            <Dialog open={dialogOpen} onOpenChange={(o) => { setDialogOpen(o); if (!o) resetForm(); }}>
-              <DialogTrigger asChild>
-                <Button size="sm" onClick={openCreate}><Plus className="mr-1 h-4 w-4" /> Add Employee</Button>
-              </DialogTrigger>
-            <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto">
-              <DialogHeader>
-                <DialogTitle>{editingId ? "Edit Employee" : "Add New Employee"}</DialogTitle>
-                <DialogDescription>
-                  {editingId
-                    ? "Update employee profile, role, OT caps, photo, and reporting structure."
-                    : "Account is created with a temporary password shown after save. Share it securely; the user can change it after first login."}
-                </DialogDescription>
-              </DialogHeader>
+        <div className="flex items-center gap-2">
+          {isAdmin && (
+            <>
+              <Button size="sm" variant="outline" onClick={downloadTemplate}>
+                <Download className="mr-1 h-4 w-4" /> Template
+              </Button>
+              <Button size="sm" variant="outline" onClick={() => csvInputRef.current?.click()}>
+                <Upload className="mr-1 h-4 w-4" /> Bulk Upload
+              </Button>
+              <input
+                ref={csvInputRef}
+                type="file"
+                accept=".csv"
+                className="hidden"
+                onChange={(e) => {
+                  const f = e.target.files?.[0];
+                  if (f) { setBulkOpen(true); handleBulkUpload(f); }
+                  if (csvInputRef.current) csvInputRef.current.value = "";
+                }}
+              />
+              <Button size="sm" onClick={openCreate}><Plus className="mr-1 h-4 w-4" /> Add Employee</Button>
+            </>
+          )}
+        </div>
+        <Dialog open={dialogOpen} onOpenChange={(o) => { setDialogOpen(o); if (!o) resetForm(); }}>
+          <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto">
+            <DialogHeader>
+              <DialogTitle>{editingId ? "Edit Employee" : "Add New Employee"}</DialogTitle>
+              <DialogDescription>
+                {editingId
+                  ? "Update employee profile, role, OT caps, photo, and reporting structure."
+                  : "Account is created with a temporary password shown after save. Share it securely; the user can change it after first login."}
+              </DialogDescription>
+            </DialogHeader>
 
-              <div className="flex items-start gap-4 mb-4">
-                <Avatar className="h-20 w-20">
-                  <AvatarImage src={form.photo_url || undefined} />
-                  <AvatarFallback>{(form.full_name || "?").slice(0, 2).toUpperCase()}</AvatarFallback>
-                </Avatar>
-                <div>
-                  <input
-                    ref={fileInputRef}
-                    type="file"
-                    accept="image/*"
-                    className="hidden"
-                    onChange={(e) => {
-                      const f = e.target.files?.[0];
-                      if (f) handlePhotoSelect(f, editingId || crypto.randomUUID());
-                    }}
-                  />
-                  <Button size="sm" variant="outline" onClick={() => fileInputRef.current?.click()} disabled={uploadingPhoto}>
-                    <Camera className="mr-1 h-4 w-4" />
-                    {uploadingPhoto ? "Uploading…" : "Upload Photo"}
-                  </Button>
-                  <p className="text-xs text-muted-foreground mt-1">JPG / PNG, up to 3MB</p>
-                </div>
-              </div>
-
-              <div className="grid grid-cols-2 gap-3">
-                <div><Label>Full Name *</Label><Input value={form.full_name} onChange={(e) => setForm((f) => ({ ...f, full_name: e.target.value }))} /></div>
-                <div><Label>Email *</Label><Input type="email" value={form.email} onChange={(e) => setForm((f) => ({ ...f, email: e.target.value }))} disabled={!!editingId} /></div>
-                <div><Label>Phone</Label><Input value={form.phone} onChange={(e) => setForm((f) => ({ ...f, phone: e.target.value }))} /></div>
-                <div><Label>Department</Label><Input value={form.department} onChange={(e) => setForm((f) => ({ ...f, department: e.target.value }))} /></div>
-                <div><Label>Designation</Label><Input value={form.designation} onChange={(e) => setForm((f) => ({ ...f, designation: e.target.value }))} /></div>
-                <div>
-                  <Label>Wing</Label>
-                  <Select value={form.company_wing} onValueChange={(v) => setForm((f) => ({ ...f, company_wing: v }))}>
-                    <SelectTrigger><SelectValue /></SelectTrigger>
-                    <SelectContent>{WINGS.map((w) => <SelectItem key={w} value={w}>{w}</SelectItem>)}</SelectContent>
-                  </Select>
-                </div>
-                <div>
-                  <Label>Role</Label>
-                  <Select value={form.role} onValueChange={(v) => setForm((f) => ({ ...f, role: v }))}>
-                    <SelectTrigger><SelectValue /></SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="admin">Admin</SelectItem>
-                      <SelectItem value="manager">Manager / Reporting Boss</SelectItem>
-                      <SelectItem value="employee">Employee</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-                <div>
-                  <Label>Reporting To</Label>
-                  <Select value={form.reporting_manager_id || "none"} onValueChange={(v) => setForm((f) => ({ ...f, reporting_manager_id: v === "none" ? "" : v }))}>
-                    <SelectTrigger><SelectValue placeholder="Select manager" /></SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="none">None</SelectItem>
-                      {managers.filter((m) => m.id !== editingId).map((m) => (
-                        <SelectItem key={m.id} value={m.id}>{m.full_name || m.email}</SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-                <div>
-                  <Label>Service Status</Label>
-                  <Select value={form.service_status} onValueChange={(v) => setForm((f) => ({ ...f, service_status: v }))}>
-                    <SelectTrigger><SelectValue /></SelectTrigger>
-                    <SelectContent>{SERVICE_STATUS.map((s) => <SelectItem key={s} value={s}>{s}</SelectItem>)}</SelectContent>
-                  </Select>
-                </div>
-                <div>
-                  <Label>Employee Status</Label>
-                  <Select value={form.employee_status} onValueChange={(v) => setForm((f) => ({ ...f, employee_status: v }))}>
-                    <SelectTrigger><SelectValue /></SelectTrigger>
-                    <SelectContent>{EMPLOYEE_STATUS.map((s) => <SelectItem key={s} value={s}>{s}</SelectItem>)}</SelectContent>
-                  </Select>
-                </div>
-                <div><Label>Joining Date</Label><Input type="date" value={form.joining_date} onChange={(e) => setForm((f) => ({ ...f, joining_date: e.target.value }))} /></div>
-                <div><Label>Promotion Date</Label><Input type="date" value={form.promotion_date} onChange={(e) => setForm((f) => ({ ...f, promotion_date: e.target.value }))} /></div>
-                <div><Label>Resign Date</Label><Input type="date" value={form.resign_date} onChange={(e) => setForm((f) => ({ ...f, resign_date: e.target.value }))} /></div>
-                <div></div>
-                <div><Label>Daily OT Cap (hrs)</Label><Input type="number" step="0.5" value={form.daily_ot_cap} onChange={(e) => setForm((f) => ({ ...f, daily_ot_cap: e.target.value }))} /></div>
-                <div><Label>Monthly OT Cap (hrs)</Label><Input type="number" step="1" value={form.monthly_ot_cap} onChange={(e) => setForm((f) => ({ ...f, monthly_ot_cap: e.target.value }))} /></div>
-              </div>
-              <DialogFooter>
-                <Button onClick={handleSave} disabled={saving} className="w-full mt-3">
-                  {saving ? "Saving..." : editingId ? "Update Employee" : "Create Employee"}
+            <div className="flex items-start gap-4 mb-4">
+              <Avatar className="h-20 w-20">
+                <AvatarImage src={form.photo_url || undefined} />
+                <AvatarFallback>{(form.full_name || "?").slice(0, 2).toUpperCase()}</AvatarFallback>
+              </Avatar>
+              <div>
+                <input
+                  ref={fileInputRef}
+                  type="file"
+                  accept="image/*"
+                  className="hidden"
+                  onChange={(e) => {
+                    const f = e.target.files?.[0];
+                    if (f) handlePhotoSelect(f, editingId || crypto.randomUUID());
+                  }}
+                />
+                <Button size="sm" variant="outline" onClick={() => fileInputRef.current?.click()} disabled={uploadingPhoto}>
+                  <Camera className="mr-1 h-4 w-4" />
+                  {uploadingPhoto ? "Uploading…" : "Upload Photo"}
                 </Button>
-              </DialogFooter>
-            </DialogContent>
-          </Dialog>
-          </div>
-        )}
+                <p className="text-xs text-muted-foreground mt-1">JPG / PNG, up to 3MB</p>
+              </div>
+            </div>
+
+            <div className="grid grid-cols-2 gap-3">
+              <div><Label>Full Name *</Label><Input value={form.full_name} onChange={(e) => setForm((f) => ({ ...f, full_name: e.target.value }))} /></div>
+              <div><Label>Email *</Label><Input type="email" value={form.email} onChange={(e) => setForm((f) => ({ ...f, email: e.target.value }))} disabled={!!editingId} /></div>
+              <div><Label>Phone</Label><Input value={form.phone} onChange={(e) => setForm((f) => ({ ...f, phone: e.target.value }))} /></div>
+              <div><Label>Department</Label><Input value={form.department} onChange={(e) => setForm((f) => ({ ...f, department: e.target.value }))} /></div>
+              <div><Label>Designation</Label><Input value={form.designation} onChange={(e) => setForm((f) => ({ ...f, designation: e.target.value }))} /></div>
+              <div>
+                <Label>Wing</Label>
+                <Select value={form.company_wing} onValueChange={(v) => setForm((f) => ({ ...f, company_wing: v }))}>
+                  <SelectTrigger><SelectValue /></SelectTrigger>
+                  <SelectContent>{WINGS.map((w) => <SelectItem key={w} value={w}>{w}</SelectItem>)}</SelectContent>
+                </Select>
+              </div>
+              <div>
+                <Label>Role</Label>
+                <Select value={form.role} onValueChange={(v) => setForm((f) => ({ ...f, role: v }))} disabled={!isAdmin}>
+                  <SelectTrigger><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="admin">Admin</SelectItem>
+                    <SelectItem value="manager">Manager / Reporting Boss</SelectItem>
+                    <SelectItem value="employee">Employee</SelectItem>
+                    <SelectItem value="hr">HR</SelectItem>
+                    <SelectItem value="executive">Executive (CEO/CTO)</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              <div>
+                <Label>Reporting To</Label>
+                <Select value={form.reporting_manager_id || "none"} onValueChange={(v) => setForm((f) => ({ ...f, reporting_manager_id: v === "none" ? "" : v }))}>
+                  <SelectTrigger><SelectValue placeholder="Select manager" /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="none">None</SelectItem>
+                    {managers.filter((m) => m.id !== editingId).map((m) => (
+                      <SelectItem key={m.id} value={m.id}>{m.full_name || m.email}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div>
+                <Label>Service Status</Label>
+                <Select value={form.service_status} onValueChange={(v) => setForm((f) => ({ ...f, service_status: v }))}>
+                  <SelectTrigger><SelectValue /></SelectTrigger>
+                  <SelectContent>{SERVICE_STATUS.map((s) => <SelectItem key={s} value={s}>{s}</SelectItem>)}</SelectContent>
+                </Select>
+              </div>
+              <div>
+                <Label>Employee Status</Label>
+                <Select value={form.employee_status} onValueChange={(v) => setForm((f) => ({ ...f, employee_status: v }))}>
+                  <SelectTrigger><SelectValue /></SelectTrigger>
+                  <SelectContent>{EMPLOYEE_STATUS.map((s) => <SelectItem key={s} value={s}>{s}</SelectItem>)}</SelectContent>
+                </Select>
+              </div>
+              <div><Label>Joining Date</Label><Input type="date" value={form.joining_date} onChange={(e) => setForm((f) => ({ ...f, joining_date: e.target.value }))} /></div>
+              <div><Label>Promotion Date</Label><Input type="date" value={form.promotion_date} onChange={(e) => setForm((f) => ({ ...f, promotion_date: e.target.value }))} /></div>
+              <div><Label>Resign Date</Label><Input type="date" value={form.resign_date} onChange={(e) => setForm((f) => ({ ...f, resign_date: e.target.value }))} /></div>
+              <div></div>
+              <div><Label>Daily OT Cap (hrs)</Label><Input type="number" step="0.5" value={form.daily_ot_cap} onChange={(e) => setForm((f) => ({ ...f, daily_ot_cap: e.target.value }))} /></div>
+              <div><Label>Monthly OT Cap (hrs)</Label><Input type="number" step="1" value={form.monthly_ot_cap} onChange={(e) => setForm((f) => ({ ...f, monthly_ot_cap: e.target.value }))} /></div>
+            </div>
+
+            {canEditPayroll && (
+              <div className="mt-5 rounded-md border p-3 bg-muted/30">
+                <div className="flex items-center justify-between mb-2">
+                  <Label className="text-sm font-semibold">Compensation</Label>
+                  <Badge variant="outline" className="text-[10px]">Admin / HR / Executive only</Badge>
+                </div>
+                <p className="text-xs text-muted-foreground mb-3">
+                  Update base salary on promotion or revision. Changes take effect on the next payroll generation.
+                </p>
+                <div className="grid grid-cols-3 gap-3">
+                  <div>
+                    <Label>Base Salary (monthly)</Label>
+                    <Input type="number" step="0.01" min="0" value={form.base_salary}
+                      onChange={(e) => setForm((f) => ({ ...f, base_salary: e.target.value }))} />
+                  </div>
+                  <div>
+                    <Label>Hourly OT Rate</Label>
+                    <Input type="number" step="0.01" min="0" value={form.hourly_overtime_rate}
+                      onChange={(e) => setForm((f) => ({ ...f, hourly_overtime_rate: e.target.value }))} />
+                  </div>
+                  <div>
+                    <Label>PF Contribution (%)</Label>
+                    <Input type="number" step="0.01" min="0" max="100" value={form.pf_contribution_pct}
+                      onChange={(e) => setForm((f) => ({ ...f, pf_contribution_pct: e.target.value }))} />
+                  </div>
+                </div>
+              </div>
+            )}
+
+            <DialogFooter>
+              <Button onClick={handleSave} disabled={saving} className="w-full mt-3">
+                {saving ? "Saving..." : editingId ? "Update Employee" : "Create Employee"}
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
       </CardHeader>
       <CardContent className="space-y-4">
         <p className="text-xs text-muted-foreground">
