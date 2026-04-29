@@ -1,4 +1,5 @@
 import { supabase } from "@/integrations/supabase/client";
+import type { Json } from "@/integrations/supabase/types";
 import jsPDF from "jspdf";
 
 export interface PayrollProfile {
@@ -29,7 +30,7 @@ export interface PayrollComputation {
   other_deductions: number;
   net_pay: number;
   currency: string;
-  breakdown: Record<string, unknown>;
+  breakdown: Json;
 }
 
 export const MONTHS = [
