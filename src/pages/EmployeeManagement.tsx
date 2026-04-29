@@ -43,6 +43,9 @@ type EmployeeRow = {
   daily_ot_cap: number;
   monthly_ot_cap: number;
   reporting_manager_id: string | null;
+  base_salary: number;
+  hourly_overtime_rate: number;
+  pf_contribution_pct: number;
   _role: string;
 };
 
