@@ -626,11 +626,13 @@ const EmployeeManagement = () => {
                 <TableCell className="text-xs">{emp.daily_ot_cap}h / {emp.monthly_ot_cap}h</TableCell>
                 <TableCell className="text-right">
                   <div className="flex items-center gap-1 justify-end">
-                    {isAdmin ? (
+                    {(isAdmin || canEditPayroll) && (
+                      <Button size="sm" variant="outline" onClick={() => openEdit(emp)} title="Edit">
+                        <Pencil className="h-4 w-4" />
+                      </Button>
+                    )}
+                    {isAdmin && (
                       <>
-                        <Button size="sm" variant="outline" onClick={() => openEdit(emp)} title="Edit">
-                          <Pencil className="h-4 w-4" />
-                        </Button>
                         <AlertDialog>
                           <AlertDialogTrigger asChild>
                             <Button size="sm" variant="outline" title="Reset password">
@@ -672,7 +674,8 @@ const EmployeeManagement = () => {
                           </AlertDialogContent>
                         </AlertDialog>
                       </>
-                    ) : (
+                    )}
+                    {!isAdmin && !canEditPayroll && (
                       <span className="text-xs text-muted-foreground">View only</span>
                     )}
                   </div>
