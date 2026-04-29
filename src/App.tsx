@@ -45,7 +45,7 @@ const PublicOnlyRoute = ({ children }: { children: ReactNode }) => {
   return <>{children}</>;
 };
 
-const RoleGate = ({ children, allow }: { children: ReactNode; allow: ("admin" | "manager" | "employee")[] }) => {
+const RoleGate = ({ children, allow }: { children: ReactNode; allow: ("admin" | "manager" | "employee" | "hr" | "executive")[] }) => {
   const { role } = useAuth();
   if (!allow.includes(role)) return <Navigate to="/" replace />;
   return <>{children}</>;
