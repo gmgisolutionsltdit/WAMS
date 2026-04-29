@@ -109,6 +109,24 @@ export function AppSidebar() {
             </SidebarGroupContent>
           </SidebarGroup>
         )}
+
+        {canPayroll && (
+          <SidebarGroup>
+            <SidebarGroupLabel>{!collapsed && "HR"}</SidebarGroupLabel>
+            <SidebarGroupContent>
+              <SidebarMenu>
+                <SidebarMenuItem>
+                  <SidebarMenuButton asChild isActive={isActive("/payroll")}>
+                    <NavLink to="/payroll" end className="hover:bg-muted/50" activeClassName="bg-muted text-primary font-medium">
+                      <Wallet className="mr-2 h-4 w-4" />
+                      {!collapsed && <span>Payroll</span>}
+                    </NavLink>
+                  </SidebarMenuButton>
+                </SidebarMenuItem>
+              </SidebarMenu>
+            </SidebarGroupContent>
+          </SidebarGroup>
+        )}
       </SidebarContent>
 
       <SidebarFooter>
