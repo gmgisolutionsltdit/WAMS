@@ -139,6 +139,9 @@ const EmployeeManagement = () => {
       daily_ot_cap: String(emp.daily_ot_cap ?? 4),
       monthly_ot_cap: String(emp.monthly_ot_cap ?? 40),
       photo_url: emp.photo_url || "",
+      base_salary: String(emp.base_salary ?? 0),
+      hourly_overtime_rate: String(emp.hourly_overtime_rate ?? 0),
+      pf_contribution_pct: String(emp.pf_contribution_pct ?? 0),
     });
     setEditingId(emp.id);
     setDialogOpen(true);
