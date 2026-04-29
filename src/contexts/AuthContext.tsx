@@ -2,7 +2,7 @@ import { createContext, useContext, useState, useEffect, useCallback, ReactNode 
 import { supabase } from "@/integrations/supabase/client";
 import type { Session, User } from "@supabase/supabase-js";
 
-type AppRole = "admin" | "manager" | "employee";
+type AppRole = "admin" | "manager" | "employee" | "hr" | "executive";
 type CompanyWing = "GMGI" | "MORU";
 type ServiceStatus = "Permanent" | "Contractual" | "Intern" | "Short-Term" | "Consultant";
 type EmployeeStatus = "Active" | "Inactive" | "Resigned";
