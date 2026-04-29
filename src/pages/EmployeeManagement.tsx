@@ -76,6 +76,7 @@ const EmployeeManagement = () => {
     joining_date: "", promotion_date: "", resign_date: "",
     daily_ot_cap: "4", monthly_ot_cap: "40",
     photo_url: "" as string,
+    base_salary: "0", hourly_overtime_rate: "0", pf_contribution_pct: "0",
   };
   const [form, setForm] = useState(initialForm);
 
