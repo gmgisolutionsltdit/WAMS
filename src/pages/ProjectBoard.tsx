@@ -382,10 +382,16 @@ const ProjectBoard = () => {
         </div>
       </div>
 
-      {/* Empty state vs board */}
-      {totalTasks === 0 && columns.length > 0 ? (
+      {/* Hint banner when board is empty — but always render the columns below */}
+      {totalTasks === 0 && columns.length > 0 && (
         <div className="rounded-2xl bg-gradient-to-b from-muted/30 to-transparent border border-border/60">
           <KanbanEmptyState onCreate={() => openCreate(columns[0].id)} />
+        </div>
+      )}
+
+      {columns.length === 0 ? (
+        <div className="rounded-2xl border border-dashed border-border/60 p-10 text-center text-sm text-muted-foreground">
+          No columns yet. Click <span className="font-medium">+ Column</span> above to add one.
         </div>
       ) : (
         <DndContext
