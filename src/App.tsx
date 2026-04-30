@@ -17,6 +17,7 @@ import Holidays from "./pages/Holidays";
 import LeaveManagement from "./pages/LeaveManagement";
 import Projects from "./pages/Projects";
 import ProjectBoard from "./pages/ProjectBoard";
+import { ErrorBoundary } from "./components/ErrorBoundary";
 import Login from "./pages/Login";
 import Signup from "./pages/Signup";
 import ForgotPassword from "./pages/ForgotPassword";
