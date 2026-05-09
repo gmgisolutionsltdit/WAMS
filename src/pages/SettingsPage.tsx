@@ -23,6 +23,7 @@ const DOW = [
 type LeaveType = {
   id: string; name: string; code: string; color: string;
   annual_quota: number; half_day_allowed: boolean; is_paid: boolean; active: boolean;
+  sandwich_leave: boolean;
 };
 
 const SettingsPage = () => {
