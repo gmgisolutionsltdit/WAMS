@@ -137,7 +137,8 @@ const LeaveManagement = () => {
 
   const submit = async () => {
     if (!form.leave_type_id || !form.start_date || !form.end_date) { toast.error("Fill leave type and dates"); return; }
-    const days = computeWorkingDays(form.start_date, form.end_date, form.day_type, settings.weekend_days, holidaySet);
+    const submitLt = leaveTypes.find((t) => t.id === form.leave_type_id);
+    const days = computeWorkingDays(form.start_date, form.end_date, form.day_type, settings.weekend_days, holidaySet, !!submitLt?.sandwich_leave);
     if (days <= 0) { toast.error("No working days in this range (weekends/holidays excluded)"); return; }
     const { data, error } = await supabase.from("leave_requests").insert({
       user_id: user!.id,
