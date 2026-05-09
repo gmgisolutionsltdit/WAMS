@@ -80,6 +80,7 @@ const SettingsPage = () => {
         half_day_allowed: lt.half_day_allowed,
         is_paid: lt.is_paid,
         color: lt.color,
+        sandwich_leave: lt.sandwich_leave,
       }).eq("id", lt.id)
     );
     const results = await Promise.all(updates);
