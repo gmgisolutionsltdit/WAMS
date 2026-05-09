@@ -220,7 +220,8 @@ const LeaveManagement = () => {
   const submitModify = async () => {
     if (!modReq || !user) return;
     if (!modForm.leave_type_id || !modForm.start_date || !modForm.end_date) { toast.error("Fill all fields"); return; }
-    const days = computeWorkingDays(modForm.start_date, modForm.end_date, modForm.day_type, settings.weekend_days, holidaySet);
+    const modLt = leaveTypes.find((t) => t.id === modForm.leave_type_id);
+    const days = computeWorkingDays(modForm.start_date, modForm.end_date, modForm.day_type, settings.weekend_days, holidaySet, !!modLt?.sandwich_leave);
     if (days <= 0) { toast.error("No working days in modified range"); return; }
     const { error } = await supabase.from("leave_requests").update({
       leave_type_id: modForm.leave_type_id,
