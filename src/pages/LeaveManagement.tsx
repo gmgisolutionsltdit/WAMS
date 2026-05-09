@@ -39,25 +39,38 @@ type Balance = { id: string; user_id: string; leave_type_id: string; year: numbe
 type Holiday = { id: string; holiday_date: string; name: string; wing: string | null };
 type Settings = { weekend_days: number[] };
 
-/** Compute leave days, excluding weekends and holidays. Half-day always = 0.5. */
+/**
+ * Compute leave days. By default weekends and holidays are excluded.
+ * If `sandwich` is true, weekend/holiday days are counted when an immediately
+ * adjacent day (either side, within the request range) is a working leave day.
+ * Half-day always = 0.5.
+ */
 const computeWorkingDays = (
   start: string,
   end: string,
   dayType: string,
   weekendDays: number[],
   holidaySet: Set<string>,
+  sandwich = false,
 ): number => {
   if (dayType !== "full") return 0.5;
   const s = new Date(start + "T00:00:00");
   const e = new Date(end + "T00:00:00");
   if (e < s) return 0;
+
+  const isNonWorking = (d: Date) =>
+    weekendDays.includes(d.getDay()) || holidaySet.has(format(d, "yyyy-MM-dd"));
+
   let count = 0;
   for (let d = new Date(s); d <= e; d.setDate(d.getDate() + 1)) {
-    const dow = d.getDay();
-    const iso = format(d, "yyyy-MM-dd");
-    if (weekendDays.includes(dow)) continue;
-    if (holidaySet.has(iso)) continue;
-    count += 1;
+    if (!isNonWorking(d)) { count += 1; continue; }
+    if (!sandwich) continue;
+    // Sandwich (either side): count if previous OR next day in range is a working day.
+    const prev = new Date(d); prev.setDate(prev.getDate() - 1);
+    const next = new Date(d); next.setDate(next.getDate() + 1);
+    const prevInRange = prev >= s && prev <= e && !isNonWorking(prev);
+    const nextInRange = next >= s && next <= e && !isNonWorking(next);
+    if (prevInRange || nextInRange) count += 1;
   }
   return count;
 };
