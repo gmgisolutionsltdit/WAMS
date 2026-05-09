@@ -605,8 +605,8 @@ const LeaveManagement = () => {
                 <Textarea value={modForm.note} onChange={(e) => setModForm((f) => ({ ...f, note: e.target.value }))} />
               </div>
               <div className="text-sm text-muted-foreground">
-                New working days: <strong>
-                  {computeWorkingDays(modForm.start_date, modForm.end_date, modForm.day_type, settings.weekend_days, holidaySet)}
+                New chargeable days: <strong>
+                  {(() => { const lt = leaveTypes.find((t) => t.id === modForm.leave_type_id); return computeWorkingDays(modForm.start_date, modForm.end_date, modForm.day_type, settings.weekend_days, holidaySet, !!lt?.sandwich_leave); })()}
                 </strong>
               </div>
             </div>
