@@ -23,6 +23,7 @@ const DOW = [
 type LeaveType = {
   id: string; name: string; code: string; color: string;
   annual_quota: number; half_day_allowed: boolean; is_paid: boolean; active: boolean;
+  sandwich_leave: boolean;
 };
 
 const SettingsPage = () => {
@@ -79,6 +80,7 @@ const SettingsPage = () => {
         half_day_allowed: lt.half_day_allowed,
         is_paid: lt.is_paid,
         color: lt.color,
+        sandwich_leave: lt.sandwich_leave,
       }).eq("id", lt.id)
     );
     const results = await Promise.all(updates);
@@ -187,9 +189,13 @@ const SettingsPage = () => {
                   <Switch checked={lt.is_paid} onCheckedChange={(v) => updateLeaveType(lt.id, { is_paid: v })} />
                   <Label className="text-xs">Paid</Label>
                 </div>
-                <div className="md:col-span-3 flex items-center gap-2">
+                <div className="md:col-span-2 flex items-center gap-2">
                   <Switch checked={lt.half_day_allowed} onCheckedChange={(v) => updateLeaveType(lt.id, { half_day_allowed: v })} />
-                  <Label className="text-xs">Half-day allowed</Label>
+                  <Label className="text-xs">Half-day</Label>
+                </div>
+                <div className="md:col-span-1 flex items-center gap-2" title="Charge weekends/holidays adjacent (either side) to leave days">
+                  <Switch checked={!!lt.sandwich_leave} onCheckedChange={(v) => updateLeaveType(lt.id, { sandwich_leave: v })} />
+                  <Label className="text-xs">Sandwich</Label>
                 </div>
               </div>
             ))}

@@ -1,0 +1,1 @@
+ALTER TABLE public.leave_types ADD COLUMN IF NOT EXISTS sandwich_leave boolean NOT NULL DEFAULT false;

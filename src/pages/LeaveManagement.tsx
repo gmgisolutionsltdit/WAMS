@@ -22,7 +22,7 @@ import { notifyManagersAndAdmins, notifyEmployee } from "@/lib/notifications";
 
 type LeaveType = {
   id: string; name: string; code: string; color: string; annual_quota: number;
-  half_day_allowed: boolean; is_paid: boolean; active: boolean;
+  half_day_allowed: boolean; is_paid: boolean; active: boolean; sandwich_leave?: boolean;
 };
 
 type LeaveRequest = {
@@ -39,25 +39,38 @@ type Balance = { id: string; user_id: string; leave_type_id: string; year: numbe
 type Holiday = { id: string; holiday_date: string; name: string; wing: string | null };
 type Settings = { weekend_days: number[] };
 
-/** Compute leave days, excluding weekends and holidays. Half-day always = 0.5. */
+/**
+ * Compute leave days. By default weekends and holidays are excluded.
+ * If `sandwich` is true, weekend/holiday days are counted when an immediately
+ * adjacent day (either side, within the request range) is a working leave day.
+ * Half-day always = 0.5.
+ */
 const computeWorkingDays = (
   start: string,
   end: string,
   dayType: string,
   weekendDays: number[],
   holidaySet: Set<string>,
+  sandwich = false,
 ): number => {
   if (dayType !== "full") return 0.5;
   const s = new Date(start + "T00:00:00");
   const e = new Date(end + "T00:00:00");
   if (e < s) return 0;
+
+  const isNonWorking = (d: Date) =>
+    weekendDays.includes(d.getDay()) || holidaySet.has(format(d, "yyyy-MM-dd"));
+
   let count = 0;
   for (let d = new Date(s); d <= e; d.setDate(d.getDate() + 1)) {
-    const dow = d.getDay();
-    const iso = format(d, "yyyy-MM-dd");
-    if (weekendDays.includes(dow)) continue;
-    if (holidaySet.has(iso)) continue;
-    count += 1;
+    if (!isNonWorking(d)) { count += 1; continue; }
+    if (!sandwich) continue;
+    // Sandwich (either side): count if previous OR next day in range is a working day.
+    const prev = new Date(d); prev.setDate(prev.getDate() - 1);
+    const next = new Date(d); next.setDate(next.getDate() + 1);
+    const prevInRange = prev >= s && prev <= e && !isNonWorking(prev);
+    const nextInRange = next >= s && next <= e && !isNonWorking(next);
+    if (prevInRange || nextInRange) count += 1;
   }
   return count;
 };
@@ -124,7 +137,8 @@ const LeaveManagement = () => {
 
   const submit = async () => {
     if (!form.leave_type_id || !form.start_date || !form.end_date) { toast.error("Fill leave type and dates"); return; }
-    const days = computeWorkingDays(form.start_date, form.end_date, form.day_type, settings.weekend_days, holidaySet);
+    const submitLt = leaveTypes.find((t) => t.id === form.leave_type_id);
+    const days = computeWorkingDays(form.start_date, form.end_date, form.day_type, settings.weekend_days, holidaySet, !!submitLt?.sandwich_leave);
     if (days <= 0) { toast.error("No working days in this range (weekends/holidays excluded)"); return; }
     const { data, error } = await supabase.from("leave_requests").insert({
       user_id: user!.id,
@@ -206,7 +220,8 @@ const LeaveManagement = () => {
   const submitModify = async () => {
     if (!modReq || !user) return;
     if (!modForm.leave_type_id || !modForm.start_date || !modForm.end_date) { toast.error("Fill all fields"); return; }
-    const days = computeWorkingDays(modForm.start_date, modForm.end_date, modForm.day_type, settings.weekend_days, holidaySet);
+    const modLt = leaveTypes.find((t) => t.id === modForm.leave_type_id);
+    const days = computeWorkingDays(modForm.start_date, modForm.end_date, modForm.day_type, settings.weekend_days, holidaySet, !!modLt?.sandwich_leave);
     if (days <= 0) { toast.error("No working days in modified range"); return; }
     const { error } = await supabase.from("leave_requests").update({
       leave_type_id: modForm.leave_type_id,
@@ -291,8 +306,9 @@ const LeaveManagement = () => {
     return <Badge className="bg-warning/15 text-warning border-warning/30" variant="outline"><Clock className="mr-1 h-3 w-3" />Pending</Badge>;
   };
 
+  const previewLt = leaveTypes.find((t) => t.id === form.leave_type_id);
   const previewDays = form.start_date && form.end_date
-    ? computeWorkingDays(form.start_date, form.end_date, form.day_type, settings.weekend_days, holidaySet)
+    ? computeWorkingDays(form.start_date, form.end_date, form.day_type, settings.weekend_days, holidaySet, !!previewLt?.sandwich_leave)
     : 0;
 
   return (
@@ -308,7 +324,7 @@ const LeaveManagement = () => {
           <DialogContent>
             <DialogHeader>
               <DialogTitle>Apply for Leave</DialogTitle>
-              <DialogDescription>Weekends and holidays are automatically excluded from the day count.</DialogDescription>
+              <DialogDescription>Weekends and holidays are excluded by default. Sandwich-leave types charge adjacent weekends/holidays.</DialogDescription>
             </DialogHeader>
             <div className="space-y-3">
               <div>
@@ -342,7 +358,8 @@ const LeaveManagement = () => {
               </div>
               <div><Label>Reason</Label><Textarea value={form.reason} onChange={(e) => setForm((f) => ({ ...f, reason: e.target.value }))} /></div>
               <div className="text-sm text-muted-foreground">
-                Working days (excl. weekends &amp; holidays): <strong>{previewDays}</strong>
+                Chargeable days: <strong>{previewDays}</strong>
+                {previewLt?.sandwich_leave && <span className="ml-2 text-xs">(sandwich rule applied)</span>}
               </div>
             </div>
             <DialogFooter><Button onClick={submit}>Submit</Button></DialogFooter>
@@ -588,8 +605,8 @@ const LeaveManagement = () => {
                 <Textarea value={modForm.note} onChange={(e) => setModForm((f) => ({ ...f, note: e.target.value }))} />
               </div>
               <div className="text-sm text-muted-foreground">
-                New working days: <strong>
-                  {computeWorkingDays(modForm.start_date, modForm.end_date, modForm.day_type, settings.weekend_days, holidaySet)}
+                New chargeable days: <strong>
+                  {(() => { const lt = leaveTypes.find((t) => t.id === modForm.leave_type_id); return computeWorkingDays(modForm.start_date, modForm.end_date, modForm.day_type, settings.weekend_days, holidaySet, !!lt?.sandwich_leave); })()}
                 </strong>
               </div>
             </div>
