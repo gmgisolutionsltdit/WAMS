@@ -358,7 +358,8 @@ const LeaveManagement = () => {
               </div>
               <div><Label>Reason</Label><Textarea value={form.reason} onChange={(e) => setForm((f) => ({ ...f, reason: e.target.value }))} /></div>
               <div className="text-sm text-muted-foreground">
-                Working days (excl. weekends &amp; holidays): <strong>{previewDays}</strong>
+                Chargeable days: <strong>{previewDays}</strong>
+                {previewLt?.sandwich_leave && <span className="ml-2 text-xs">(sandwich rule applied)</span>}
               </div>
             </div>
             <DialogFooter><Button onClick={submit}>Submit</Button></DialogFooter>
