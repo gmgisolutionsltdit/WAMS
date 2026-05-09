@@ -306,8 +306,9 @@ const LeaveManagement = () => {
     return <Badge className="bg-warning/15 text-warning border-warning/30" variant="outline"><Clock className="mr-1 h-3 w-3" />Pending</Badge>;
   };
 
+  const previewLt = leaveTypes.find((t) => t.id === form.leave_type_id);
   const previewDays = form.start_date && form.end_date
-    ? computeWorkingDays(form.start_date, form.end_date, form.day_type, settings.weekend_days, holidaySet)
+    ? computeWorkingDays(form.start_date, form.end_date, form.day_type, settings.weekend_days, holidaySet, !!previewLt?.sandwich_leave)
     : 0;
 
   return (
