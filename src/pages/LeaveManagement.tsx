@@ -324,7 +324,7 @@ const LeaveManagement = () => {
           <DialogContent>
             <DialogHeader>
               <DialogTitle>Apply for Leave</DialogTitle>
-              <DialogDescription>Weekends and holidays are automatically excluded from the day count.</DialogDescription>
+              <DialogDescription>Weekends and holidays are excluded by default. Sandwich-leave types charge adjacent weekends/holidays.</DialogDescription>
             </DialogHeader>
             <div className="space-y-3">
               <div>
