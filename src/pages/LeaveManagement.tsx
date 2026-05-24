@@ -69,9 +69,33 @@ const computeWorkingDays = (
   const isNonWorking = (d: Date) =>
     weekendDays.includes(d.getDay()) || holidaySet.has(format(d, "yyyy-MM-dd"));
 
+  // Encapsulation mode: extend the range outward across contiguous
+  // weekends/holidays adjacent to the selected range, then count every
+  // day inclusively. Implements the Thursday/Sunday bridging rule and
+  // adjacent-holiday bridging.
+  if (bridgeHolidays) {
+    let extStart = new Date(s);
+    let extEnd = new Date(e);
+    // Only bridge when the touching boundary day is a working day
+    if (!isNonWorking(extStart)) {
+      while (true) {
+        const prev = new Date(extStart); prev.setDate(prev.getDate() - 1);
+        if (isNonWorking(prev)) extStart = prev; else break;
+      }
+    }
+    if (!isNonWorking(extEnd)) {
+      while (true) {
+        const next = new Date(extEnd); next.setDate(next.getDate() + 1);
+        if (isNonWorking(next)) extEnd = next; else break;
+      }
+    }
+    let count = 0;
+    for (let d = new Date(extStart); d <= extEnd; d.setDate(d.getDate() + 1)) count += 1;
+    return count;
+  }
+
   let count = 0;
   for (let d = new Date(s); d <= e; d.setDate(d.getDate() + 1)) {
-    if (bridgeHolidays) { count += 1; continue; }
     if (!isNonWorking(d)) { count += 1; continue; }
     if (!sandwich) continue;
     const prev = new Date(d); prev.setDate(prev.getDate() - 1);
