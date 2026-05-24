@@ -19,10 +19,12 @@ import { CalendarHeart, Plus, CheckCircle2, XCircle, Clock, Users, Pencil } from
 import { useRealtimeSubscription } from "@/hooks/useRealtimeSubscription";
 import { format } from "date-fns";
 import { notifyManagersAndAdmins, notifyEmployee } from "@/lib/notifications";
+import { min48hDateISO, isWithin48h, canBypass48h, RETRO_LOCK_MESSAGE } from "@/lib/dateRules";
 
 type LeaveType = {
   id: string; name: string; code: string; color: string; annual_quota: number;
-  half_day_allowed: boolean; is_paid: boolean; active: boolean; sandwich_leave?: boolean;
+  half_day_allowed: boolean; is_paid: boolean; active: boolean;
+  sandwich_leave?: boolean; bridge_holidays?: boolean;
 };
 
 type LeaveRequest = {
@@ -40,10 +42,15 @@ type Holiday = { id: string; holiday_date: string; name: string; wing: string | 
 type Settings = { weekend_days: number[] };
 
 /**
- * Compute leave days. By default weekends and holidays are excluded.
- * If `sandwich` is true, weekend/holiday days are counted when an immediately
- * adjacent day (either side, within the request range) is a working leave day.
- * Half-day always = 0.5.
+ * Compute leave days.
+ *
+ * - `bridgeHolidays=true` (default ON for most leave types): every day in
+ *   the range counts, weekends and holidays included. This implements the
+ *   "holiday encapsulation" rule (e.g. Thu→Sat with Fri/Sat weekend = 3d).
+ * - `bridgeHolidays=false`: weekends/holidays excluded by default;
+ *   `sandwich` then counts weekend/holiday days adjacent (either side)
+ *   to working leave days within the range.
+ * - Half-day always = 0.5.
  */
 const computeWorkingDays = (
   start: string,
@@ -52,6 +59,7 @@ const computeWorkingDays = (
   weekendDays: number[],
   holidaySet: Set<string>,
   sandwich = false,
+  bridgeHolidays = true,
 ): number => {
   if (dayType !== "full") return 0.5;
   const s = new Date(start + "T00:00:00");
@@ -63,9 +71,9 @@ const computeWorkingDays = (
 
   let count = 0;
   for (let d = new Date(s); d <= e; d.setDate(d.getDate() + 1)) {
+    if (bridgeHolidays) { count += 1; continue; }
     if (!isNonWorking(d)) { count += 1; continue; }
     if (!sandwich) continue;
-    // Sandwich (either side): count if previous OR next day in range is a working day.
     const prev = new Date(d); prev.setDate(prev.getDate() - 1);
     const next = new Date(d); next.setDate(next.getDate() + 1);
     const prevInRange = prev >= s && prev <= e && !isNonWorking(prev);
@@ -138,7 +146,8 @@ const LeaveManagement = () => {
   const submit = async () => {
     if (!form.leave_type_id || !form.start_date || !form.end_date) { toast.error("Fill leave type and dates"); return; }
     const submitLt = leaveTypes.find((t) => t.id === form.leave_type_id);
-    const days = computeWorkingDays(form.start_date, form.end_date, form.day_type, settings.weekend_days, holidaySet, !!submitLt?.sandwich_leave);
+    if (!canBypass48h(role) && !isWithin48h(form.start_date)) { toast.error(RETRO_LOCK_MESSAGE); return; }
+    const days = computeWorkingDays(form.start_date, form.end_date, form.day_type, settings.weekend_days, holidaySet, !!submitLt?.sandwich_leave, submitLt?.bridge_holidays !== false);
     if (days <= 0) { toast.error("No working days in this range (weekends/holidays excluded)"); return; }
     const { data, error } = await supabase.from("leave_requests").insert({
       user_id: user!.id,
@@ -221,7 +230,7 @@ const LeaveManagement = () => {
     if (!modReq || !user) return;
     if (!modForm.leave_type_id || !modForm.start_date || !modForm.end_date) { toast.error("Fill all fields"); return; }
     const modLt = leaveTypes.find((t) => t.id === modForm.leave_type_id);
-    const days = computeWorkingDays(modForm.start_date, modForm.end_date, modForm.day_type, settings.weekend_days, holidaySet, !!modLt?.sandwich_leave);
+    const days = computeWorkingDays(modForm.start_date, modForm.end_date, modForm.day_type, settings.weekend_days, holidaySet, !!modLt?.sandwich_leave, modLt?.bridge_holidays !== false);
     if (days <= 0) { toast.error("No working days in modified range"); return; }
     const { error } = await supabase.from("leave_requests").update({
       leave_type_id: modForm.leave_type_id,
@@ -308,7 +317,7 @@ const LeaveManagement = () => {
 
   const previewLt = leaveTypes.find((t) => t.id === form.leave_type_id);
   const previewDays = form.start_date && form.end_date
-    ? computeWorkingDays(form.start_date, form.end_date, form.day_type, settings.weekend_days, holidaySet, !!previewLt?.sandwich_leave)
+    ? computeWorkingDays(form.start_date, form.end_date, form.day_type, settings.weekend_days, holidaySet, !!previewLt?.sandwich_leave, previewLt?.bridge_holidays !== false)
     : 0;
 
   return (
@@ -342,8 +351,8 @@ const LeaveManagement = () => {
                 </Select>
               </div>
               <div className="grid grid-cols-2 gap-3">
-                <div><Label>Start Date</Label><Input type="date" value={form.start_date} onChange={(e) => setForm((f) => ({ ...f, start_date: e.target.value }))} /></div>
-                <div><Label>End Date</Label><Input type="date" value={form.end_date} onChange={(e) => setForm((f) => ({ ...f, end_date: e.target.value }))} /></div>
+                <div><Label>Start Date</Label><Input type="date" min={canBypass48h(role) ? undefined : min48hDateISO()} value={form.start_date} onChange={(e) => setForm((f) => ({ ...f, start_date: e.target.value }))} /></div>
+                <div><Label>End Date</Label><Input type="date" min={form.start_date || (canBypass48h(role) ? undefined : min48hDateISO())} value={form.end_date} onChange={(e) => setForm((f) => ({ ...f, end_date: e.target.value }))} /></div>
               </div>
               <div>
                 <Label>Day Type</Label>
@@ -606,7 +615,7 @@ const LeaveManagement = () => {
               </div>
               <div className="text-sm text-muted-foreground">
                 New chargeable days: <strong>
-                  {(() => { const lt = leaveTypes.find((t) => t.id === modForm.leave_type_id); return computeWorkingDays(modForm.start_date, modForm.end_date, modForm.day_type, settings.weekend_days, holidaySet, !!lt?.sandwich_leave); })()}
+                  {(() => { const lt = leaveTypes.find((t) => t.id === modForm.leave_type_id); return computeWorkingDays(modForm.start_date, modForm.end_date, modForm.day_type, settings.weekend_days, holidaySet, !!lt?.sandwich_leave, lt?.bridge_holidays !== false); })()}
                 </strong>
               </div>
             </div>

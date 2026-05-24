@@ -106,6 +106,33 @@ export type Database = {
         }
         Relationships: []
       }
+      company_wings: {
+        Row: {
+          active: boolean
+          code: string
+          created_at: string
+          id: string
+          name: string
+          updated_at: string
+        }
+        Insert: {
+          active?: boolean
+          code: string
+          created_at?: string
+          id?: string
+          name: string
+          updated_at?: string
+        }
+        Update: {
+          active?: boolean
+          code?: string
+          created_at?: string
+          id?: string
+          name?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
       daily_work_logs: {
         Row: {
           created_at: string
@@ -295,6 +322,7 @@ export type Database = {
           accrual_per_month: number
           active: boolean
           annual_quota: number
+          bridge_holidays: boolean
           carry_forward_max: number
           code: string
           color: string
@@ -312,6 +340,7 @@ export type Database = {
           accrual_per_month?: number
           active?: boolean
           annual_quota?: number
+          bridge_holidays?: boolean
           carry_forward_max?: number
           code: string
           color?: string
@@ -329,6 +358,7 @@ export type Database = {
           accrual_per_month?: number
           active?: boolean
           annual_quota?: number
+          bridge_holidays?: boolean
           carry_forward_max?: number
           code?: string
           color?: string
@@ -383,6 +413,7 @@ export type Database = {
       overtime_requests: {
         Row: {
           approved_by: string | null
+          assigned_approver_id: string | null
           created_at: string
           date: string
           id: string
@@ -397,6 +428,7 @@ export type Database = {
         }
         Insert: {
           approved_by?: string | null
+          assigned_approver_id?: string | null
           created_at?: string
           date: string
           id?: string
@@ -411,6 +443,7 @@ export type Database = {
         }
         Update: {
           approved_by?: string | null
+          assigned_approver_id?: string | null
           created_at?: string
           date?: string
           id?: string
@@ -564,6 +597,7 @@ export type Database = {
           resign_date: string | null
           service_status: Database["public"]["Enums"]["service_status"]
           updated_at: string
+          wing_id: string | null
         }
         Insert: {
           base_salary?: number
@@ -587,6 +621,7 @@ export type Database = {
           resign_date?: string | null
           service_status?: Database["public"]["Enums"]["service_status"]
           updated_at?: string
+          wing_id?: string | null
         }
         Update: {
           base_salary?: number
@@ -610,6 +645,7 @@ export type Database = {
           resign_date?: string | null
           service_status?: Database["public"]["Enums"]["service_status"]
           updated_at?: string
+          wing_id?: string | null
         }
         Relationships: [
           {
@@ -617,6 +653,13 @@ export type Database = {
             columns: ["reporting_manager_id"]
             isOneToOne: false
             referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "profiles_wing_id_fkey"
+            columns: ["wing_id"]
+            isOneToOne: false
+            referencedRelation: "company_wings"
             referencedColumns: ["id"]
           },
         ]
@@ -686,6 +729,51 @@ export type Database = {
           owner_id?: string
           updated_at?: string
           wing?: Database["public"]["Enums"]["company_wing"] | null
+        }
+        Relationships: []
+      }
+      salary_increments: {
+        Row: {
+          approved_by: string | null
+          base_salary: number
+          created_at: string
+          cycle_label: string
+          effective_from: string
+          effective_to: string | null
+          id: string
+          increment_amount: number
+          increment_pct: number
+          reason: string | null
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          approved_by?: string | null
+          base_salary?: number
+          created_at?: string
+          cycle_label: string
+          effective_from: string
+          effective_to?: string | null
+          id?: string
+          increment_amount?: number
+          increment_pct?: number
+          reason?: string | null
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          approved_by?: string | null
+          base_salary?: number
+          created_at?: string
+          cycle_label?: string
+          effective_from?: string
+          effective_to?: string | null
+          id?: string
+          increment_amount?: number
+          increment_pct?: number
+          reason?: string | null
+          updated_at?: string
+          user_id?: string
         }
         Relationships: []
       }
@@ -1074,6 +1162,51 @@ export type Database = {
           },
         ]
       }
+      wing_designations: {
+        Row: {
+          created_at: string
+          id: string
+          level: number
+          parent_id: string | null
+          position: number
+          title: string
+          wing_id: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          level?: number
+          parent_id?: string | null
+          position?: number
+          title: string
+          wing_id: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          level?: number
+          parent_id?: string | null
+          position?: number
+          title?: string
+          wing_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "wing_designations_parent_id_fkey"
+            columns: ["parent_id"]
+            isOneToOne: false
+            referencedRelation: "wing_designations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "wing_designations_wing_id_fkey"
+            columns: ["wing_id"]
+            isOneToOne: false
+            referencedRelation: "company_wings"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
     }
     Views: {
       [_ in never]: never
@@ -1104,13 +1237,23 @@ export type Database = {
         Args: { _project_id: string; _user_id: string }
         Returns: boolean
       }
+      is_supervisor_of: {
+        Args: { _emp: string; _sup: string }
+        Returns: boolean
+      }
       project_role_of: {
         Args: { _project_id: string; _user_id: string }
         Returns: Database["public"]["Enums"]["project_role"]
       }
     }
     Enums: {
-      app_role: "admin" | "manager" | "employee" | "hr" | "executive"
+      app_role:
+        | "admin"
+        | "manager"
+        | "employee"
+        | "hr"
+        | "executive"
+        | "supervisor"
       company_wing: "GMGI" | "MORU"
       employee_status: "Active" | "Inactive" | "Resigned"
       leave_day_type: "full" | "first_half" | "second_half"
@@ -1257,7 +1400,14 @@ export type CompositeTypes<
 export const Constants = {
   public: {
     Enums: {
-      app_role: ["admin", "manager", "employee", "hr", "executive"],
+      app_role: [
+        "admin",
+        "manager",
+        "employee",
+        "hr",
+        "executive",
+        "supervisor",
+      ],
       company_wing: ["GMGI", "MORU"],
       employee_status: ["Active", "Inactive", "Resigned"],
       leave_day_type: ["full", "first_half", "second_half"],
