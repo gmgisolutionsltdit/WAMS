@@ -396,13 +396,13 @@ const Dashboard = () => {
                       <Input
                         type="date"
                         value={manualForm.date}
-                        min={role === "employee" ? min48hDateISO() : undefined}
+                        min={(role as string) !== "admin" ? min48hDateISO() : undefined}
                         onChange={(e) => setManualForm(f => ({ ...f, date: e.target.value }))}
                       />
-                      {role === "employee" && !isWithin48h(manualForm.date) && (
+                      {(role as string) !== "admin" && !isWithin48h(manualForm.date) && (
                         <p className="text-xs text-destructive mt-1">Employees cannot manually enter logs older than 48 hours.</p>
                       )}
-                      {role === "employee" && (
+                      {(role as string) !== "admin" && (
                         <p className="text-xs text-muted-foreground mt-1">{RETRO_LOCK_MESSAGE}</p>
                       )}
                     </div>
