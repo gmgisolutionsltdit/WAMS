@@ -391,7 +391,21 @@ const Dashboard = () => {
                   <DialogHeader><DialogTitle>Add Manual Attendance/OT Log</DialogTitle></DialogHeader>
                   <div className="space-y-4">
                     <div><Label>Employee Email</Label><Input value={manualForm.employee_email} onChange={(e) => setManualForm(f => ({ ...f, employee_email: e.target.value }))} placeholder="employee@company.com" /></div>
-                    <div><Label>Date</Label><Input type="date" value={manualForm.date} onChange={(e) => setManualForm(f => ({ ...f, date: e.target.value }))} /></div>
+                    <div>
+                      <Label>Date</Label>
+                      <Input
+                        type="date"
+                        value={manualForm.date}
+                        min={role === "employee" ? min48hDateISO() : undefined}
+                        onChange={(e) => setManualForm(f => ({ ...f, date: e.target.value }))}
+                      />
+                      {role === "employee" && !isWithin48h(manualForm.date) && (
+                        <p className="text-xs text-destructive mt-1">Employees cannot manually enter logs older than 48 hours.</p>
+                      )}
+                      {role === "employee" && (
+                        <p className="text-xs text-muted-foreground mt-1">{RETRO_LOCK_MESSAGE}</p>
+                      )}
+                    </div>
                     <div className="grid grid-cols-2 gap-4">
                       <div><Label>Clock In</Label><Input type="time" value={manualForm.clock_in} onChange={(e) => setManualForm(f => ({ ...f, clock_in: e.target.value }))} /></div>
                       <div><Label>Clock Out</Label><Input type="time" value={manualForm.clock_out} onChange={(e) => setManualForm(f => ({ ...f, clock_out: e.target.value }))} /></div>
