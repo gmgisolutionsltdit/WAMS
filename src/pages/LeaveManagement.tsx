@@ -19,10 +19,12 @@ import { CalendarHeart, Plus, CheckCircle2, XCircle, Clock, Users, Pencil } from
 import { useRealtimeSubscription } from "@/hooks/useRealtimeSubscription";
 import { format } from "date-fns";
 import { notifyManagersAndAdmins, notifyEmployee } from "@/lib/notifications";
+import { min48hDateISO, isWithin48h, canBypass48h, RETRO_LOCK_MESSAGE } from "@/lib/dateRules";
 
 type LeaveType = {
   id: string; name: string; code: string; color: string; annual_quota: number;
-  half_day_allowed: boolean; is_paid: boolean; active: boolean; sandwich_leave?: boolean;
+  half_day_allowed: boolean; is_paid: boolean; active: boolean;
+  sandwich_leave?: boolean; bridge_holidays?: boolean;
 };
 
 type LeaveRequest = {
@@ -40,10 +42,15 @@ type Holiday = { id: string; holiday_date: string; name: string; wing: string | 
 type Settings = { weekend_days: number[] };
 
 /**
- * Compute leave days. By default weekends and holidays are excluded.
- * If `sandwich` is true, weekend/holiday days are counted when an immediately
- * adjacent day (either side, within the request range) is a working leave day.
- * Half-day always = 0.5.
+ * Compute leave days.
+ *
+ * - `bridgeHolidays=true` (default ON for most leave types): every day in
+ *   the range counts, weekends and holidays included. This implements the
+ *   "holiday encapsulation" rule (e.g. Thu→Sat with Fri/Sat weekend = 3d).
+ * - `bridgeHolidays=false`: weekends/holidays excluded by default;
+ *   `sandwich` then counts weekend/holiday days adjacent (either side)
+ *   to working leave days within the range.
+ * - Half-day always = 0.5.
  */
 const computeWorkingDays = (
   start: string,
@@ -52,6 +59,7 @@ const computeWorkingDays = (
   weekendDays: number[],
   holidaySet: Set<string>,
   sandwich = false,
+  bridgeHolidays = true,
 ): number => {
   if (dayType !== "full") return 0.5;
   const s = new Date(start + "T00:00:00");
@@ -63,9 +71,9 @@ const computeWorkingDays = (
 
   let count = 0;
   for (let d = new Date(s); d <= e; d.setDate(d.getDate() + 1)) {
+    if (bridgeHolidays) { count += 1; continue; }
     if (!isNonWorking(d)) { count += 1; continue; }
     if (!sandwich) continue;
-    // Sandwich (either side): count if previous OR next day in range is a working day.
     const prev = new Date(d); prev.setDate(prev.getDate() - 1);
     const next = new Date(d); next.setDate(next.getDate() + 1);
     const prevInRange = prev >= s && prev <= e && !isNonWorking(prev);
