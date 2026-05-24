@@ -42,7 +42,7 @@ export function AppSidebar() {
   const { role, profile, signOut } = useAuth();
 
   const isActive = (path: string) => location.pathname === path;
-  const isManagerOrAdmin = role === "manager" || role === "admin";
+  const isManagerOrAdmin = role === "manager" || role === "admin" || role === "supervisor";
   const isAdmin = role === "admin";
   const canPayroll = role === "admin" || role === "hr" || role === "executive";
 
@@ -120,6 +120,14 @@ export function AppSidebar() {
                     <NavLink to="/payroll" end className="hover:bg-muted/50" activeClassName="bg-muted text-primary font-medium">
                       <Wallet className="mr-2 h-4 w-4" />
                       {!collapsed && <span>Payroll</span>}
+                    </NavLink>
+                  </SidebarMenuButton>
+                </SidebarMenuItem>
+                <SidebarMenuItem>
+                  <SidebarMenuButton asChild isActive={isActive("/salary-increments")}>
+                    <NavLink to="/salary-increments" end className="hover:bg-muted/50" activeClassName="bg-muted text-primary font-medium">
+                      <Wallet className="mr-2 h-4 w-4" />
+                      {!collapsed && <span>Salary Increments</span>}
                     </NavLink>
                   </SidebarMenuButton>
                 </SidebarMenuItem>

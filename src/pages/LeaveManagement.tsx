@@ -146,7 +146,8 @@ const LeaveManagement = () => {
   const submit = async () => {
     if (!form.leave_type_id || !form.start_date || !form.end_date) { toast.error("Fill leave type and dates"); return; }
     const submitLt = leaveTypes.find((t) => t.id === form.leave_type_id);
-    const days = computeWorkingDays(form.start_date, form.end_date, form.day_type, settings.weekend_days, holidaySet, !!submitLt?.sandwich_leave);
+    if (!canBypass48h(role) && !isWithin48h(form.start_date)) { toast.error(RETRO_LOCK_MESSAGE); return; }
+    const days = computeWorkingDays(form.start_date, form.end_date, form.day_type, settings.weekend_days, holidaySet, !!submitLt?.sandwich_leave, submitLt?.bridge_holidays !== false);
     if (days <= 0) { toast.error("No working days in this range (weekends/holidays excluded)"); return; }
     const { data, error } = await supabase.from("leave_requests").insert({
       user_id: user!.id,
@@ -229,7 +230,7 @@ const LeaveManagement = () => {
     if (!modReq || !user) return;
     if (!modForm.leave_type_id || !modForm.start_date || !modForm.end_date) { toast.error("Fill all fields"); return; }
     const modLt = leaveTypes.find((t) => t.id === modForm.leave_type_id);
-    const days = computeWorkingDays(modForm.start_date, modForm.end_date, modForm.day_type, settings.weekend_days, holidaySet, !!modLt?.sandwich_leave);
+    const days = computeWorkingDays(modForm.start_date, modForm.end_date, modForm.day_type, settings.weekend_days, holidaySet, !!modLt?.sandwich_leave, modLt?.bridge_holidays !== false);
     if (days <= 0) { toast.error("No working days in modified range"); return; }
     const { error } = await supabase.from("leave_requests").update({
       leave_type_id: modForm.leave_type_id,
@@ -316,7 +317,7 @@ const LeaveManagement = () => {
 
   const previewLt = leaveTypes.find((t) => t.id === form.leave_type_id);
   const previewDays = form.start_date && form.end_date
-    ? computeWorkingDays(form.start_date, form.end_date, form.day_type, settings.weekend_days, holidaySet, !!previewLt?.sandwich_leave)
+    ? computeWorkingDays(form.start_date, form.end_date, form.day_type, settings.weekend_days, holidaySet, !!previewLt?.sandwich_leave, previewLt?.bridge_holidays !== false)
     : 0;
 
   return (
@@ -350,8 +351,8 @@ const LeaveManagement = () => {
                 </Select>
               </div>
               <div className="grid grid-cols-2 gap-3">
-                <div><Label>Start Date</Label><Input type="date" value={form.start_date} onChange={(e) => setForm((f) => ({ ...f, start_date: e.target.value }))} /></div>
-                <div><Label>End Date</Label><Input type="date" value={form.end_date} onChange={(e) => setForm((f) => ({ ...f, end_date: e.target.value }))} /></div>
+                <div><Label>Start Date</Label><Input type="date" min={canBypass48h(role) ? undefined : min48hDateISO()} value={form.start_date} onChange={(e) => setForm((f) => ({ ...f, start_date: e.target.value }))} /></div>
+                <div><Label>End Date</Label><Input type="date" min={form.start_date || (canBypass48h(role) ? undefined : min48hDateISO())} value={form.end_date} onChange={(e) => setForm((f) => ({ ...f, end_date: e.target.value }))} /></div>
               </div>
               <div>
                 <Label>Day Type</Label>
@@ -614,7 +615,7 @@ const LeaveManagement = () => {
               </div>
               <div className="text-sm text-muted-foreground">
                 New chargeable days: <strong>
-                  {(() => { const lt = leaveTypes.find((t) => t.id === modForm.leave_type_id); return computeWorkingDays(modForm.start_date, modForm.end_date, modForm.day_type, settings.weekend_days, holidaySet, !!lt?.sandwich_leave); })()}
+                  {(() => { const lt = leaveTypes.find((t) => t.id === modForm.leave_type_id); return computeWorkingDays(modForm.start_date, modForm.end_date, modForm.day_type, settings.weekend_days, holidaySet, !!lt?.sandwich_leave, lt?.bridge_holidays !== false); })()}
                 </strong>
               </div>
             </div>

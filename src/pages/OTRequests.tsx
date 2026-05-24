@@ -16,6 +16,8 @@ import { useRealtimeSubscription } from "@/hooks/useRealtimeSubscription";
 import { notifyManagersAndAdmins, notifyEmployee } from "@/lib/notifications";
 import { applyOTFulfillment } from "@/lib/otFulfillment";
 import DailyWorkLogDialog from "@/components/DailyWorkLogDialog";
+import TimeWithMeridiem from "@/components/TimeWithMeridiem";
+import { min48hDateISO, isWithin48h, canBypass48h, RETRO_LOCK_MESSAGE } from "@/lib/dateRules";
 
 /** Color helper for OT status badges */
 const otStatusStyle = (status: string) => {
@@ -91,6 +93,7 @@ const OTRequests = () => {
     e.preventDefault();
     if (!user) return;
     if (!calculatedHours || calculatedHours <= 0) { toast.error("Please enter valid start and end times"); return; }
+    if (!canBypass48h(role) && !isWithin48h(date)) { toast.error(RETRO_LOCK_MESSAGE); return; }
     setLoading(true);
     const { data, error } = await supabase
       .from("overtime_requests")
@@ -209,7 +212,16 @@ const OTRequests = () => {
             <div className="grid gap-4 md:grid-cols-2">
               <div className="space-y-2">
                 <Label>Date</Label>
-                <Input type="date" value={date} onChange={(e) => setDate(e.target.value)} required />
+                <Input
+                  type="date"
+                  value={date}
+                  min={canBypass48h(role) ? undefined : min48hDateISO()}
+                  onChange={(e) => setDate(e.target.value)}
+                  required
+                />
+                {!canBypass48h(role) && (
+                  <p className="text-xs text-muted-foreground">Limited to the last 48 hours.</p>
+                )}
               </div>
               <div className="space-y-2">
                 <Label>Calculated Hours</Label>
@@ -222,14 +234,8 @@ const OTRequests = () => {
               </div>
             </div>
             <div className="grid gap-4 md:grid-cols-2">
-              <div className="space-y-2">
-                <Label>Start Time</Label>
-                <Input type="time" value={startTime} onChange={(e) => setStartTime(e.target.value)} required />
-              </div>
-              <div className="space-y-2">
-                <Label>End Time</Label>
-                <Input type="time" value={endTime} onChange={(e) => setEndTime(e.target.value)} required />
-              </div>
+              <TimeWithMeridiem label="Start Time" value={startTime} onChange={setStartTime} required />
+              <TimeWithMeridiem label="End Time" value={endTime} onChange={setEndTime} required />
             </div>
             {startTime && endTime && calculatedHours && (
               <p className="text-sm text-muted-foreground">
