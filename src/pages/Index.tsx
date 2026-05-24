@@ -188,6 +188,10 @@ const Dashboard = () => {
 
   const handleManualEntry = async () => {
     if (!user) return;
+    if (role === "employee" && !isWithin48h(manualForm.date)) {
+      toast.error("Employees cannot manually enter logs older than 48 hours.");
+      return;
+    }
     const { data: profile } = await supabase.from("profiles").select("id").eq("email", manualForm.employee_email).single();
     if (!profile) { toast.error("Employee not found"); return; }
     const clockInTime = new Date(`${manualForm.date}T${manualForm.clock_in}:00`);
