@@ -15,6 +15,7 @@ import { toast } from "sonner";
 import { format } from "date-fns";
 import DailyWorkLogDialog from "@/components/DailyWorkLogDialog";
 import DailyWorkSummary from "@/components/DailyWorkSummary";
+import { min48hDateISO, isWithin48h, RETRO_LOCK_MESSAGE } from "@/lib/dateRules";
 
 /** Return today's date string in the user's local timezone (yyyy-MM-dd). */
 const localToday = () => format(new Date(), "yyyy-MM-dd");
@@ -187,6 +188,10 @@ const Dashboard = () => {
 
   const handleManualEntry = async () => {
     if (!user) return;
+    if (role === "employee" && !isWithin48h(manualForm.date)) {
+      toast.error("Employees cannot manually enter logs older than 48 hours.");
+      return;
+    }
     const { data: profile } = await supabase.from("profiles").select("id").eq("email", manualForm.employee_email).single();
     if (!profile) { toast.error("Employee not found"); return; }
     const clockInTime = new Date(`${manualForm.date}T${manualForm.clock_in}:00`);
@@ -386,7 +391,21 @@ const Dashboard = () => {
                   <DialogHeader><DialogTitle>Add Manual Attendance/OT Log</DialogTitle></DialogHeader>
                   <div className="space-y-4">
                     <div><Label>Employee Email</Label><Input value={manualForm.employee_email} onChange={(e) => setManualForm(f => ({ ...f, employee_email: e.target.value }))} placeholder="employee@company.com" /></div>
-                    <div><Label>Date</Label><Input type="date" value={manualForm.date} onChange={(e) => setManualForm(f => ({ ...f, date: e.target.value }))} /></div>
+                    <div>
+                      <Label>Date</Label>
+                      <Input
+                        type="date"
+                        value={manualForm.date}
+                        min={(role as string) !== "admin" ? min48hDateISO() : undefined}
+                        onChange={(e) => setManualForm(f => ({ ...f, date: e.target.value }))}
+                      />
+                      {(role as string) !== "admin" && !isWithin48h(manualForm.date) && (
+                        <p className="text-xs text-destructive mt-1">Employees cannot manually enter logs older than 48 hours.</p>
+                      )}
+                      {(role as string) !== "admin" && (
+                        <p className="text-xs text-muted-foreground mt-1">{RETRO_LOCK_MESSAGE}</p>
+                      )}
+                    </div>
                     <div className="grid grid-cols-2 gap-4">
                       <div><Label>Clock In</Label><Input type="time" value={manualForm.clock_in} onChange={(e) => setManualForm(f => ({ ...f, clock_in: e.target.value }))} /></div>
                       <div><Label>Clock Out</Label><Input type="time" value={manualForm.clock_out} onChange={(e) => setManualForm(f => ({ ...f, clock_out: e.target.value }))} /></div>
