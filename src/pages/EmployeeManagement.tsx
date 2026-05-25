@@ -601,7 +601,11 @@ const EmployeeManagement = () => {
             ) : filtered.length === 0 ? (
               <TableRow><TableCell colSpan={10} className="text-center text-muted-foreground">No employees found</TableCell></TableRow>
             ) : filtered.map((emp) => (
-              <TableRow key={emp.id}>
+              <TableRow
+                key={emp.id}
+                className="cursor-pointer"
+                onClick={() => navigate(`/employees/${emp.id}`)}
+              >
                 <TableCell>
                   <div className="flex items-center gap-2">
                     <Avatar className="h-9 w-9">
