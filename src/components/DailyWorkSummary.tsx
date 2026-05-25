@@ -179,20 +179,41 @@ const DailyWorkSummary = () => {
 
   const groups = buildGroups(attendance, workLogs);
 
-  // Compute total hours per month (yyyy-MM) from attendance.
-  const monthlyTotals = new Map<string, number>();
-  attendance.forEach((a) => {
-    const key = a.date.slice(0, 7); // yyyy-MM
-    monthlyTotals.set(key, (monthlyTotals.get(key) ?? 0) + (a.total_hours ?? 0));
-  });
 
-  // Group day-groups by month key, preserving descending date order.
-  const monthBuckets: { month: string; days: typeof groups }[] = [];
+  // Flatten rows: one row per task, plus one "no tasks" row for days without entries.
+  type FlatRow = {
+    key: string;
+    date: string;
+    isToday: boolean;
+    clockIn: string;
+    clockOut: string;
+    totalHours: string;
+    firstEntryDate: string | null;
+    task: string;
+    status: string;
+    forwarded: boolean;
+  };
+  const rows: FlatRow[] = [];
   groups.forEach((g) => {
-    const key = g.date.slice(0, 7);
-    const last = monthBuckets[monthBuckets.length - 1];
-    if (last && last.month === key) last.days.push(g);
-    else monthBuckets.push({ month: key, days: [g] });
+    const att = g.attendance;
+    const clockIn = att?.clock_in ? format(new Date(att.clock_in), "HH:mm") : "—";
+    const clockOut = att?.clock_out ? format(new Date(att.clock_out), "HH:mm") : "—";
+    const totalHours = att?.total_hours != null ? `${att.total_hours.toFixed(2)} hrs` : "—";
+    if (g.tasks.length === 0) {
+      rows.push({
+        key: `${g.date}-empty`, date: g.date, isToday: g.date === localToday(),
+        clockIn, clockOut, totalHours,
+        firstEntryDate: null, task: "", status: "", forwarded: false,
+      });
+    } else {
+      g.tasks.forEach((t, idx) => {
+        rows.push({
+          key: `${g.date}-${idx}`, date: g.date, isToday: g.date === localToday(),
+          clockIn, clockOut, totalHours,
+          firstEntryDate: t.firstEntryDate, task: t.task, status: t.status, forwarded: t.forwarded,
+        });
+      });
+    }
   });
 
   return (
@@ -202,116 +223,56 @@ const DailyWorkSummary = () => {
           <ClipboardList className="h-5 w-5" /> Daily Work Summary
         </CardTitle>
       </CardHeader>
-      <CardContent className="space-y-8">
+      <CardContent>
         {groups.length === 0 ? (
           <p className="text-center text-sm text-muted-foreground py-6">
             No records yet. Clock in to get started.
           </p>
         ) : (
-          monthBuckets.map((bucket) => {
-            const monthTotal = monthlyTotals.get(bucket.month) ?? 0;
-            return (
-              <div key={bucket.month} className="space-y-4">
-                <div className="flex flex-wrap items-center justify-between gap-2 border-b pb-2">
-                  <h3 className="text-lg font-semibold">
-                    {format(parseISO(`${bucket.month}-01`), "MMMM yyyy")}
-                  </h3>
-                  <Badge className="bg-primary text-primary-foreground text-sm">
-                    Monthly Total: {monthTotal.toFixed(2)} hrs
-                  </Badge>
-                </div>
-                {bucket.days.map((g) => {
-            const att = g.attendance;
-            const clockIn = att?.clock_in
-              ? format(new Date(att.clock_in), "HH:mm")
-              : "—";
-            const clockOut = att?.clock_out
-              ? format(new Date(att.clock_out), "HH:mm")
-              : "—";
-            const totalHours =
-              att?.total_hours != null ? att.total_hours.toFixed(2) : "—";
-            return (
-              <div key={g.date} className="border rounded-lg overflow-hidden">
-                <div className="bg-muted/50 px-4 py-3 flex flex-wrap items-center justify-between gap-2 border-b">
-                  <div className="font-semibold">
-                    {format(parseISO(g.date), "EEEE, MMMM d, yyyy")}
-                    {g.date === localToday() && (
-                      <Badge variant="outline" className="ml-2">
-                        Today
-                      </Badge>
-                    )}
-                  </div>
-                  <div className="flex flex-wrap gap-3 text-sm text-muted-foreground">
-                    <span>
-                      <strong className="text-foreground">In:</strong> {clockIn}
-                    </span>
-                    <span>
-                      <strong className="text-foreground">Out:</strong>{" "}
-                      {clockOut}
-                    </span>
-                    <span>
-                      <strong className="text-foreground">Total:</strong>{" "}
-                      {totalHours === "—" ? "—" : `${totalHours} hrs`}
-                    </span>
-                  </div>
-                </div>
-
-                <Table>
-                  <TableHeader>
-                    <TableRow>
-                      <TableHead className="w-44">First Entry Date</TableHead>
-                      <TableHead>Task</TableHead>
-                      <TableHead className="w-56">Status</TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {g.tasks.length === 0 ? (
-                      <TableRow>
-                        <TableCell
-                          colSpan={3}
-                          className="text-center text-sm text-muted-foreground py-4"
-                        >
-                          No tasks logged for this day.
-                        </TableCell>
-                      </TableRow>
-                    ) : (
-                      g.tasks.map((t, idx) => (
-                        <TableRow key={`${g.date}-${idx}`}>
-                          <TableCell className="text-sm text-muted-foreground">
-                            {format(parseISO(t.firstEntryDate), "MMM d, yyyy")}
-                            {t.forwarded && (
-                              <Badge variant="outline" className="ml-2 text-xs">
-                                Forwarded
-                              </Badge>
-                            )}
-                          </TableCell>
-                          <TableCell className="whitespace-pre-wrap">
-                            {t.task || (
-                              <span className="text-muted-foreground italic">
-                                (no description)
-                              </span>
-                            )}
-                          </TableCell>
-                          <TableCell>
-                            {t.status ? (
-                              <Badge className={statusBadgeClass(t.status)}>
-                                {t.status}
-                              </Badge>
-                            ) : (
-                              <span className="text-muted-foreground">—</span>
-                            )}
-                          </TableCell>
-                        </TableRow>
-                      ))
-                    )}
-                  </TableBody>
-                </Table>
-              </div>
-            );
-          })}
-              </div>
-            );
-          })
+          <div className="overflow-x-auto">
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Date</TableHead>
+                  <TableHead>Clock In</TableHead>
+                  <TableHead>Clock Out</TableHead>
+                  <TableHead>Total Hours</TableHead>
+                  <TableHead>First Entry</TableHead>
+                  <TableHead>Task</TableHead>
+                  <TableHead>Status</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {rows.map((r) => (
+                  <TableRow key={r.key}>
+                    <TableCell className="whitespace-nowrap">
+                      {format(parseISO(r.date), "MMM d, yyyy")}
+                      {r.isToday && <Badge variant="outline" className="ml-2 text-xs">Today</Badge>}
+                    </TableCell>
+                    <TableCell>{r.clockIn}</TableCell>
+                    <TableCell>{r.clockOut}</TableCell>
+                    <TableCell>{r.totalHours}</TableCell>
+                    <TableCell className="text-sm text-muted-foreground whitespace-nowrap">
+                      {r.firstEntryDate
+                        ? <>
+                            {format(parseISO(r.firstEntryDate), "MMM d, yyyy")}
+                            {r.forwarded && <Badge variant="outline" className="ml-2 text-xs">Forwarded</Badge>}
+                          </>
+                        : "—"}
+                    </TableCell>
+                    <TableCell className="whitespace-pre-wrap">
+                      {r.task || <span className="text-muted-foreground italic">No tasks logged</span>}
+                    </TableCell>
+                    <TableCell>
+                      {r.status
+                        ? <Badge className={statusBadgeClass(r.status)}>{r.status}</Badge>
+                        : <span className="text-muted-foreground">—</span>}
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          </div>
         )}
       </CardContent>
     </Card>

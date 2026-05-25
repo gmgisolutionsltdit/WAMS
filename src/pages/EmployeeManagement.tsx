@@ -21,6 +21,7 @@ import {
   Plus, Pencil, Users, Search, KeyRound, Upload, Download, Trash2, Camera, Copy,
 } from "lucide-react";
 import { useRealtimeSubscription } from "@/hooks/useRealtimeSubscription";
+import { useNavigate } from "react-router-dom";
 
 const SERVICE_STATUS = ["Permanent", "Contractual", "Intern", "Short-Term", "Consultant"];
 const EMPLOYEE_STATUS = ["Active", "Inactive", "Resigned"];
@@ -51,6 +52,7 @@ type EmployeeRow = {
 
 const EmployeeManagement = () => {
   const { role, user } = useAuth();
+  const navigate = useNavigate();
   const [employees, setEmployees] = useState<EmployeeRow[]>([]);
   const [managers, setManagers] = useState<EmployeeRow[]>([]);
   const [dialogOpen, setDialogOpen] = useState(false);
@@ -599,7 +601,11 @@ const EmployeeManagement = () => {
             ) : filtered.length === 0 ? (
               <TableRow><TableCell colSpan={10} className="text-center text-muted-foreground">No employees found</TableCell></TableRow>
             ) : filtered.map((emp) => (
-              <TableRow key={emp.id}>
+              <TableRow
+                key={emp.id}
+                className="cursor-pointer"
+                onClick={() => navigate(`/employees/${emp.id}`)}
+              >
                 <TableCell>
                   <div className="flex items-center gap-2">
                     <Avatar className="h-9 w-9">
@@ -624,7 +630,7 @@ const EmployeeManagement = () => {
                 <TableCell className="text-xs">{emp.service_status}</TableCell>
                 <TableCell><Badge variant="outline" className={statusBadge(emp.employee_status)}>{emp.employee_status}</Badge></TableCell>
                 <TableCell className="text-xs">{emp.daily_ot_cap}h / {emp.monthly_ot_cap}h</TableCell>
-                <TableCell className="text-right">
+                <TableCell className="text-right" onClick={(e) => e.stopPropagation()}>
                   <div className="flex items-center gap-1 justify-end">
                     {(isAdmin || canEditPayroll) && (
                       <Button size="sm" variant="outline" onClick={() => openEdit(emp)} title="Edit">
