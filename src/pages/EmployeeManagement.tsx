@@ -52,6 +52,7 @@ type EmployeeRow = {
 
 const EmployeeManagement = () => {
   const { role, user } = useAuth();
+  const navigate = useNavigate();
   const [employees, setEmployees] = useState<EmployeeRow[]>([]);
   const [managers, setManagers] = useState<EmployeeRow[]>([]);
   const [dialogOpen, setDialogOpen] = useState(false);
