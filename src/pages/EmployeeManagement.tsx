@@ -630,7 +630,7 @@ const EmployeeManagement = () => {
                 <TableCell className="text-xs">{emp.service_status}</TableCell>
                 <TableCell><Badge variant="outline" className={statusBadge(emp.employee_status)}>{emp.employee_status}</Badge></TableCell>
                 <TableCell className="text-xs">{emp.daily_ot_cap}h / {emp.monthly_ot_cap}h</TableCell>
-                <TableCell className="text-right">
+                <TableCell className="text-right" onClick={(e) => e.stopPropagation()}>
                   <div className="flex items-center gap-1 justify-end">
                     {(isAdmin || canEditPayroll) && (
                       <Button size="sm" variant="outline" onClick={() => openEdit(emp)} title="Edit">
