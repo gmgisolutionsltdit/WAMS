@@ -179,21 +179,6 @@ const DailyWorkSummary = () => {
 
   const groups = buildGroups(attendance, workLogs);
 
-  // Compute total hours per month (yyyy-MM) from attendance.
-  const monthlyTotals = new Map<string, number>();
-  attendance.forEach((a) => {
-    const key = a.date.slice(0, 7); // yyyy-MM
-    monthlyTotals.set(key, (monthlyTotals.get(key) ?? 0) + (a.total_hours ?? 0));
-  });
-
-  // Group day-groups by month key, preserving descending date order.
-  const monthBuckets: { month: string; days: typeof groups }[] = [];
-  groups.forEach((g) => {
-    const key = g.date.slice(0, 7);
-    const last = monthBuckets[monthBuckets.length - 1];
-    if (last && last.month === key) last.days.push(g);
-    else monthBuckets.push({ month: key, days: [g] });
-  });
 
   // Flatten rows: one row per task, plus one "no tasks" row for days without entries.
   type FlatRow = {
