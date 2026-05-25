@@ -25,6 +25,7 @@ import ResetPassword from "./pages/ResetPassword";
 import NotFound from "./pages/NotFound";
 import Payroll from "./pages/Payroll";
 import SalaryIncrements from "./pages/SalaryIncrements";
+import EmployeeProfile from "./pages/EmployeeProfile";
 
 const queryClient = new QueryClient();
 
