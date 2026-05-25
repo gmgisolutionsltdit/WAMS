@@ -21,6 +21,7 @@ import {
   Plus, Pencil, Users, Search, KeyRound, Upload, Download, Trash2, Camera, Copy,
 } from "lucide-react";
 import { useRealtimeSubscription } from "@/hooks/useRealtimeSubscription";
+import { useNavigate } from "react-router-dom";
 
 const SERVICE_STATUS = ["Permanent", "Contractual", "Intern", "Short-Term", "Consultant"];
 const EMPLOYEE_STATUS = ["Active", "Inactive", "Resigned"];
