@@ -72,8 +72,8 @@ const Login = () => {
         </form>
         <CardFooter className="flex flex-col gap-2 text-sm text-center">
           <Link to="/forgot-password" className="text-primary hover:underline">Forgot password?</Link>
-          <span className="text-muted-foreground">
-            Don't have an account? <Link to="/signup" className="text-primary hover:underline">Sign up</Link>
+          <span className="text-muted-foreground text-xs">
+            Accounts are created by your administrator.
           </span>
         </CardFooter>
       </Card>
