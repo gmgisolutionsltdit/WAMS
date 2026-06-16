@@ -32,8 +32,10 @@ interface CreateUserPayload {
 
 function genPassword() {
   const chars = "ABCDEFGHJKLMNPQRSTUVWXYZabcdefghjkmnpqrstuvwxyz23456789";
+  const bytes = new Uint8Array(12);
+  crypto.getRandomValues(bytes);
   let p = "";
-  for (let i = 0; i < 12; i++) p += chars[Math.floor(Math.random() * chars.length)];
+  for (let i = 0; i < 12; i++) p += chars[bytes[i] % chars.length];
   return p + "!";
 }
 
