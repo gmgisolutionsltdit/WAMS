@@ -19,7 +19,7 @@ import Projects from "./pages/Projects";
 import ProjectBoard from "./pages/ProjectBoard";
 import { ErrorBoundary } from "./components/ErrorBoundary";
 import Login from "./pages/Login";
-import Signup from "./pages/Signup";
+
 import ForgotPassword from "./pages/ForgotPassword";
 import ResetPassword from "./pages/ResetPassword";
 import NotFound from "./pages/NotFound";
@@ -58,7 +58,7 @@ const RoleGate = ({ children, allow }: { children: ReactNode; allow: ("admin" | 
 const AppRoutes = () => (
   <Routes>
     <Route path="/login" element={<PublicOnlyRoute><Login /></PublicOnlyRoute>} />
-    <Route path="/signup" element={<PublicOnlyRoute><Signup /></PublicOnlyRoute>} />
+    <Route path="/signup" element={<Navigate to="/login" replace />} />
     <Route path="/forgot-password" element={<PublicOnlyRoute><ForgotPassword /></PublicOnlyRoute>} />
     <Route path="/reset-password" element={<ResetPassword />} />
 
