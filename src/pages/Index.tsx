@@ -15,6 +15,7 @@ import { toast } from "sonner";
 import { format } from "date-fns";
 import DailyWorkLogDialog from "@/components/DailyWorkLogDialog";
 import DailyWorkSummary from "@/components/DailyWorkSummary";
+import WorkCalendar from "@/components/WorkCalendar";
 import { min48hDateISO, isWithin48h, RETRO_LOCK_MESSAGE } from "@/lib/dateRules";
 
 /** Return today's date string in the user's local timezone (yyyy-MM-dd). */
@@ -515,8 +516,12 @@ const Dashboard = () => {
         </>
       )}
 
+      {/* Work Calendar — month grid + per-day list of tasks, leaves, OT, holidays */}
+      <WorkCalendar />
+
       {/* Daily Work Summary — grouped by date with task forwarding */}
       <DailyWorkSummary />
+
 
       {/* Daily Work Log modal — opens on Clock Out, finalizes the session on submit */}
       <DailyWorkLogDialog
