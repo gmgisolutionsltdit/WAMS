@@ -516,8 +516,12 @@ const Dashboard = () => {
         </>
       )}
 
+      {/* Work Calendar — month grid + per-day list of tasks, leaves, OT, holidays */}
+      <WorkCalendar />
+
       {/* Daily Work Summary — grouped by date with task forwarding */}
       <DailyWorkSummary />
+
 
       {/* Daily Work Log modal — opens on Clock Out, finalizes the session on submit */}
       <DailyWorkLogDialog
