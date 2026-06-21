@@ -26,6 +26,10 @@ import NotFound from "./pages/NotFound";
 import Payroll from "./pages/Payroll";
 import SalaryIncrements from "./pages/SalaryIncrements";
 import EmployeeProfile from "./pages/EmployeeProfile";
+import Roster from "./pages/Roster";
+import Loans from "./pages/Loans";
+import Expenses from "./pages/Expenses";
+import NoticeBoard from "./pages/NoticeBoard";
 
 const queryClient = new QueryClient();
 
@@ -76,6 +80,10 @@ const AppRoutes = () => (
     <Route path="/projects/:id" element={<ProtectedRoute><ErrorBoundary fallbackTitle="Couldn't open this project"><ProjectBoard /></ErrorBoundary></ProtectedRoute>} />
     <Route path="/payroll" element={<ProtectedRoute><RoleGate allow={["admin", "hr", "executive"]}><Payroll /></RoleGate></ProtectedRoute>} />
     <Route path="/salary-increments" element={<ProtectedRoute><RoleGate allow={["admin", "hr", "executive"]}><SalaryIncrements /></RoleGate></ProtectedRoute>} />
+    <Route path="/loans" element={<ProtectedRoute><RoleGate allow={["admin", "hr", "executive"]}><Loans /></RoleGate></ProtectedRoute>} />
+    <Route path="/roster" element={<ProtectedRoute><RoleGate allow={["admin", "hr"]}><Roster /></RoleGate></ProtectedRoute>} />
+    <Route path="/expenses" element={<ProtectedRoute><Expenses /></ProtectedRoute>} />
+    <Route path="/notices" element={<ProtectedRoute><NoticeBoard /></ProtectedRoute>} />
 
     <Route path="*" element={<NotFound />} />
   </Routes>
