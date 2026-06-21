@@ -205,7 +205,66 @@ const SettingsPage = () => {
           </Button>
         </CardContent>
       </Card>
+
+      <TaxSettingsSection settings={settings} setSettings={setSettings} onSaved={fetchSettings} />
     </div>
+  );
+};
+
+/* ============== Tax Slabs Section ============== */
+const DEFAULT_SLABS = [
+  { upto: 300000, rate: 0 },
+  { upto: 400000, rate: 5 },
+  { upto: 700000, rate: 10 },
+  { upto: 1100000, rate: 15 },
+  { upto: 1600000, rate: 20 },
+  { upto: null, rate: 25 },
+];
+
+const TaxSettingsSection = ({ settings, setSettings, onSaved }: any) => {
+  const [slabs, setSlabs] = useState<Array<{ upto: number | null; rate: number }>>(
+    (settings.tax_slabs && settings.tax_slabs.length) ? settings.tax_slabs : DEFAULT_SLABS
+  );
+  const [enabled, setEnabled] = useState<boolean>(!!settings.tax_enabled);
+  const [saving, setSaving] = useState(false);
+
+  const save = async () => {
+    setSaving(true);
+    const { error } = await supabase.from("settings").update({ tax_slabs: slabs as any, tax_enabled: enabled }).eq("id", settings.id);
+    if (error) toast.error(error.message);
+    else { toast.success("Tax settings saved"); onSaved(); }
+    setSaving(false);
+  };
+
+  return (
+    <Card className="shadow-card">
+      <CardHeader>
+        <CardTitle className="flex items-center gap-2"><SettingsIcon className="h-5 w-5" /> Tax Calculation</CardTitle>
+        <CardDescription>Progressive tax slabs applied during payroll</CardDescription>
+      </CardHeader>
+      <CardContent className="space-y-4">
+        <div className="flex items-center gap-3">
+          <Switch checked={enabled} onCheckedChange={setEnabled} />
+          <Label>Enable tax deduction in payroll</Label>
+        </div>
+        <div className="space-y-2">
+          {slabs.map((s, i) => (
+            <div key={i} className="grid grid-cols-12 gap-2 items-center">
+              <span className="col-span-1 text-xs text-muted-foreground">Slab {i + 1}</span>
+              <Input className="col-span-5" type="number" placeholder="Up to (blank = ∞)" value={s.upto ?? ""}
+                onChange={(e) => setSlabs(slabs.map((x, j) => j === i ? { ...x, upto: e.target.value === "" ? null : Number(e.target.value) } : x))} />
+              <div className="col-span-5 flex items-center gap-2">
+                <Input type="number" step="0.5" value={s.rate} onChange={(e) => setSlabs(slabs.map((x, j) => j === i ? { ...x, rate: Number(e.target.value) } : x))} />
+                <span className="text-xs">%</span>
+              </div>
+              <Button size="icon" variant="ghost" className="col-span-1" onClick={() => setSlabs(slabs.filter((_, j) => j !== i))}>×</Button>
+            </div>
+          ))}
+          <Button variant="outline" size="sm" onClick={() => setSlabs([...slabs, { upto: null, rate: 0 }])}>+ Add Slab</Button>
+        </div>
+        <Button onClick={save} disabled={saving}>{saving ? "Saving..." : "Save Tax Settings"}</Button>
+      </CardContent>
+    </Card>
   );
 };
 

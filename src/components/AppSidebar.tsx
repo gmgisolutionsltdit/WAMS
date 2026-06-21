@@ -1,4 +1,4 @@
-import { Clock, LayoutDashboard, CalendarDays, FileText, CheckSquare, BarChart3, Settings, LogOut, Users, CalendarHeart, FolderKanban, Plane, Wallet } from "lucide-react";
+import { Clock, LayoutDashboard, CalendarDays, FileText, CheckSquare, BarChart3, Settings, LogOut, Users, CalendarHeart, FolderKanban, Plane, Wallet, Megaphone, Receipt, Banknote, CalendarClock, TrendingUp } from "lucide-react";
 import { NavLink } from "@/components/NavLink";
 import { useLocation } from "react-router-dom";
 import { useAuth } from "@/contexts/AuthContext";
@@ -21,6 +21,8 @@ const employeeItems = [
   { title: "My Attendance", url: "/attendance", icon: CalendarDays },
   { title: "OT Requests", url: "/ot-requests", icon: FileText },
   { title: "Leave", url: "/leave", icon: Plane },
+  { title: "Expenses", url: "/expenses", icon: Receipt },
+  { title: "Notice Board", url: "/notices", icon: Megaphone },
   { title: "Projects", url: "/projects", icon: FolderKanban },
 ];
 
@@ -31,9 +33,11 @@ const managerItems = [
 
 const adminItems = [
   { title: "Employees", url: "/employees", icon: Users },
+  { title: "Roster & Shifts", url: "/roster", icon: CalendarClock },
   { title: "Holidays", url: "/holidays", icon: CalendarHeart },
   { title: "Settings", url: "/settings", icon: Settings },
 ];
+
 
 export function AppSidebar() {
   const { state } = useSidebar();
@@ -124,9 +128,17 @@ export function AppSidebar() {
                   </SidebarMenuButton>
                 </SidebarMenuItem>
                 <SidebarMenuItem>
+                  <SidebarMenuButton asChild isActive={isActive("/loans")}>
+                    <NavLink to="/loans" end className="hover:bg-muted/50" activeClassName="bg-muted text-primary font-medium">
+                      <Banknote className="mr-2 h-4 w-4" />
+                      {!collapsed && <span>Loans</span>}
+                    </NavLink>
+                  </SidebarMenuButton>
+                </SidebarMenuItem>
+                <SidebarMenuItem>
                   <SidebarMenuButton asChild isActive={isActive("/salary-increments")}>
                     <NavLink to="/salary-increments" end className="hover:bg-muted/50" activeClassName="bg-muted text-primary font-medium">
-                      <Wallet className="mr-2 h-4 w-4" />
+                      <TrendingUp className="mr-2 h-4 w-4" />
                       {!collapsed && <span>Salary Increments</span>}
                     </NavLink>
                   </SidebarMenuButton>

@@ -23,6 +23,8 @@ export type Database = {
           clock_out: string | null
           created_at: string
           date: string
+          device_source: string | null
+          face_verified: boolean | null
           id: string
           ip_address: string | null
           overtime_hours: number | null
@@ -38,6 +40,8 @@ export type Database = {
           clock_out?: string | null
           created_at?: string
           date?: string
+          device_source?: string | null
+          face_verified?: boolean | null
           id?: string
           ip_address?: string | null
           overtime_hours?: number | null
@@ -53,6 +57,8 @@ export type Database = {
           clock_out?: string | null
           created_at?: string
           date?: string
+          device_source?: string | null
+          face_verified?: boolean | null
           id?: string
           ip_address?: string | null
           overtime_hours?: number | null
@@ -155,6 +161,146 @@ export type Database = {
           id?: string
           log_date?: string
           tasks?: Json
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
+      employee_loans: {
+        Row: {
+          approved_by: string | null
+          created_at: string
+          end_date: string | null
+          id: string
+          interest_rate: number | null
+          monthly_deduction: number
+          principal_amount: number
+          reason: string | null
+          remaining_balance: number
+          start_date: string
+          status: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          approved_by?: string | null
+          created_at?: string
+          end_date?: string | null
+          id?: string
+          interest_rate?: number | null
+          monthly_deduction: number
+          principal_amount: number
+          reason?: string | null
+          remaining_balance: number
+          start_date?: string
+          status?: string
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          approved_by?: string | null
+          created_at?: string
+          end_date?: string | null
+          id?: string
+          interest_rate?: number | null
+          monthly_deduction?: number
+          principal_amount?: number
+          reason?: string | null
+          remaining_balance?: number
+          start_date?: string
+          status?: string
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
+      employee_shift_assignments: {
+        Row: {
+          created_at: string
+          created_by: string | null
+          effective_date: string
+          end_date: string | null
+          id: string
+          shift_id: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          created_by?: string | null
+          effective_date: string
+          end_date?: string | null
+          id?: string
+          shift_id: string
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          created_by?: string | null
+          effective_date?: string
+          end_date?: string | null
+          id?: string
+          shift_id?: string
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "employee_shift_assignments_shift_id_fkey"
+            columns: ["shift_id"]
+            isOneToOne: false
+            referencedRelation: "shifts_roster"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      expense_claims: {
+        Row: {
+          amount: number
+          approved_at: string | null
+          approver_id: string | null
+          approver_note: string | null
+          category: string
+          claim_date: string
+          created_at: string
+          currency: string
+          description: string | null
+          id: string
+          receipt_url: string | null
+          status: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          amount: number
+          approved_at?: string | null
+          approver_id?: string | null
+          approver_note?: string | null
+          category: string
+          claim_date?: string
+          created_at?: string
+          currency?: string
+          description?: string | null
+          id?: string
+          receipt_url?: string | null
+          status?: string
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          amount?: number
+          approved_at?: string | null
+          approver_id?: string | null
+          approver_note?: string | null
+          category?: string
+          claim_date?: string
+          created_at?: string
+          currency?: string
+          description?: string | null
+          id?: string
+          receipt_url?: string | null
+          status?: string
           updated_at?: string
           user_id?: string
         }
@@ -374,6 +520,51 @@ export type Database = {
         }
         Relationships: []
       }
+      notices: {
+        Row: {
+          author_id: string | null
+          body: string
+          category: string
+          created_at: string
+          expires_at: string | null
+          id: string
+          is_active: boolean
+          pinned: boolean
+          priority: string
+          published_at: string
+          title: string
+          updated_at: string
+        }
+        Insert: {
+          author_id?: string | null
+          body: string
+          category?: string
+          created_at?: string
+          expires_at?: string | null
+          id?: string
+          is_active?: boolean
+          pinned?: boolean
+          priority?: string
+          published_at?: string
+          title: string
+          updated_at?: string
+        }
+        Update: {
+          author_id?: string | null
+          body?: string
+          category?: string
+          created_at?: string
+          expires_at?: string | null
+          id?: string
+          is_active?: boolean
+          pinned?: boolean
+          priority?: string
+          published_at?: string
+          title?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
       notifications: {
         Row: {
           created_at: string
@@ -584,6 +775,7 @@ export type Database = {
           designation: string | null
           email: string | null
           employee_status: Database["public"]["Enums"]["employee_status"]
+          face_descriptor: Json | null
           full_name: string | null
           hourly_overtime_rate: number
           id: string
@@ -608,6 +800,7 @@ export type Database = {
           designation?: string | null
           email?: string | null
           employee_status?: Database["public"]["Enums"]["employee_status"]
+          face_descriptor?: Json | null
           full_name?: string | null
           hourly_overtime_rate?: number
           id: string
@@ -632,6 +825,7 @@ export type Database = {
           designation?: string | null
           email?: string | null
           employee_status?: Database["public"]["Enums"]["employee_status"]
+          face_descriptor?: Json | null
           full_name?: string | null
           hourly_overtime_rate?: number
           id?: string
@@ -786,6 +980,8 @@ export type Database = {
           office_end_time: string
           office_start_time: string
           standard_shift_hours: number
+          tax_enabled: boolean | null
+          tax_slabs: Json | null
           updated_at: string
           weekday_ot_multiplier: number
           weekend_days: number[]
@@ -799,6 +995,8 @@ export type Database = {
           office_end_time?: string
           office_start_time?: string
           standard_shift_hours?: number
+          tax_enabled?: boolean | null
+          tax_slabs?: Json | null
           updated_at?: string
           weekday_ot_multiplier?: number
           weekend_days?: number[]
@@ -812,10 +1010,57 @@ export type Database = {
           office_end_time?: string
           office_start_time?: string
           standard_shift_hours?: number
+          tax_enabled?: boolean | null
+          tax_slabs?: Json | null
           updated_at?: string
           weekday_ot_multiplier?: number
           weekend_days?: number[]
           weekend_ot_multiplier?: number
+        }
+        Relationships: []
+      }
+      shifts_roster: {
+        Row: {
+          color: string | null
+          created_at: string
+          created_by: string | null
+          description: string | null
+          end_time: string
+          grace_period_minutes: number
+          id: string
+          is_active: boolean
+          shift_name: string
+          start_time: string
+          updated_at: string
+          work_days: number[]
+        }
+        Insert: {
+          color?: string | null
+          created_at?: string
+          created_by?: string | null
+          description?: string | null
+          end_time: string
+          grace_period_minutes?: number
+          id?: string
+          is_active?: boolean
+          shift_name: string
+          start_time: string
+          updated_at?: string
+          work_days?: number[]
+        }
+        Update: {
+          color?: string | null
+          created_at?: string
+          created_by?: string | null
+          description?: string | null
+          end_time?: string
+          grace_period_minutes?: number
+          id?: string
+          is_active?: boolean
+          shift_name?: string
+          start_time?: string
+          updated_at?: string
+          work_days?: number[]
         }
         Relationships: []
       }

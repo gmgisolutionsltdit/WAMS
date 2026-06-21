@@ -16,6 +16,9 @@ import { format } from "date-fns";
 import DailyWorkLogDialog from "@/components/DailyWorkLogDialog";
 import DailyWorkSummary from "@/components/DailyWorkSummary";
 import WorkCalendar from "@/components/WorkCalendar";
+import NoticeBoardWidget from "@/components/NoticeBoardWidget";
+import SecurityControlsPanel from "@/components/SecurityControlsPanel";
+import FaceCheckIn from "@/components/FaceCheckIn";
 import { min48hDateISO, isWithin48h, RETRO_LOCK_MESSAGE } from "@/lib/dateRules";
 
 /** Return today's date string in the user's local timezone (yyyy-MM-dd). */
@@ -39,6 +42,9 @@ const Dashboard = () => {
   const [manualForm, setManualForm] = useState({ employee_email: "", date: localToday(), clock_in: "09:00", clock_out: "18:00", overtime_hours: "1" });
   const [workLogOpen, setWorkLogOpen] = useState(false);
   const [pendingClockOut, setPendingClockOut] = useState<{ clockOutTime: string; logId: string; totalHours: number; overtimeHours: number; breakMins: number } | null>(null);
+  const [faceRequired, setFaceRequired] = useState(false);
+  const [faceDialogOpen, setFaceDialogOpen] = useState(false);
+  const [enrolledFace, setEnrolledFace] = useState<number[] | null>(null);
 
   useEffect(() => {
     const timer = setInterval(() => setCurrentTime(new Date()), 1000);
@@ -97,7 +103,7 @@ const Dashboard = () => {
   useRealtimeSubscription("overtime_requests", () => { fetchEmployeeData(); fetchAdminData(); }, "dashboard-ot");
   useRealtimeSubscription("attendance_logs", () => { fetchEmployeeData(); fetchAdminData(); }, "dashboard-attendance");
 
-  const handleClockIn = async () => {
+  const performClockIn = async (faceDescriptor?: number[]) => {
     if (!user) return;
     setLoading(true);
     const now = new Date();
@@ -106,11 +112,32 @@ const Dashboard = () => {
       date: localToday(),
       clock_in: now.toISOString(),
       ip_address: "192.168.1.1 (simulated)",
+      device_source: faceDescriptor ? "Web-Face" : "web",
+      face_verified: !!faceDescriptor,
     });
     if (error) toast.error(error.message);
-    else { toast.success("Clocked in!"); fetchEmployeeData(); fetchAdminData(); }
+    else {
+      toast.success(faceDescriptor ? "Clocked in (face verified) ✓" : "Clocked in!");
+      if (faceDescriptor && !enrolledFace) {
+        await supabase.from("profiles").update({ face_descriptor: faceDescriptor as any }).eq("id", user.id);
+        setEnrolledFace(faceDescriptor);
+      }
+      fetchEmployeeData(); fetchAdminData();
+    }
     setLoading(false);
   };
+
+  const handleClockIn = async () => {
+    if (faceRequired) { setFaceDialogOpen(true); return; }
+    await performClockIn();
+  };
+
+  useEffect(() => {
+    if (!user) return;
+    supabase.from("profiles").select("face_descriptor").eq("id", user.id).maybeSingle().then(({ data }) => {
+      if (data?.face_descriptor && Array.isArray(data.face_descriptor)) setEnrolledFace(data.face_descriptor as number[]);
+    });
+  }, [user]);
 
   /** Step 1: capture end-of-day time and prompt for the optional Daily Work Log. */
   const handleClockOut = () => {
@@ -268,6 +295,26 @@ const Dashboard = () => {
         <div className="pointer-events-none absolute -right-20 -top-20 h-64 w-64 rounded-full bg-white/10 blur-3xl" />
         <div className="pointer-events-none absolute -left-10 -bottom-10 h-48 w-48 rounded-full bg-white/10 blur-3xl" />
       </div>
+
+      {/* Notice Board + Security Controls */}
+      <div className="grid gap-4 lg:grid-cols-3">
+        <div className="lg:col-span-2"><NoticeBoardWidget /></div>
+        <SecurityControlsPanel faceRecognition={faceRequired} onToggleFace={setFaceRequired} />
+      </div>
+
+      {/* Face capture dialog */}
+      <Dialog open={faceDialogOpen} onOpenChange={setFaceDialogOpen}>
+        <DialogContent>
+          <DialogHeader><DialogTitle>Face Verification</DialogTitle></DialogHeader>
+          <p className="text-sm text-muted-foreground mb-2">
+            {enrolledFace ? "Look at the camera to verify your identity." : "First-time enrollment: your face descriptor will be stored securely for future check-ins."}
+          </p>
+          <FaceCheckIn
+            enrolledDescriptor={enrolledFace}
+            onVerified={(desc) => { setFaceDialogOpen(false); performClockIn(desc); }}
+          />
+        </DialogContent>
+      </Dialog>
 
       {/* Employee Section */}
       <div className="grid gap-4 md:grid-cols-3">
