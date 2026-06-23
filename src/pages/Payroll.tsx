@@ -153,6 +153,11 @@ export default function Payroll() {
 
   return (
     <div className="space-y-6">
+      <PayrollProcessor />
+      <div className="grid gap-4 lg:grid-cols-2">
+        <PayslipCard />
+        <LoanLedger />
+      </div>
       <div className="flex flex-wrap items-end justify-between gap-3">
         <div>
           <h1 className="text-2xl font-bold flex items-center gap-2"><Wallet className="h-6 w-6" /> Payroll & Incentives</h1>
