@@ -61,7 +61,7 @@ export function BiometricDevicePanel() {
       return;
     }
     setErrors({});
-    const dev: Device = { id: crypto.randomUUID(), ...parsed.data, status: "online" };
+    const dev: Device = { id: crypto.randomUUID(), ...(parsed.data as FormState), status: "online" };
     persist([dev, ...devices]);
     setForm(empty);
     toast.success(`${dev.name} registered & online`);
