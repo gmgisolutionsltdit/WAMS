@@ -9,6 +9,7 @@ import { Switch } from "@/components/ui/switch";
 import { toast } from "sonner";
 import { Settings as SettingsIcon, CalendarHeart } from "lucide-react";
 import { useRealtimeSubscription } from "@/hooks/useRealtimeSubscription";
+import { BiometricDevicePanel } from "@/components/hrms/BiometricDevicePanel";
 
 const DOW = [
   { v: 0, label: "Sun" },
@@ -207,6 +208,8 @@ const SettingsPage = () => {
       </Card>
 
       <TaxSettingsSection settings={settings} setSettings={setSettings} onSaved={fetchSettings} />
+
+      <BiometricDevicePanel />
     </div>
   );
 };

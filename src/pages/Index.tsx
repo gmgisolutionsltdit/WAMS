@@ -20,6 +20,8 @@ import NoticeBoardWidget from "@/components/NoticeBoardWidget";
 import SecurityControlsPanel from "@/components/SecurityControlsPanel";
 import FaceCheckIn from "@/components/FaceCheckIn";
 import { min48hDateISO, isWithin48h, RETRO_LOCK_MESSAGE } from "@/lib/dateRules";
+import { AttendancePunchCard } from "@/components/hrms/AttendancePunchCard";
+import { BiometricLogFeed } from "@/components/hrms/BiometricLogFeed";
 
 /** Return today's date string in the user's local timezone (yyyy-MM-dd). */
 const localToday = () => format(new Date(), "yyyy-MM-dd");
@@ -301,6 +303,12 @@ const Dashboard = () => {
         <div className="lg:col-span-2"><NoticeBoardWidget /></div>
         <SecurityControlsPanel faceRecognition={faceRequired} onToggleFace={setFaceRequired} />
       </div>
+
+      <div className="grid gap-4 lg:grid-cols-2">
+        <AttendancePunchCard employeeId={user?.id?.slice(0, 8).toUpperCase() || "EMP-1042"} />
+        <BiometricLogFeed />
+      </div>
+
 
       {/* Face capture dialog */}
       <Dialog open={faceDialogOpen} onOpenChange={setFaceDialogOpen}>
