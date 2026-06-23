@@ -34,11 +34,12 @@ const deviceSchema = z.object({
   branch: z.string().trim().min(2, "Branch required").max(60),
 });
 
-const empty = { name: "", model: MODELS[0], protocol: "tcp" as const, ip: "", port: 4370, serial: "", branch: "" };
+type FormState = { name: string; model: string; protocol: "tcp" | "adms"; ip: string; port: number; serial: string; branch: string };
+const empty: FormState = { name: "", model: MODELS[0], protocol: "tcp", ip: "", port: 4370, serial: "", branch: "" };
 
 export function BiometricDevicePanel() {
   const [devices, setDevices] = useState<Device[]>([]);
-  const [form, setForm] = useState(empty);
+  const [form, setForm] = useState<FormState>(empty);
   const [errors, setErrors] = useState<Record<string, string>>({});
 
   useEffect(() => {
