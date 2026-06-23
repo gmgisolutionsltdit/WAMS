@@ -306,7 +306,7 @@ const Dashboard = () => {
         <AttendancePunchCard employeeId={user?.id?.slice(0, 8).toUpperCase() || "EMP-1042"} />
         <BiometricLogFeed />
       </div>
-      </div>
+
 
       {/* Face capture dialog */}
       <Dialog open={faceDialogOpen} onOpenChange={setFaceDialogOpen}>
