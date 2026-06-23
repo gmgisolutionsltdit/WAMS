@@ -20,6 +20,8 @@ import NoticeBoardWidget from "@/components/NoticeBoardWidget";
 import SecurityControlsPanel from "@/components/SecurityControlsPanel";
 import FaceCheckIn from "@/components/FaceCheckIn";
 import { min48hDateISO, isWithin48h, RETRO_LOCK_MESSAGE } from "@/lib/dateRules";
+import { AttendancePunchCard } from "@/components/hrms/AttendancePunchCard";
+import { BiometricLogFeed } from "@/components/hrms/BiometricLogFeed";
 
 /** Return today's date string in the user's local timezone (yyyy-MM-dd). */
 const localToday = () => format(new Date(), "yyyy-MM-dd");
