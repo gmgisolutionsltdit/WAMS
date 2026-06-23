@@ -207,6 +207,8 @@ const SettingsPage = () => {
       </Card>
 
       <TaxSettingsSection settings={settings} setSettings={setSettings} onSaved={fetchSettings} />
+
+      <BiometricDevicePanel />
     </div>
   );
 };
