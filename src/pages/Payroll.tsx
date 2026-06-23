@@ -21,6 +21,9 @@ import {
   type PayrollProfile,
   type PayrollComputation,
 } from "@/lib/payroll";
+import { PayrollProcessor } from "@/components/hrms/PayrollProcessor";
+import { PayslipCard } from "@/components/hrms/PayslipCard";
+import { LoanLedger } from "@/components/hrms/LoanLedger";
 
 type PayrollRecord = PayrollComputation & { id: string; status: string; generated_at: string };
 
