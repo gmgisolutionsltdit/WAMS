@@ -14,7 +14,7 @@ type Loan = {
   monthly_deduction: number;
   remaining_balance: number;
   status: string;
-  profiles?: { full_name: string | null } | null;
+  employee_name?: string;
 };
 
 export function LoanLedger() {
