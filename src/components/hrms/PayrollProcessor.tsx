@@ -15,7 +15,7 @@ type Row = {
   gross_pay: number;
   net_pay: number;
   status: string;
-  profiles?: { full_name: string | null; email: string | null } | null;
+  employee_name?: string;
 };
 
 const now = new Date();
