@@ -78,11 +78,18 @@ export function BiometricDevicePanel() {
     setErrors({});
     setSubmitting(true);
     try {
-      const { error } = await supabase.from("biometric_devices").insert({
-        ...parsed.data,
+      const payload = {
+        name: parsed.data.name,
+        model: parsed.data.model,
+        protocol: parsed.data.protocol,
+        ip_address: parsed.data.ip_address,
+        port: parsed.data.port,
+        serial_number: parsed.data.serial_number,
+        branch: parsed.data.branch,
         status: "offline",
         created_by: user?.id ?? null,
-      });
+      };
+      const { error } = await supabase.from("biometric_devices").insert(payload);
       if (error) throw error;
       toast.success("Biometric device registered");
       setForm(empty);
