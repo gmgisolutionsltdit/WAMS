@@ -305,7 +305,7 @@ const Dashboard = () => {
       </div>
 
       <div className="grid gap-4 lg:grid-cols-2">
-        <AttendancePunchCard employeeId={user?.id?.slice(0, 8).toUpperCase() || "EMP-1042"} />
+        <AttendancePunchCard />
         <BiometricLogFeed />
       </div>
 
