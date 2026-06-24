@@ -96,7 +96,7 @@ export function PayrollProcessor() {
               <TableBody>
                 {rows.map((r) => (
                   <TableRow key={r.id}>
-                    <TableCell className="font-medium">{r.profiles?.full_name ?? r.profiles?.email ?? r.user_id.slice(0, 8)}</TableCell>
+                    <TableCell className="font-medium">{r.employee_name ?? r.user_id.slice(0, 8)}</TableCell>
                     <TableCell className="text-right tabular-nums">{Number(r.base_salary).toLocaleString()}</TableCell>
                     <TableCell className="text-right tabular-nums">{Number(r.gross_pay).toLocaleString()}</TableCell>
                     <TableCell className="text-right tabular-nums font-semibold text-emerald-700">{Number(r.net_pay).toLocaleString()}</TableCell>
