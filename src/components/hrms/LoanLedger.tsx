@@ -79,7 +79,7 @@ export function LoanLedger() {
                   <div>
                     <div className="font-semibold text-slate-800">{l.reason ?? "Loan"}</div>
                     <div className="text-xs text-muted-foreground">
-                      {isPrivileged && l.profiles?.full_name ? `${l.profiles.full_name} · ` : ""}{l.id.slice(0, 8)} · {l.status}
+                      {isPrivileged && l.employee_name ? `${l.employee_name} · ` : ""}{l.id.slice(0, 8)} · {l.status}
                     </div>
                   </div>
                   <Badge variant="outline" className="border-emerald-300 text-emerald-700">
