@@ -34,12 +34,19 @@ export function PayrollProcessor() {
     try {
       const { data, error } = await supabase
         .from("payroll_records")
-        .select("id, user_id, period_year, period_month, base_salary, gross_pay, net_pay, status, profiles!payroll_records_user_id_fkey(full_name, email)")
+        .select("id, user_id, period_year, period_month, base_salary, gross_pay, net_pay, status")
         .eq("period_year", YEAR)
         .eq("period_month", MONTH)
         .order("net_pay", { ascending: false });
       if (error) throw error;
-      setRows((data || []) as unknown as Row[]);
+      const baseRows = (data || []) as Row[];
+      const ids = Array.from(new Set(baseRows.map((r) => r.user_id)));
+      let nameMap = new Map<string, string>();
+      if (ids.length) {
+        const { data: profs } = await supabase.from("profiles").select("id, full_name, email").in("id", ids);
+        nameMap = new Map((profs || []).map((p) => [p.id, (p.full_name || p.email || p.id.slice(0, 8)) as string]));
+      }
+      setRows(baseRows.map((r) => ({ ...r, employee_name: nameMap.get(r.user_id) ?? r.user_id.slice(0, 8) })));
     } catch (err) {
       console.error("[PayrollProcessor] load failed", err);
     } finally {
