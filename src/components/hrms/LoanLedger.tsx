@@ -29,12 +29,19 @@ export function LoanLedger() {
     try {
       let query = supabase
         .from("employee_loans")
-        .select("id, user_id, reason, principal_amount, monthly_deduction, remaining_balance, status, profiles!employee_loans_user_id_fkey(full_name)")
+        .select("id, user_id, reason, principal_amount, monthly_deduction, remaining_balance, status")
         .order("created_at", { ascending: false });
       if (!isPrivileged) query = query.eq("user_id", user.id);
       const { data, error } = await query;
       if (error) throw error;
-      setLoans((data || []) as unknown as Loan[]);
+      const base = (data || []) as Loan[];
+      let nameMap = new Map<string, string>();
+      if (isPrivileged && base.length) {
+        const ids = Array.from(new Set(base.map((b) => b.user_id)));
+        const { data: profs } = await supabase.from("profiles").select("id, full_name").in("id", ids);
+        nameMap = new Map((profs || []).map((p) => [p.id, (p.full_name || p.id.slice(0, 8)) as string]));
+      }
+      setLoans(base.map((b) => ({ ...b, employee_name: nameMap.get(b.user_id) })));
     } catch (err) {
       console.error("[LoanLedger] fetch failed", err);
     } finally {
