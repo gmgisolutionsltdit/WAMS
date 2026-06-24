@@ -1,77 +1,78 @@
-import { useState } from "react";
+import { useCallback, useEffect, useState } from "react";
+import { supabase } from "@/integrations/supabase/client";
+import { useAuth } from "@/contexts/AuthContext";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { Calculator, FileSpreadsheet, Inbox, Sparkles } from "lucide-react";
-import { toast } from "sonner";
+import { Calculator, Inbox, Loader2 } from "lucide-react";
 
-type Employee = { id: string; name: string; base: number; loan: number };
+type Row = {
+  id: string;
+  user_id: string;
+  period_year: number;
+  period_month: number;
+  base_salary: number;
+  gross_pay: number;
+  net_pay: number;
+  status: string;
+  profiles?: { full_name: string | null; email: string | null } | null;
+};
 
-const ROSTER: Employee[] = [
-  { id: "EMP-1042", name: "Sadia Rahman", base: 95000, loan: 4500 },
-  { id: "EMP-1156", name: "Tanvir Hasan", base: 72000, loan: 0 },
-  { id: "EMP-0987", name: "Mehnaz Karim", base: 140000, loan: 12000 },
-  { id: "EMP-1320", name: "Rafiul Islam", base: 58000, loan: 2500 },
-  { id: "EMP-2204", name: "Nusrat Jahan", base: 86000, loan: 0 },
-];
-
-const SLABS = [
-  { upto: 25000, rate: 0 },
-  { upto: 60000, rate: 0.05 },
-  { upto: 100000, rate: 0.1 },
-  { upto: 150000, rate: 0.15 },
-  { upto: Infinity, rate: 0.2 },
-];
-
-function progressiveTax(monthly: number) {
-  let tax = 0; let remaining = monthly; let prev = 0;
-  for (const s of SLABS) {
-    const band = Math.min(remaining, s.upto - prev);
-    if (band <= 0) break;
-    tax += band * s.rate;
-    remaining -= band; prev = s.upto;
-    if (remaining <= 0) break;
-  }
-  return Math.round(tax);
-}
+const now = new Date();
+const MONTH = now.getMonth() + 1;
+const YEAR = now.getFullYear();
 
 export function PayrollProcessor() {
-  const [rows, setRows] = useState<(Employee & { tax: number; net: number })[]>([]);
-  const [running, setRunning] = useState(false);
+  const { role } = useAuth();
+  const canAccess = role === "admin" || role === "hr" || role === "executive";
+  const [rows, setRows] = useState<Row[]>([]);
+  const [loading, setLoading] = useState(false);
 
-  const generate = () => {
-    setRunning(true);
-    setTimeout(() => {
-      const computed = ROSTER.map((e) => {
-        const tax = progressiveTax(e.base);
-        const net = e.base - tax - e.loan;
-        return { ...e, tax, net };
-      });
-      setRows(computed);
-      setRunning(false);
-      toast.success(`Payroll matrix generated for ${computed.length} employees`);
-    }, 900);
-  };
+  const load = useCallback(async () => {
+    if (!canAccess) return;
+    setLoading(true);
+    try {
+      const { data, error } = await supabase
+        .from("payroll_records")
+        .select("id, user_id, period_year, period_month, base_salary, gross_pay, net_pay, status, profiles!payroll_records_user_id_fkey(full_name, email)")
+        .eq("period_year", YEAR)
+        .eq("period_month", MONTH)
+        .order("net_pay", { ascending: false });
+      if (error) throw error;
+      setRows((data || []) as unknown as Row[]);
+    } catch (err) {
+      console.error("[PayrollProcessor] load failed", err);
+    } finally {
+      setLoading(false);
+    }
+  }, [canAccess]);
+
+  useEffect(() => { load(); }, [load]);
+
+  if (!canAccess) {
+    return (
+      <Card className="shadow-card border-slate-200">
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2 text-slate-800"><Calculator className="h-5 w-5 text-emerald-600" /> Payroll Overview</CardTitle>
+          <CardDescription>Restricted to HR, Executive, and Admin roles.</CardDescription>
+        </CardHeader>
+      </Card>
+    );
+  }
 
   return (
     <Card className="shadow-card border-slate-200">
-      <CardHeader className="flex flex-row items-start justify-between space-y-0">
-        <div>
-          <CardTitle className="flex items-center gap-2 text-slate-800">
-            <Calculator className="h-5 w-5 text-emerald-600" /> Monthly Payroll Processor
-          </CardTitle>
-          <CardDescription>Net = Base − (Progressive Tax + Active Loan Installment)</CardDescription>
-        </div>
-        <Button onClick={generate} disabled={running} className="bg-slate-900 hover:bg-slate-800 text-white">
-          <Sparkles className="h-4 w-4 mr-1" /> {running ? "Computing…" : "Generate Payroll Matrix"}
-        </Button>
+      <CardHeader>
+        <CardTitle className="flex items-center gap-2 text-slate-800"><Calculator className="h-5 w-5 text-emerald-600" /> Monthly Payroll Snapshot</CardTitle>
+        <CardDescription>Live payroll records for {now.toLocaleString("en", { month: "long", year: "numeric" })}</CardDescription>
       </CardHeader>
       <CardContent>
-        {rows.length === 0 ? (
+        {loading ? (
+          <div className="py-10 flex justify-center"><Loader2 className="h-5 w-5 animate-spin text-slate-400" /></div>
+        ) : rows.length === 0 ? (
           <div className="rounded-lg border border-dashed border-slate-300 p-10 text-center text-sm text-muted-foreground">
             <Inbox className="h-8 w-8 mx-auto mb-2 text-slate-400" />
-            No payroll matrix generated yet. Click <strong>Generate</strong> to compute net salaries for the current cycle.
+            No payroll records generated for this month yet.
           </div>
         ) : (
           <div className="rounded-lg border border-slate-200 overflow-hidden">
@@ -80,33 +81,23 @@ export function PayrollProcessor() {
                 <TableRow className="bg-slate-50">
                   <TableHead>Employee</TableHead>
                   <TableHead className="text-right">Base</TableHead>
-                  <TableHead className="text-right">Tax</TableHead>
-                  <TableHead className="text-right">Loan</TableHead>
-                  <TableHead className="text-right">Net Salary</TableHead>
+                  <TableHead className="text-right">Gross</TableHead>
+                  <TableHead className="text-right">Net</TableHead>
+                  <TableHead className="text-right">Status</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
                 {rows.map((r) => (
-                  <TableRow key={r.id} className="hover:bg-slate-50/50">
-                    <TableCell>
-                      <div className="font-medium text-slate-800">{r.name}</div>
-                      <div className="text-xs text-muted-foreground">{r.id}</div>
-                    </TableCell>
-                    <TableCell className="text-right tabular-nums">৳ {r.base.toLocaleString()}</TableCell>
-                    <TableCell className="text-right tabular-nums text-red-600">− {r.tax.toLocaleString()}</TableCell>
-                    <TableCell className="text-right tabular-nums text-amber-600">− {r.loan.toLocaleString()}</TableCell>
-                    <TableCell className="text-right">
-                      <Badge className="bg-emerald-600 tabular-nums">৳ {r.net.toLocaleString()}</Badge>
-                    </TableCell>
+                  <TableRow key={r.id}>
+                    <TableCell className="font-medium">{r.profiles?.full_name ?? r.profiles?.email ?? r.user_id.slice(0, 8)}</TableCell>
+                    <TableCell className="text-right tabular-nums">{Number(r.base_salary).toLocaleString()}</TableCell>
+                    <TableCell className="text-right tabular-nums">{Number(r.gross_pay).toLocaleString()}</TableCell>
+                    <TableCell className="text-right tabular-nums font-semibold text-emerald-700">{Number(r.net_pay).toLocaleString()}</TableCell>
+                    <TableCell className="text-right"><Badge variant="outline" className="capitalize">{r.status}</Badge></TableCell>
                   </TableRow>
                 ))}
               </TableBody>
             </Table>
-            <div className="flex items-center justify-end gap-2 p-3 border-t bg-slate-50">
-              <Button variant="outline" size="sm" onClick={() => toast.success("Payroll exported to CSV")}>
-                <FileSpreadsheet className="h-3.5 w-3.5 mr-1" /> Export CSV
-              </Button>
-            </div>
           </div>
         )}
       </CardContent>
