@@ -76,6 +76,54 @@ export type Database = {
           },
         ]
       }
+      biometric_devices: {
+        Row: {
+          branch: string | null
+          created_at: string
+          created_by: string | null
+          id: string
+          ip_address: string
+          last_sync_at: string | null
+          model: string
+          name: string
+          port: number
+          protocol: string
+          serial_number: string
+          status: string
+          updated_at: string
+        }
+        Insert: {
+          branch?: string | null
+          created_at?: string
+          created_by?: string | null
+          id?: string
+          ip_address: string
+          last_sync_at?: string | null
+          model: string
+          name: string
+          port?: number
+          protocol?: string
+          serial_number: string
+          status?: string
+          updated_at?: string
+        }
+        Update: {
+          branch?: string | null
+          created_at?: string
+          created_by?: string | null
+          id?: string
+          ip_address?: string
+          last_sync_at?: string | null
+          model?: string
+          name?: string
+          port?: number
+          protocol?: string
+          serial_number?: string
+          status?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
       comp_off_credits: {
         Row: {
           created_at: string
