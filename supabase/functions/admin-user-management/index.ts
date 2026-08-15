@@ -93,18 +93,25 @@ Deno.serve(async (req) => {
 
   try {
     const auth = req.headers.get("Authorization");
-    if (!auth) return json({ error: "Unauthorized" }, 401);
+    if (!auth) return json({ error: "Missing Authorization header" }, 401);
 
-    const userClient = createClient(SUPABASE_URL, ANON_KEY, {
-      global: { headers: { Authorization: auth } },
+    const token = auth.replace(/^Bearer\s+/i, "").trim();
+    if (!token) return json({ error: "Malformed Authorization header" }, 401);
+
+    // Validate the JWT with the service-role client (works with signing keys)
+    const admin = createClient(SUPABASE_URL, SERVICE_ROLE, {
+      auth: { autoRefreshToken: false, persistSession: false },
     });
-    const { data: userData, error: userErr } = await userClient.auth.getUser();
-    if (userErr || !userData.user) return json({ error: "Invalid session" }, 401);
+    const { data: userData, error: userErr } = await admin.auth.getUser(token);
+    if (userErr || !userData?.user) {
+      console.error("Auth validation failed:", userErr?.message);
+      return json({ error: `Invalid session: ${userErr?.message ?? "no user"}` }, 401);
+    }
 
-    const admin = createClient(SUPABASE_URL, SERVICE_ROLE);
     if (!(await isAdmin(userData.user.id, admin))) {
       return json({ error: "Admin role required" }, 403);
     }
+
 
     const body = await req.json();
     const action = body.action as string;
