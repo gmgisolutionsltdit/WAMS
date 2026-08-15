@@ -27,6 +27,19 @@ const SERVICE_STATUS = ["Permanent", "Contractual", "Intern", "Short-Term", "Con
 const EMPLOYEE_STATUS = ["Active", "Inactive", "Resigned"];
 const WINGS = ["GMGI", "MORU"];
 
+/** Extracts the real error text from a Supabase edge-function failure (non-2xx bodies). */
+async function edgeErrorMessage(error: any, data: any, fallback: string) {
+  if (data?.error) return String(data.error);
+  const res = error?.context;
+  if (res && typeof res.json === "function") {
+    try {
+      const body = await res.clone().json();
+      if (body?.error) return String(body.error);
+    } catch { /* body not JSON */ }
+  }
+  return error?.message || fallback;
+}
+
 type EmployeeRow = {
   id: string;
   full_name: string | null;
@@ -230,7 +243,8 @@ const EmployeeManagement = () => {
           },
         });
         if (error || (data as any)?.error) {
-          toast.error((data as any)?.error || error?.message || "Create failed"); return;
+          toast.error(await edgeErrorMessage(error, data, "Create failed"), { duration: 8000 });
+          return;
         }
         const created = data as any;
         // Apply photo if uploaded before saving
@@ -253,7 +267,8 @@ const EmployeeManagement = () => {
       body: { action: "reset_password", user_id: emp.id },
     });
     if (error || (data as any)?.error) {
-      toast.error((data as any)?.error || error?.message || "Reset failed"); return;
+      toast.error(await edgeErrorMessage(error, data, "Reset failed"), { duration: 8000 });
+      return;
     }
     setTempCredentials({ email: emp.email || "", password: (data as any).tempPassword });
     toast.success("Password reset");
@@ -264,7 +279,8 @@ const EmployeeManagement = () => {
       body: { action: "delete_user", user_id: emp.id },
     });
     if (error || (data as any)?.error) {
-      toast.error((data as any)?.error || error?.message || "Delete failed"); return;
+      toast.error(await edgeErrorMessage(error, data, "Delete failed"), { duration: 8000 });
+      return;
     }
     toast.success("Employee deleted");
     fetchEmployees();
