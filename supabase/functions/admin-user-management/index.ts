@@ -11,7 +11,6 @@ const corsHeaders = {
 
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
 const SERVICE_ROLE = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
-const ANON_KEY = Deno.env.get("SUPABASE_PUBLISHABLE_KEY") ?? Deno.env.get("SUPABASE_ANON_KEY")!;
 
 interface CreateUserPayload {
   email: string;
@@ -50,14 +49,33 @@ async function isAdmin(userId: string, admin: any) {
 }
 
 async function createSingleUser(admin: any, p: CreateUserPayload) {
+  const email = (p.email ?? "").trim().toLowerCase();
+  if (!email || !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) {
+    throw new Error("A valid email address is required");
+  }
+
+  // Friendly duplicate check before hitting the auth admin API
+  const { data: dupe } = await admin
+    .from("profiles")
+    .select("id")
+    .ilike("email", email)
+    .maybeSingle();
+  if (dupe) throw new Error(`An employee with the email ${email} already exists`);
+
   const password = p.password && p.password.length >= 8 ? p.password : genPassword();
   const { data: created, error: createErr } = await admin.auth.admin.createUser({
-    email: p.email,
+    email,
     password,
     email_confirm: true,
     user_metadata: { full_name: p.full_name ?? "" },
   });
-  if (createErr) throw new Error(createErr.message);
+  if (createErr) {
+    console.error("createUser failed:", createErr.message);
+    const msg = /already been registered|already exists|duplicate/i.test(createErr.message)
+      ? `An account with the email ${email} already exists`
+      : createErr.message;
+    throw new Error(msg);
+  }
 
   const userId = created.user!.id;
 
@@ -77,15 +95,23 @@ async function createSingleUser(admin: any, p: CreateUserPayload) {
   if (p.monthly_ot_cap !== undefined) profileUpdate.monthly_ot_cap = p.monthly_ot_cap;
 
   if (Object.keys(profileUpdate).length > 0) {
-    await admin.from("profiles").update(profileUpdate).eq("id", userId);
+    const { error: profErr } = await admin.from("profiles").update(profileUpdate).eq("id", userId);
+    if (profErr) {
+      console.error("profile update failed:", profErr.message);
+      throw new Error(`User created but profile update failed: ${profErr.message}`);
+    }
   }
 
   if (p.role && p.role !== "employee") {
     await admin.from("user_roles").delete().eq("user_id", userId);
-    await admin.from("user_roles").insert({ user_id: userId, role: p.role });
+    const { error: roleErr } = await admin.from("user_roles").insert({ user_id: userId, role: p.role });
+    if (roleErr) {
+      console.error("role assignment failed:", roleErr.message);
+      throw new Error(`User created but role assignment failed: ${roleErr.message}`);
+    }
   }
 
-  return { userId, email: p.email, tempPassword: password };
+  return { userId, email, tempPassword: password };
 }
 
 Deno.serve(async (req) => {
@@ -175,7 +201,8 @@ Deno.serve(async (req) => {
 
     return json({ error: "Unknown action" }, 400);
   } catch (e) {
-    return json({ error: (e as Error).message }, 500);
+    console.error("admin-user-management error:", (e as Error).message);
+    return json({ error: (e as Error).message }, 400);
   }
 });
 
