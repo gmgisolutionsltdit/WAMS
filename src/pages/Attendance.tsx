@@ -4,22 +4,21 @@ import { supabase } from "@/integrations/supabase/client";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import { format } from "date-fns";
+import { ChevronDown, ChevronRight } from "lucide-react";
 import { useRealtimeSubscription } from "@/hooks/useRealtimeSubscription";
+import { fmtHMS, fmtClock, spanToHMS } from "@/lib/time";
+import { mergeDailySessions, sessionWorkedSeconds, type AttendanceSession } from "@/lib/attendance";
 
 const STANDARD_HOURS = 7;
-
-const fmtHrs = (h: number) => {
-  if (!isFinite(h) || h <= 0) return "0h 0m";
-  const hrs = Math.floor(h);
-  const mins = Math.round((h - hrs) * 60);
-  return `${hrs}h ${mins}m`;
-};
+const STANDARD_SECONDS = STANDARD_HOURS * 3600;
 
 const Attendance = () => {
   const { user } = useAuth();
-  const [logs, setLogs] = useState<any[]>([]);
+  const [logs, setLogs] = useState<AttendanceSession[]>([]);
   const [approvedOT, setApprovedOT] = useState<any[]>([]);
+  const [expanded, setExpanded] = useState<Record<string, boolean>>({});
 
   const fetchData = () => {
     if (!user) return;
@@ -27,7 +26,7 @@ const Attendance = () => {
       supabase.from("attendance_logs").select("*").eq("user_id", user.id).order("date", { ascending: false }),
       supabase.from("overtime_requests").select("*").eq("user_id", user.id).in("status", ["approved", "modified"]).order("date", { ascending: false }),
     ]).then(([{ data: logsData }, { data: otData }]) => {
-      setLogs(logsData || []);
+      setLogs((logsData || []) as AttendanceSession[]);
       setApprovedOT(otData || []);
     });
   };
@@ -37,19 +36,26 @@ const Attendance = () => {
   useRealtimeSubscription("attendance_logs", fetchData, "attendance-page-logs");
   useRealtimeSubscription("overtime_requests", fetchData, "attendance-page-ot");
 
+  const days = mergeDailySessions(logs).sort((a, b) => b.date.localeCompare(a.date));
+
   return (
     <Card>
       <CardHeader>
         <CardTitle>My Attendance History</CardTitle>
+        <p className="text-xs text-muted-foreground">
+          Multiple punches on the same day are merged into one record — expand a row to see each session.
+        </p>
       </CardHeader>
       <CardContent>
         <div className="overflow-x-auto">
           <Table>
             <TableHeader>
               <TableRow>
+                <TableHead className="w-8" />
                 <TableHead>Date</TableHead>
-                <TableHead>Clock In</TableHead>
-                <TableHead>Clock Out</TableHead>
+                <TableHead>First In</TableHead>
+                <TableHead>Last Out</TableHead>
+                <TableHead>Sessions</TableHead>
                 <TableHead>Break Time</TableHead>
                 <TableHead>Total Hours</TableHead>
                 <TableHead>Due Time</TableHead>
@@ -60,50 +66,105 @@ const Attendance = () => {
               </TableRow>
             </TableHeader>
             <TableBody>
-              {logs.length === 0 ? (
-                <TableRow><TableCell colSpan={10} className="text-center text-muted-foreground">No attendance records</TableCell></TableRow>
-              ) : logs.map((log) => {
-                const breakHrs = (log.break_minutes || 0) / 60;
-                const total = Math.max(0, log.total_hours || 0);
-                const hasOut = !!log.clock_out;
-                const dueTime = hasOut && total < STANDARD_HOURS ? STANDARD_HOURS - total : 0;
-                const otRegular = hasOut && total > STANDARD_HOURS ? total - STANDARD_HOURS : 0;
+              {days.length === 0 ? (
+                <TableRow><TableCell colSpan={12} className="text-center text-muted-foreground">No attendance records</TableCell></TableRow>
+              ) : days.map((day) => {
+                const worked = day.workedSeconds;
+                const closed = !day.open && !!day.lastOut;
+                const dueSeconds = closed && worked < STANDARD_SECONDS ? STANDARD_SECONDS - worked : 0;
+                const otRegular = closed && worked > STANDARD_SECONDS ? worked - STANDARD_SECONDS : 0;
                 const rawApproved = approvedOT
-                  .filter((ot) => ot.date === log.date)
-                  .reduce((sum: number, ot: any) => sum + (ot.requested_hours || 0), 0);
-                const approvedAdjusted = Math.max(0, rawApproved - dueTime);
+                  .filter((ot) => ot.date === day.date)
+                  .reduce((sum: number, ot: any) => sum + (ot.requested_hours || 0), 0) * 3600;
+                const approvedAdjusted = Math.max(0, rawApproved - dueSeconds);
                 const totalOT = approvedAdjusted + otRegular;
+                const isOpen = !!expanded[day.key];
+                const ips = Array.from(new Set(day.sessions.map((s) => s.ip_address).filter(Boolean)));
                 return (
-                  <TableRow key={log.id}>
-                    <TableCell>{format(new Date(log.date), "MMM d, yyyy")}</TableCell>
-                    <TableCell>{log.clock_in ? format(new Date(log.clock_in), "HH:mm") : "—"}</TableCell>
-                    <TableCell>{log.clock_out ? format(new Date(log.clock_out), "HH:mm") : "—"}</TableCell>
-                    <TableCell>{breakHrs > 0 ? fmtHrs(breakHrs) : "—"}</TableCell>
-                    <TableCell>{hasOut ? fmtHrs(total) : "—"}</TableCell>
-                    <TableCell>
-                      {dueTime > 0
-                        ? <Badge variant="destructive">{fmtHrs(dueTime)}</Badge>
-                        : <span className="text-muted-foreground">0h 0m</span>}
-                    </TableCell>
-                    <TableCell>
-                      {otRegular > 0
-                        ? <Badge variant="outline">{fmtHrs(otRegular)}</Badge>
-                        : <span className="text-muted-foreground">0h 0m</span>}
-                    </TableCell>
-                    <TableCell>
-                      {approvedAdjusted > 0
-                        ? <Badge className="bg-lime-500 text-white border-lime-500">{fmtHrs(approvedAdjusted)}</Badge>
-                        : rawApproved > 0
-                          ? <span className="text-xs text-muted-foreground" title={`${fmtHrs(rawApproved)} requested, offset by due time`}>0h 0m</span>
-                          : "—"}
-                    </TableCell>
-                    <TableCell>
-                      {totalOT > 0
-                        ? <Badge className="bg-primary text-primary-foreground">{fmtHrs(totalOT)}</Badge>
-                        : <span className="text-muted-foreground">0h 0m</span>}
-                    </TableCell>
-                    <TableCell className="text-xs text-muted-foreground">{log.ip_address || "—"}</TableCell>
-                  </TableRow>
+                  <>
+                    <TableRow key={day.key}>
+                      <TableCell>
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          className="h-6 w-6"
+                          onClick={() => setExpanded((e) => ({ ...e, [day.key]: !e[day.key] }))}
+                          aria-label={isOpen ? "Hide sessions" : "Show sessions"}
+                        >
+                          {isOpen ? <ChevronDown className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}
+                        </Button>
+                      </TableCell>
+                      <TableCell className="whitespace-nowrap">{format(new Date(day.date), "MMM d, yyyy")}</TableCell>
+                      <TableCell className="font-mono text-xs">{fmtClock(day.firstIn)}</TableCell>
+                      <TableCell className="font-mono text-xs">{day.open ? <Badge variant="secondary">In progress</Badge> : fmtClock(day.lastOut)}</TableCell>
+                      <TableCell><Badge variant="outline">{day.sessions.length}</Badge></TableCell>
+                      <TableCell className="font-mono text-xs">{day.breakSeconds > 0 ? fmtHMS(day.breakSeconds) : "—"}</TableCell>
+                      <TableCell className="font-mono text-xs">{fmtHMS(worked)}</TableCell>
+                      <TableCell>
+                        {dueSeconds > 0
+                          ? <Badge variant="destructive" className="font-mono">{fmtHMS(dueSeconds)}</Badge>
+                          : <span className="text-muted-foreground font-mono text-xs">00:00:00</span>}
+                      </TableCell>
+                      <TableCell>
+                        {otRegular > 0
+                          ? <Badge variant="outline" className="font-mono">{fmtHMS(otRegular)}</Badge>
+                          : <span className="text-muted-foreground font-mono text-xs">00:00:00</span>}
+                      </TableCell>
+                      <TableCell>
+                        {approvedAdjusted > 0
+                          ? <Badge className="bg-lime-500 text-white border-lime-500 font-mono">{fmtHMS(approvedAdjusted)}</Badge>
+                          : rawApproved > 0
+                            ? <span className="text-xs text-muted-foreground font-mono" title={`${fmtHMS(rawApproved)} requested, offset by due time`}>00:00:00</span>
+                            : "—"}
+                      </TableCell>
+                      <TableCell>
+                        {totalOT > 0
+                          ? <Badge className="bg-primary text-primary-foreground font-mono">{fmtHMS(totalOT)}</Badge>
+                          : <span className="text-muted-foreground font-mono text-xs">00:00:00</span>}
+                      </TableCell>
+                      <TableCell className="text-xs text-muted-foreground">{ips.length ? ips.join(", ") : "—"}</TableCell>
+                    </TableRow>
+                    {isOpen && (
+                      <TableRow key={`${day.key}-details`} className="bg-muted/40 hover:bg-muted/40">
+                        <TableCell />
+                        <TableCell colSpan={11} className="p-0">
+                          <div className="p-3">
+                            <p className="text-xs font-medium text-muted-foreground mb-2">Individual sessions</p>
+                            <Table>
+                              <TableHeader>
+                                <TableRow>
+                                  <TableHead>#</TableHead>
+                                  <TableHead>Start</TableHead>
+                                  <TableHead>Close</TableHead>
+                                  <TableHead>Break</TableHead>
+                                  <TableHead>Duration</TableHead>
+                                  <TableHead>Source</TableHead>
+                                </TableRow>
+                              </TableHeader>
+                              <TableBody>
+                                {day.sessions.map((s, i) => (
+                                  <TableRow key={s.id}>
+                                    <TableCell className="text-xs">{i + 1}</TableCell>
+                                    <TableCell className="font-mono text-xs">{fmtClock(s.clock_in)}</TableCell>
+                                    <TableCell className="font-mono text-xs">
+                                      {s.clock_out ? fmtClock(s.clock_out) : <Badge variant="secondary">Open</Badge>}
+                                    </TableCell>
+                                    <TableCell className="font-mono text-xs">{fmtHMS((Number(s.break_minutes) || 0) * 60)}</TableCell>
+                                    <TableCell className="font-mono text-xs">
+                                      {s.clock_out && s.clock_in
+                                        ? fmtHMS(sessionWorkedSeconds(s))
+                                        : s.clock_in ? spanToHMS(s.clock_in, new Date()) : "—"}
+                                    </TableCell>
+                                    <TableCell className="text-xs text-muted-foreground">{s.device_source || "web"}</TableCell>
+                                  </TableRow>
+                                ))}
+                              </TableBody>
+                            </Table>
+                          </div>
+                        </TableCell>
+                      </TableRow>
+                    )}
+                  </>
                 );
               })}
             </TableBody>
