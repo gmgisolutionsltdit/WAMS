@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { Fragment, useEffect, useState } from "react";
 import { useAuth } from "@/contexts/AuthContext";
 import { supabase } from "@/integrations/supabase/client";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -81,8 +81,8 @@ const Attendance = () => {
                 const isOpen = !!expanded[day.key];
                 const ips = Array.from(new Set(day.sessions.map((s) => s.ip_address).filter(Boolean)));
                 return (
-                  <>
-                    <TableRow key={day.key}>
+                  <Fragment key={day.key}>
+                    <TableRow>
                       <TableCell>
                         <Button
                           variant="ghost"
@@ -125,7 +125,7 @@ const Attendance = () => {
                       <TableCell className="text-xs text-muted-foreground">{ips.length ? ips.join(", ") : "—"}</TableCell>
                     </TableRow>
                     {isOpen && (
-                      <TableRow key={`${day.key}-details`} className="bg-muted/40 hover:bg-muted/40">
+                      <TableRow className="bg-muted/40 hover:bg-muted/40">
                         <TableCell />
                         <TableCell colSpan={11} className="p-0">
                           <div className="p-3">
@@ -164,7 +164,7 @@ const Attendance = () => {
                         </TableCell>
                       </TableRow>
                     )}
-                  </>
+                  </Fragment>
                 );
               })}
             </TableBody>
