@@ -134,31 +134,88 @@ const Reports = () => {
         <Table>
           <TableHeader>
             <TableRow>
+              <TableHead className="w-8" />
               <TableHead>Employee</TableHead>
               <TableHead>Department</TableHead>
               <TableHead>Date</TableHead>
-              <TableHead>Clock In</TableHead>
-              <TableHead>Clock Out</TableHead>
+              <TableHead>First In</TableHead>
+              <TableHead>Last Out</TableHead>
+              <TableHead>Sessions</TableHead>
+              <TableHead>Break</TableHead>
               <TableHead>Total Hours</TableHead>
               <TableHead>Overtime</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
-            {logs.length === 0 ? (
-              <TableRow><TableCell colSpan={7} className="text-center text-muted-foreground">No records</TableCell></TableRow>
-            ) : logs.map((log) => (
-              <TableRow key={log.id}>
-                <TableCell>{(log.profiles as any)?.full_name || "—"}</TableCell>
-                <TableCell>{(log.profiles as any)?.department || "—"}</TableCell>
-                <TableCell>{format(new Date(log.date), "MMM d, yyyy")}</TableCell>
-                <TableCell>{log.clock_in ? format(new Date(log.clock_in), "HH:mm") : "—"}</TableCell>
-                <TableCell>{log.clock_out ? format(new Date(log.clock_out), "HH:mm") : "—"}</TableCell>
-                <TableCell>{log.total_hours?.toFixed(1) || "—"}</TableCell>
-                <TableCell>{log.overtime_hours > 0 ? <Badge variant="destructive">{log.overtime_hours.toFixed(1)}h</Badge> : "0.0"}</TableCell>
-              </TableRow>
-            ))}
+            {days.length === 0 ? (
+              <TableRow><TableCell colSpan={10} className="text-center text-muted-foreground">No records</TableCell></TableRow>
+            ) : days.map((day) => {
+              const isOpen = !!expanded[day.key];
+              const p: any = day.profiles;
+              return (
+                <Fragment key={day.key}>
+                  <TableRow>
+                    <TableCell>
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        className="h-6 w-6"
+                        onClick={() => setExpanded((e) => ({ ...e, [day.key]: !e[day.key] }))}
+                        aria-label={isOpen ? "Hide sessions" : "Show sessions"}
+                      >
+                        {isOpen ? <ChevronDown className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}
+                      </Button>
+                    </TableCell>
+                    <TableCell>{p?.full_name || "—"}</TableCell>
+                    <TableCell>{p?.department || "—"}</TableCell>
+                    <TableCell>{format(new Date(day.date), "MMM d, yyyy")}</TableCell>
+                    <TableCell className="font-mono text-xs">{fmtClock(day.firstIn)}</TableCell>
+                    <TableCell className="font-mono text-xs">{day.open ? <Badge variant="secondary">In progress</Badge> : fmtClock(day.lastOut)}</TableCell>
+                    <TableCell><Badge variant="outline">{day.sessions.length}</Badge></TableCell>
+                    <TableCell className="font-mono text-xs">{fmtHMS(day.breakSeconds)}</TableCell>
+                    <TableCell className="font-mono text-xs">{fmtHMS(day.workedSeconds)}</TableCell>
+                    <TableCell>
+                      {day.overtimeHours > 0
+                        ? <Badge variant="destructive" className="font-mono">{hoursToHMS(day.overtimeHours)}</Badge>
+                        : <span className="font-mono text-xs text-muted-foreground">00:00:00</span>}
+                    </TableCell>
+                  </TableRow>
+                  {isOpen && (
+                    <TableRow className="bg-muted/40 hover:bg-muted/40">
+                      <TableCell />
+                      <TableCell colSpan={9} className="p-3">
+                        <p className="text-xs font-medium text-muted-foreground mb-2">Individual sessions</p>
+                        <Table>
+                          <TableHeader>
+                            <TableRow>
+                              <TableHead>#</TableHead>
+                              <TableHead>Start</TableHead>
+                              <TableHead>Close</TableHead>
+                              <TableHead>Break</TableHead>
+                              <TableHead>Duration</TableHead>
+                            </TableRow>
+                          </TableHeader>
+                          <TableBody>
+                            {day.sessions.map((s, i) => (
+                              <TableRow key={s.id}>
+                                <TableCell className="text-xs">{i + 1}</TableCell>
+                                <TableCell className="font-mono text-xs">{fmtClock(s.clock_in)}</TableCell>
+                                <TableCell className="font-mono text-xs">{s.clock_out ? fmtClock(s.clock_out) : <Badge variant="secondary">Open</Badge>}</TableCell>
+                                <TableCell className="font-mono text-xs">{fmtHMS((Number(s.break_minutes) || 0) * 60)}</TableCell>
+                                <TableCell className="font-mono text-xs">{fmtHMS(sessionWorkedSeconds(s))}</TableCell>
+                              </TableRow>
+                            ))}
+                          </TableBody>
+                        </Table>
+                      </TableCell>
+                    </TableRow>
+                  )}
+                </Fragment>
+              );
+            })}
           </TableBody>
         </Table>
+
       </CardContent>
     </Card>
   );
