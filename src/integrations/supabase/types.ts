@@ -1511,6 +1511,19 @@ export type Database = {
         Args: never
         Returns: Database["public"]["Enums"]["company_wing"]
       }
+      get_team_leave_calendar: {
+        Args: never
+        Returns: {
+          day_type: Database["public"]["Enums"]["leave_day_type"]
+          end_date: string
+          id: string
+          leave_type_id: string
+          start_date: string
+          status: Database["public"]["Enums"]["leave_status"]
+          total_days: number
+          user_id: string
+        }[]
+      }
       has_role: {
         Args: {
           _role: Database["public"]["Enums"]["app_role"]
