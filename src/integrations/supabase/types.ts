@@ -1502,7 +1502,27 @@ export type Database = {
       }
     }
     Views: {
-      [_ in never]: never
+      team_leave_calendar: {
+        Row: {
+          day_type: Database["public"]["Enums"]["leave_day_type"] | null
+          end_date: string | null
+          id: string | null
+          leave_type_id: string | null
+          start_date: string | null
+          status: Database["public"]["Enums"]["leave_status"] | null
+          total_days: number | null
+          user_id: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "leave_requests_leave_type_id_fkey"
+            columns: ["leave_type_id"]
+            isOneToOne: false
+            referencedRelation: "leave_types"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
     }
     Functions: {
       can_access_payroll: { Args: { _user_id: string }; Returns: boolean }
