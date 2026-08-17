@@ -1,91 +1,35 @@
-# Office Management System Upgrade Plan
+# Time Tracking Precision & Session Upgrades
 
-This is a large, multi-area change. I'll break it into 4 deliverable phases so you can approve all or pick subset. Each phase ships independently.
+## 1. Seconds everywhere
+Introduce one shared formatting helper (`src/lib/time.ts`) that renders any duration as `HH:MM:SS` and use it in every place a duration is shown:
 
----
+- Dashboard live timer, break totals, admin live table
+- My Attendance page (Total Hours, Break Time, Due Time, OT Regular, Approved OT, Total Overtime)
+- Daily Work Summary table
+- Reports totals
 
-## Phase 1 — Leave & Attendance Rules
+Clock in/out timestamps get seconds too (`hh:mm:ss AM/PM`).
 
-**1.1 48-hour retro lock**
-- New helper `src/lib/dateRules.ts` → `isWithin48h(date)`, `minAllowedDate()`.
-- Apply in: `Attendance.tsx` (regularization / manual logs), `OTRequests.tsx` (date field), `LeaveManagement.tsx` (back-dated start), `DailyWorkLogDialog.tsx`.
-- Disable older dates in `<Calendar disabled={...}>` and native `<input type="date" min={...}>`.
-- Server guard: DB trigger `enforce_48h_window` on `attendance_logs`, `overtime_requests` insert/update — raises exception if `date < now()::date - interval '2 days'` AND record is being created/edited now. Admins bypass via `has_role(auth.uid(),'admin')`.
-- Toast: "Submissions for dates older than 48 hours are restricted."
+## 2. Merge multiple daily sessions
+Today several punches on one date create several rows, and pages show them as separate lines.
 
-**1.2 Holiday bridging in leave calc**
-- Already partially handled by `sandwich_leave` flag. Add new `bridge_holidays` boolean on `leave_types` (default true).
-- Update `computeWorkingDays` in `LeaveManagement.tsx`: when `bridge_holidays=true`, count ALL days in range (weekends + holidays inclusive) — pure inclusive count. Sandwich logic still applies to leave-types that have it off.
-- UI toggle in SettingsPage Leave Defaults.
+- Group attendance rows by `user_id + date` in the UI layer.
+- Each day shows one row: first clock-in of the day, last clock-out, summed worked time, summed break time.
+- The day row is expandable: clicking it reveals every individual session with its own start time, close time, break, and duration.
+- Applies to My Attendance, Dashboard summary/admin table, and Reports (report totals use merged day values).
 
-**1.3 AM/PM bottom dropdown + live hours**
-- New component `src/components/TimeWithMeridiem.tsx` — two number inputs (hh:mm) + Select(AM/PM) below.
-- Wire into OT request form (`OTRequests.tsx`) and attendance manual entry. Recompute `calculatedHours` via `useMemo` on every change.
+## 3. Manual Entry: Due Time & Break Time
+Add two fields to the Dashboard manual-entry dialog:
 
----
+- **Break Time** (minutes) — saved to `break_minutes`; net worked time = clock out − clock in − break.
+- **Due Time** — shown as a live read-only calculation (standard shift hours − net worked time, floored at 0) so the person entering sees the shortfall before saving; overtime stays a manual field.
 
-## Phase 2 — Wings & Role Matrix
+Validation stays as-is (48-hour rule, clock-out after clock-in).
 
-**2.1 Dynamic Wings**
-- New table `company_wings (id, name, code, active, created_at)`. Seed with existing `GMGI`, `MORU`.
-- Migrate `profiles.company_wing` from enum to text FK-style (keep enum but allow free text via new column `wing_id uuid` nullable; phase 1 keep both in sync).
-- Admin UI in `SettingsPage` → new "Wings & Hierarchy" tab. CRUD list, add/edit/disable wings.
-- Hierarchy: new table `wing_designations (id, wing_id, title, level, parent_id)` to model GM → GMGI → GMGI IT → HOI tree. Tree view + drag reorder (simple ↑↓ buttons to keep scope tight).
+## 4. Break countdown on Dashboard
+When a break is started, the break card switches to a live countdown from the allowed break duration (default 60 minutes, configurable in Settings) ticking down in `HH:MM:SS`. When it hits zero it flips to a red "over break by HH:MM:SS" counter and keeps counting up. Ending the break records the actual elapsed minutes exactly as it does now.
 
-**2.2 Role matrix migration (admin / supervisor / employee)**
-- Add `'supervisor'` to `app_role` enum (keep `manager` for legacy).
-- New SECURITY DEFINER `is_supervisor_of(_sup, _emp)` = current `is_in_management_chain` semantics but for direct downline only (`reporting_manager_id = _sup`).
-- Update RLS on `leave_requests`, `overtime_requests`, `attendance_logs`: add supervisor policies parallel to manager ones.
-- `AuthContext.tsx` role precedence: admin > supervisor > hr > executive > manager > employee.
-- New Admin UI: SettingsPage → "Role Migration" panel listing users with `manager` role and a button "Migrate to Supervisor" (adds `supervisor` row, optionally removes `manager`).
-- Keep manager RLS intact — nothing breaks.
-
----
-
-## Phase 3 — Salary Increment Ledger
-
-- New table `salary_increments`:
-  ```
-  id uuid pk, user_id uuid, cycle_label text,
-  effective_from date, effective_to date,
-  base_salary numeric, increment_amount numeric, increment_pct numeric,
-  reason text, approved_by uuid, created_at, updated_at
-  ```
-- Overlapping date ranges allowed (no exclusion constraint), GIST index for audit queries.
-- RLS: payroll roles manage, employee views own.
-- UI: new page `src/pages/SalaryIncrements.tsx` listing per-employee timeline with Cycle 1 / Cycle 2 chips. Add to sidebar under Payroll (HR/Admin only).
-
----
-
-## Phase 4 — OT Routing Fix
-
-- Bug: requests over the "2 office days" benchmark sometimes have no `approver_id` populated, so they don't show in supervisor queue.
-- Add `assigned_approver_id` column on `overtime_requests`.
-- DB trigger `route_ot_request_to_supervisor` (BEFORE INSERT/UPDATE on status='pending'):
-  - lookup `profiles.reporting_manager_id` for `user_id` → set `assigned_approver_id`.
-  - if null, fallback: any admin user → set.
-- `Approvals.tsx` queue queries by `assigned_approver_id = auth.uid() OR is_in_management_chain(...)`.
-- Notification: existing `notifyManagersAndAdmins` already fires; add explicit `notifyEmployee(assigned_approver_id, ...)` after insert.
-- Backfill existing pending requests via one-time UPDATE.
-
----
-
-## Files Created
-
-- `src/lib/dateRules.ts`
-- `src/components/TimeWithMeridiem.tsx`
-- `src/pages/SalaryIncrements.tsx`
-- Migrations (one per phase)
-
-## Files Edited
-
-- `src/pages/OTRequests.tsx`, `Attendance.tsx`, `LeaveManagement.tsx`, `SettingsPage.tsx`, `Approvals.tsx`, `AppSidebar.tsx`, `AuthContext.tsx`, `DailyWorkLogDialog.tsx`
-
----
-
-## Open questions before I start
-
-1. **Scope**: Approve all 4 phases in one go, or land Phase 1 first then iterate?
-2. **48h rule**: Should Admins/HR be allowed to bypass (recommended), or hard-locked for everyone?
-3. **Wings migration**: OK to keep the existing `company_wing` enum column alongside new `wing_id`, then deprecate later? (safest path)
-4. **Manager role**: After admin migrates a user to Supervisor, should the legacy `manager` role auto-remove or stay until manually cleared?
+## Technical notes
+- No schema change is required for items 1, 2 and 3; merging is a presentation-layer grouping over existing `attendance_logs` rows.
+- Item 4 adds one numeric column `break_allowance_minutes` to the existing `settings` table (default 60) plus a field in Settings.
+- Durations are computed in seconds internally, rounded only at display time, so the summed day totals stay consistent with the individual sessions.
