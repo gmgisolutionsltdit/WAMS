@@ -1,0 +1,1 @@
+ALTER TABLE public.settings ADD COLUMN IF NOT EXISTS break_allowance_minutes numeric NOT NULL DEFAULT 60;

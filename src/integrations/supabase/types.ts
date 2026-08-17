@@ -1021,6 +1021,7 @@ export type Database = {
       }
       settings: {
         Row: {
+          break_allowance_minutes: number
           created_at: string
           currency: string
           holiday_ot_multiplier: number
@@ -1036,6 +1037,7 @@ export type Database = {
           weekend_ot_multiplier: number
         }
         Insert: {
+          break_allowance_minutes?: number
           created_at?: string
           currency?: string
           holiday_ot_multiplier?: number
@@ -1051,6 +1053,7 @@ export type Database = {
           weekend_ot_multiplier?: number
         }
         Update: {
+          break_allowance_minutes?: number
           created_at?: string
           currency?: string
           holiday_ot_multiplier?: number
