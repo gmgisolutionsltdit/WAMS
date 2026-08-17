@@ -135,16 +135,23 @@ const LeaveManagement = () => {
   });
 
   const fetchAll = useCallback(async () => {
-    const [{ data: types }, { data: reqs }, { data: bals }, { data: pf }, { data: hols }, { data: cfg }] = await Promise.all([
+    const [{ data: types }, { data: reqs }, { data: teamCal }, { data: bals }, { data: pf }, { data: hols }, { data: cfg }] = await Promise.all([
       supabase.from("leave_types").select("*").eq("active", true).order("name"),
       supabase.from("leave_requests").select("*").order("start_date", { ascending: false }),
+      supabase.rpc("get_team_leave_calendar"),
       supabase.from("leave_balances").select("*").eq("year", year),
       supabase.from("profiles").select("id, full_name, email"),
       supabase.from("holidays").select("*"),
       supabase.from("settings").select("weekend_days").limit(1).maybeSingle(),
     ]);
     setLeaveTypes((types || []) as LeaveType[]);
-    setRequests((reqs || []) as LeaveRequest[]);
+    // Rows readable directly (own / managed) plus reason-free teammate calendar entries
+    const direct = (reqs || []) as LeaveRequest[];
+    const seen = new Set(direct.map((r) => r.id));
+    const teamOnly = ((teamCal || []) as any[])
+      .filter((r) => !seen.has(r.id))
+      .map((r) => ({ ...r, reason: null }) as LeaveRequest);
+    setRequests([...direct, ...teamOnly].sort((a, b) => (a.start_date < b.start_date ? 1 : -1)));
     setBalances((bals || []) as Balance[]);
     const map: Record<string, any> = {};
     (pf || []).forEach((p: any) => { map[p.id] = { full_name: p.full_name, email: p.email }; });
