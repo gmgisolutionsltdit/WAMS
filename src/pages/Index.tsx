@@ -41,12 +41,24 @@ const Dashboard = () => {
   const [approvalHistory, setApprovalHistory] = useState<any[]>([]);
 
   const [manualOpen, setManualOpen] = useState(false);
-  const [manualForm, setManualForm] = useState({ employee_email: "", date: localToday(), clock_in: "09:00", clock_out: "18:00", overtime_hours: "1" });
+  const [manualForm, setManualForm] = useState({ employee_email: "", date: localToday(), clock_in: "09:00", clock_out: "18:00", overtime_hours: "1", due_hours: "8", break_minutes: "60" });
+  const [breakAllowance, setBreakAllowance] = useState(60);
   const [workLogOpen, setWorkLogOpen] = useState(false);
   const [pendingClockOut, setPendingClockOut] = useState<{ clockOutTime: string; logId: string; totalHours: number; overtimeHours: number; breakMins: number } | null>(null);
   const [faceRequired, setFaceRequired] = useState(false);
   const [faceDialogOpen, setFaceDialogOpen] = useState(false);
   const [enrolledFace, setEnrolledFace] = useState<number[] | null>(null);
+
+  useEffect(() => {
+    (async () => {
+      const { data } = await supabase.from("settings").select("break_allowance_minutes, standard_shift_hours").limit(1).maybeSingle();
+      if (data) {
+        setBreakAllowance(Number(data.break_allowance_minutes) || 60);
+        setManualForm((f) => ({ ...f, due_hours: String(Number(data.standard_shift_hours) || 8), break_minutes: String(Number(data.break_allowance_minutes) || 60) }));
+      }
+    })();
+  }, []);
+
 
   useEffect(() => {
     const timer = setInterval(() => setCurrentTime(new Date()), 1000);
