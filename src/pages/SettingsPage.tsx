@@ -63,6 +63,7 @@ const SettingsPage = () => {
       office_start_time: settings.office_start_time,
       office_end_time: settings.office_end_time,
       weekend_days: settings.weekend_days,
+      break_allowance_minutes: Number(settings.break_allowance_minutes) || 0,
     }).eq("id", settings.id);
     if (error) toast.error(error.message);
     else toast.success("Settings saved");
