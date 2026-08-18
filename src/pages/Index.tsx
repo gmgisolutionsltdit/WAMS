@@ -486,7 +486,15 @@ const Dashboard = () => {
                       <div><Label>Clock In</Label><Input type="time" value={manualForm.clock_in} onChange={(e) => setManualForm(f => ({ ...f, clock_in: e.target.value }))} /></div>
                       <div><Label>Clock Out</Label><Input type="time" value={manualForm.clock_out} onChange={(e) => setManualForm(f => ({ ...f, clock_out: e.target.value }))} /></div>
                     </div>
-                    <div><Label>Overtime Hours</Label><Input type="number" step="0.5" value={manualForm.overtime_hours} onChange={(e) => setManualForm(f => ({ ...f, overtime_hours: e.target.value }))} /></div>
+                    <div className="grid grid-cols-2 gap-4">
+                      <div><Label>Due Time (hours)</Label><Input type="number" step="0.5" min="0" value={manualForm.due_hours} onChange={(e) => setManualForm(f => ({ ...f, due_hours: e.target.value }))} /></div>
+                      <div><Label>Break Time (minutes)</Label><Input type="number" step="5" min="0" value={manualForm.break_minutes} onChange={(e) => setManualForm(f => ({ ...f, break_minutes: e.target.value }))} /></div>
+                    </div>
+                    <div>
+                      <Label>Overtime Hours</Label>
+                      <Input type="number" step="0.5" value={manualForm.overtime_hours} onChange={(e) => setManualForm(f => ({ ...f, overtime_hours: e.target.value }))} placeholder="Leave blank to auto-calculate from Due Time" />
+                      <p className="text-xs text-muted-foreground mt-1">Leave blank to auto-calculate: worked time (minus break) beyond due time.</p>
+                    </div>
                     <Button onClick={handleManualEntry} className="w-full">Add Entry</Button>
                   </div>
                 </DialogContent>
