@@ -238,11 +238,19 @@ const Dashboard = () => {
     if (!profile) { toast.error("Employee not found"); return; }
     const clockInTime = new Date(`${manualForm.date}T${manualForm.clock_in}:00`);
     const clockOutTime = new Date(`${manualForm.date}T${manualForm.clock_out}:00`);
-    const totalHours = Math.round(((clockOutTime.getTime() - clockInTime.getTime()) / 3600000) * 100) / 100;
+    const breakMins = Math.max(0, parseFloat(manualForm.break_minutes) || 0);
+    const dueHours = Math.max(0, parseFloat(manualForm.due_hours) || 0);
+    const grossHours = (clockOutTime.getTime() - clockInTime.getTime()) / 3600000;
+    const totalHours = Math.max(0, Math.round((grossHours - breakMins / 60) * 100) / 100);
+    const otInput = manualForm.overtime_hours.trim();
+    const overtimeHours = otInput !== ""
+      ? parseFloat(otInput) || 0
+      : Math.max(0, Math.round((totalHours - dueHours) * 100) / 100);
     const { error } = await supabase.from("attendance_logs").insert({
       user_id: profile.id, date: manualForm.date, clock_in: clockInTime.toISOString(), clock_out: clockOutTime.toISOString(),
-      total_hours: totalHours, overtime_hours: parseFloat(manualForm.overtime_hours) || 0,
+      total_hours: totalHours, overtime_hours: overtimeHours, break_minutes: breakMins,
     });
+
     if (error) toast.error(error.message);
     else { toast.success("Manual entry added"); setManualOpen(false); fetchAdminData(); }
   };
