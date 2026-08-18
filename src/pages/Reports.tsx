@@ -70,17 +70,23 @@ const Reports = () => {
   }, []);
 
   const exportCSV = () => {
-    const headers = ["Employee", "Department", "Date", "Clock In", "Clock Out", "Total Hours", "Overtime"];
-    const rows = logs.map((l) => [
-      (l.profiles as any)?.full_name || "",
-      (l.profiles as any)?.department || "",
-      l.date,
-      l.clock_in || "",
-      l.clock_out || "",
-      l.total_hours || 0,
-      l.overtime_hours || 0,
-    ]);
+    const headers = ["Employee", "Department", "Date", "First In", "Last Out", "Sessions", "Break", "Total Worked", "Overtime"];
+    const rows = days.map((d) => {
+      const p: any = d.profiles;
+      return [
+        p?.full_name || "",
+        p?.department || "",
+        d.date,
+        fmtClock(d.firstIn),
+        d.open ? "In progress" : fmtClock(d.lastOut),
+        d.sessions.length,
+        fmtHMS(d.breakSeconds),
+        fmtHMS(d.workedSeconds),
+        hoursToHMS(d.overtimeHours),
+      ];
+    });
     const csv = [headers, ...rows].map((r) => r.join(",")).join("\n");
+
     const blob = new Blob([csv], { type: "text/csv" });
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
