@@ -20,6 +20,7 @@ import NoticeBoardWidget from "@/components/NoticeBoardWidget";
 import SecurityControlsPanel from "@/components/SecurityControlsPanel";
 import FaceCheckIn from "@/components/FaceCheckIn";
 import { min48hDateISO, isWithin48h, RETRO_LOCK_MESSAGE } from "@/lib/dateRules";
+import { fmtHMS } from "@/lib/time";
 import { AttendancePunchCard } from "@/components/hrms/AttendancePunchCard";
 import { BiometricLogFeed } from "@/components/hrms/BiometricLogFeed";
 
