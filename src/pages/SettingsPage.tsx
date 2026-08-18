@@ -63,6 +63,7 @@ const SettingsPage = () => {
       office_start_time: settings.office_start_time,
       office_end_time: settings.office_end_time,
       weekend_days: settings.weekend_days,
+      break_allowance_minutes: Number(settings.break_allowance_minutes) || 0,
     }).eq("id", settings.id);
     if (error) toast.error(error.message);
     else toast.success("Settings saved");
@@ -116,6 +117,12 @@ const SettingsPage = () => {
               <Label>Standard Shift Hours</Label>
               <Input type="number" step="0.5" value={settings.standard_shift_hours} onChange={(e) => setSettings({ ...settings, standard_shift_hours: parseFloat(e.target.value) })} />
             </div>
+            <div className="space-y-2">
+              <Label>Daily Break Allowance (minutes)</Label>
+              <Input type="number" step="5" min="0" value={settings.break_allowance_minutes ?? 60} onChange={(e) => setSettings({ ...settings, break_allowance_minutes: parseFloat(e.target.value) })} />
+              <p className="text-xs text-muted-foreground">Used by the dashboard break countdown timer.</p>
+            </div>
+
             <div className="space-y-2">
               <Label>Weekend Days <span className="text-xs text-muted-foreground">(excluded from leave & OT calculations)</span></Label>
               <div className="flex flex-wrap gap-3">

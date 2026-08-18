@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { Fragment, useEffect, useMemo, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -7,8 +7,10 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Badge } from "@/components/ui/badge";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Download } from "lucide-react";
+import { Download, ChevronDown, ChevronRight } from "lucide-react";
 import { format } from "date-fns";
+import { mergeDailySessions, sessionWorkedSeconds, type AttendanceSession } from "@/lib/attendance";
+import { fmtHMS, fmtClock, hoursToHMS } from "@/lib/time";
 
 const Reports = () => {
   const [logs, setLogs] = useState<any[]>([]);
@@ -18,6 +20,10 @@ const Reports = () => {
   const [department, setDepartment] = useState("all");
   const [month, setMonth] = useState(""); // YYYY-MM
   const [departments, setDepartments] = useState<string[]>([]);
+  const [expanded, setExpanded] = useState<Record<string, boolean>>({});
+
+  const days = useMemo(() => mergeDailySessions(logs as AttendanceSession[]), [logs]);
+
 
   const fetchLogs = async () => {
     let query = supabase
@@ -64,17 +70,23 @@ const Reports = () => {
   }, []);
 
   const exportCSV = () => {
-    const headers = ["Employee", "Department", "Date", "Clock In", "Clock Out", "Total Hours", "Overtime"];
-    const rows = logs.map((l) => [
-      (l.profiles as any)?.full_name || "",
-      (l.profiles as any)?.department || "",
-      l.date,
-      l.clock_in || "",
-      l.clock_out || "",
-      l.total_hours || 0,
-      l.overtime_hours || 0,
-    ]);
+    const headers = ["Employee", "Department", "Date", "First In", "Last Out", "Sessions", "Break", "Total Worked", "Overtime"];
+    const rows = days.map((d) => {
+      const p: any = d.profiles;
+      return [
+        p?.full_name || "",
+        p?.department || "",
+        d.date,
+        fmtClock(d.firstIn),
+        d.open ? "In progress" : fmtClock(d.lastOut),
+        d.sessions.length,
+        fmtHMS(d.breakSeconds),
+        fmtHMS(d.workedSeconds),
+        hoursToHMS(d.overtimeHours),
+      ];
+    });
     const csv = [headers, ...rows].map((r) => r.join(",")).join("\n");
+
     const blob = new Blob([csv], { type: "text/csv" });
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");

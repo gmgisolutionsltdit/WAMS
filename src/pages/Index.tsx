@@ -20,6 +20,7 @@ import NoticeBoardWidget from "@/components/NoticeBoardWidget";
 import SecurityControlsPanel from "@/components/SecurityControlsPanel";
 import FaceCheckIn from "@/components/FaceCheckIn";
 import { min48hDateISO, isWithin48h, RETRO_LOCK_MESSAGE } from "@/lib/dateRules";
+import { fmtHMS } from "@/lib/time";
 import { AttendancePunchCard } from "@/components/hrms/AttendancePunchCard";
 import { BiometricLogFeed } from "@/components/hrms/BiometricLogFeed";
 
@@ -41,12 +42,24 @@ const Dashboard = () => {
   const [approvalHistory, setApprovalHistory] = useState<any[]>([]);
 
   const [manualOpen, setManualOpen] = useState(false);
-  const [manualForm, setManualForm] = useState({ employee_email: "", date: localToday(), clock_in: "09:00", clock_out: "18:00", overtime_hours: "1" });
+  const [manualForm, setManualForm] = useState({ employee_email: "", date: localToday(), clock_in: "09:00", clock_out: "18:00", overtime_hours: "1", due_hours: "8", break_minutes: "60" });
+  const [breakAllowance, setBreakAllowance] = useState(60);
   const [workLogOpen, setWorkLogOpen] = useState(false);
   const [pendingClockOut, setPendingClockOut] = useState<{ clockOutTime: string; logId: string; totalHours: number; overtimeHours: number; breakMins: number } | null>(null);
   const [faceRequired, setFaceRequired] = useState(false);
   const [faceDialogOpen, setFaceDialogOpen] = useState(false);
   const [enrolledFace, setEnrolledFace] = useState<number[] | null>(null);
+
+  useEffect(() => {
+    (async () => {
+      const { data } = await supabase.from("settings").select("break_allowance_minutes, standard_shift_hours").limit(1).maybeSingle();
+      if (data) {
+        setBreakAllowance(Number(data.break_allowance_minutes) || 60);
+        setManualForm((f) => ({ ...f, due_hours: String(Number(data.standard_shift_hours) || 8), break_minutes: String(Number(data.break_allowance_minutes) || 60) }));
+      }
+    })();
+  }, []);
+
 
   useEffect(() => {
     const timer = setInterval(() => setCurrentTime(new Date()), 1000);
@@ -226,11 +239,19 @@ const Dashboard = () => {
     if (!profile) { toast.error("Employee not found"); return; }
     const clockInTime = new Date(`${manualForm.date}T${manualForm.clock_in}:00`);
     const clockOutTime = new Date(`${manualForm.date}T${manualForm.clock_out}:00`);
-    const totalHours = Math.round(((clockOutTime.getTime() - clockInTime.getTime()) / 3600000) * 100) / 100;
+    const breakMins = Math.max(0, parseFloat(manualForm.break_minutes) || 0);
+    const dueHours = Math.max(0, parseFloat(manualForm.due_hours) || 0);
+    const grossHours = (clockOutTime.getTime() - clockInTime.getTime()) / 3600000;
+    const totalHours = Math.max(0, Math.round((grossHours - breakMins / 60) * 100) / 100);
+    const otInput = manualForm.overtime_hours.trim();
+    const overtimeHours = otInput !== ""
+      ? parseFloat(otInput) || 0
+      : Math.max(0, Math.round((totalHours - dueHours) * 100) / 100);
     const { error } = await supabase.from("attendance_logs").insert({
       user_id: profile.id, date: manualForm.date, clock_in: clockInTime.toISOString(), clock_out: clockOutTime.toISOString(),
-      total_hours: totalHours, overtime_hours: parseFloat(manualForm.overtime_hours) || 0,
+      total_hours: totalHours, overtime_hours: overtimeHours, break_minutes: breakMins,
     });
+
     if (error) toast.error(error.message);
     else { toast.success("Manual entry added"); setManualOpen(false); fetchAdminData(); }
   };
@@ -339,8 +360,21 @@ const Dashboard = () => {
                 <div className="text-3xl font-mono font-bold">
                   {getRunningDuration(todayLog.clock_in, todayLog.break_minutes || 0, isOnBreak ? todayLog.break_start : null)}
                 </div>
-                {(todayLog.break_minutes || 0) > 0 && (
-                  <p className="text-xs text-muted-foreground">Total breaks: {todayLog.break_minutes}m</p>
+                {isOnBreak && (() => {
+                  const usedSec = (Number(todayLog.break_minutes) || 0) * 60 +
+                    Math.max(0, (currentTime.getTime() - new Date(todayLog.break_start).getTime()) / 1000);
+                  const remaining = breakAllowance * 60 - usedSec;
+                  const over = remaining < 0;
+                  return (
+                    <div className="w-full rounded-lg border bg-muted/40 p-3 text-center">
+                      <p className="text-xs text-muted-foreground">{over ? "Break overrun" : "Break time remaining"}</p>
+                      <p className={`text-2xl font-mono font-bold ${over ? "text-destructive" : ""}`}>{fmtHMS(Math.abs(remaining))}</p>
+                      <p className="text-[11px] text-muted-foreground mt-1">Allowance {breakAllowance} min · used {fmtHMS(usedSec)}</p>
+                    </div>
+                  );
+                })()}
+                {(todayLog.break_minutes || 0) > 0 && !isOnBreak && (
+                  <p className="text-xs text-muted-foreground">Total breaks: {fmtHMS((todayLog.break_minutes || 0) * 60)}</p>
                 )}
                 <div className="flex gap-2 w-full">
                   {isOnBreak ? (
@@ -466,7 +500,15 @@ const Dashboard = () => {
                       <div><Label>Clock In</Label><Input type="time" value={manualForm.clock_in} onChange={(e) => setManualForm(f => ({ ...f, clock_in: e.target.value }))} /></div>
                       <div><Label>Clock Out</Label><Input type="time" value={manualForm.clock_out} onChange={(e) => setManualForm(f => ({ ...f, clock_out: e.target.value }))} /></div>
                     </div>
-                    <div><Label>Overtime Hours</Label><Input type="number" step="0.5" value={manualForm.overtime_hours} onChange={(e) => setManualForm(f => ({ ...f, overtime_hours: e.target.value }))} /></div>
+                    <div className="grid grid-cols-2 gap-4">
+                      <div><Label>Due Time (hours)</Label><Input type="number" step="0.5" min="0" value={manualForm.due_hours} onChange={(e) => setManualForm(f => ({ ...f, due_hours: e.target.value }))} /></div>
+                      <div><Label>Break Time (minutes)</Label><Input type="number" step="5" min="0" value={manualForm.break_minutes} onChange={(e) => setManualForm(f => ({ ...f, break_minutes: e.target.value }))} /></div>
+                    </div>
+                    <div>
+                      <Label>Overtime Hours</Label>
+                      <Input type="number" step="0.5" value={manualForm.overtime_hours} onChange={(e) => setManualForm(f => ({ ...f, overtime_hours: e.target.value }))} placeholder="Leave blank to auto-calculate from Due Time" />
+                      <p className="text-xs text-muted-foreground mt-1">Leave blank to auto-calculate: worked time (minus break) beyond due time.</p>
+                    </div>
                     <Button onClick={handleManualEntry} className="w-full">Add Entry</Button>
                   </div>
                 </DialogContent>

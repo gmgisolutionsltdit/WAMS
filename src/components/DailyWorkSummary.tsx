@@ -7,6 +7,8 @@ import { Badge } from "@/components/ui/badge";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { format, parseISO, addDays, isWeekend } from "date-fns";
 import { ClipboardList } from "lucide-react";
+import { mergeDailySessions, type MergedDay } from "@/lib/attendance";
+import { fmtHMS, fmtClock } from "@/lib/time";
 
 type Task = { task: string; status: string };
 type WorkLog = { id: string; log_date: string; tasks: Task[] };
@@ -16,12 +18,13 @@ type Attendance = {
   clock_in: string | null;
   clock_out: string | null;
   total_hours: number | null;
+  break_minutes?: number | null;
 };
 
 type DisplayTask = Task & { firstEntryDate: string; forwarded: boolean };
 type DayGroup = {
   date: string;
-  attendance: Attendance | null;
+  attendance: MergedDay<Attendance> | null;
   tasks: DisplayTask[];
 };
 
@@ -85,7 +88,9 @@ const buildGroups = (
   });
 
   const sortedDates = Array.from(dateSet).sort().reverse(); // descending
-  const attendanceByDate = new Map(attendance.map((a) => [a.date, a]));
+  const attendanceByDate = new Map(
+    mergeDailySessions(attendance).map((d) => [d.date, d]),
+  );
 
   // For each date, gather tasks: native (logged that day) + forwarded (unfinished from earlier dates).
   const groups: DayGroup[] = sortedDates.map((date) => {
@@ -149,7 +154,7 @@ const DailyWorkSummary = () => {
     const [{ data: att }, { data: logs }] = await Promise.all([
       supabase
         .from("attendance_logs")
-        .select("id, date, clock_in, clock_out, total_hours")
+        .select("id, date, clock_in, clock_out, total_hours, break_minutes")
         .eq("user_id", user.id)
         .gte("date", since)
         .order("date", { ascending: false }),
@@ -188,6 +193,7 @@ const DailyWorkSummary = () => {
     clockIn: string;
     clockOut: string;
     totalHours: string;
+    sessions: number;
     firstEntryDate: string | null;
     task: string;
     status: string;
@@ -196,20 +202,21 @@ const DailyWorkSummary = () => {
   const rows: FlatRow[] = [];
   groups.forEach((g) => {
     const att = g.attendance;
-    const clockIn = att?.clock_in ? format(new Date(att.clock_in), "HH:mm") : "—";
-    const clockOut = att?.clock_out ? format(new Date(att.clock_out), "HH:mm") : "—";
-    const totalHours = att?.total_hours != null ? `${att.total_hours.toFixed(2)} hrs` : "—";
+    const clockIn = fmtClock(att?.firstIn);
+    const clockOut = att ? (att.open ? "In progress" : fmtClock(att.lastOut)) : "—";
+    const totalHours = att ? fmtHMS(att.workedSeconds) : "—";
+    const sessions = att ? att.sessions.length : 0;
     if (g.tasks.length === 0) {
       rows.push({
         key: `${g.date}-empty`, date: g.date, isToday: g.date === localToday(),
-        clockIn, clockOut, totalHours,
+        clockIn, clockOut, totalHours, sessions,
         firstEntryDate: null, task: "", status: "", forwarded: false,
       });
     } else {
       g.tasks.forEach((t, idx) => {
         rows.push({
           key: `${g.date}-${idx}`, date: g.date, isToday: g.date === localToday(),
-          clockIn, clockOut, totalHours,
+          clockIn, clockOut, totalHours, sessions,
           firstEntryDate: t.firstEntryDate, task: t.task, status: t.status, forwarded: t.forwarded,
         });
       });
@@ -236,6 +243,7 @@ const DailyWorkSummary = () => {
                   <TableHead>Date</TableHead>
                   <TableHead>Clock In</TableHead>
                   <TableHead>Clock Out</TableHead>
+                  <TableHead>Sessions</TableHead>
                   <TableHead>Total Hours</TableHead>
                   <TableHead>First Entry</TableHead>
                   <TableHead>Task</TableHead>
@@ -249,9 +257,10 @@ const DailyWorkSummary = () => {
                       {format(parseISO(r.date), "MMM d, yyyy")}
                       {r.isToday && <Badge variant="outline" className="ml-2 text-xs">Today</Badge>}
                     </TableCell>
-                    <TableCell>{r.clockIn}</TableCell>
-                    <TableCell>{r.clockOut}</TableCell>
-                    <TableCell>{r.totalHours}</TableCell>
+                    <TableCell className="font-mono text-xs">{r.clockIn}</TableCell>
+                    <TableCell className="font-mono text-xs">{r.clockOut}</TableCell>
+                    <TableCell>{r.sessions > 0 ? <Badge variant="outline">{r.sessions}</Badge> : "—"}</TableCell>
+                    <TableCell className="font-mono text-xs">{r.totalHours}</TableCell>
                     <TableCell className="text-sm text-muted-foreground whitespace-nowrap">
                       {r.firstEntryDate
                         ? <>
