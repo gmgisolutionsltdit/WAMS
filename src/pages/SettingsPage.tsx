@@ -118,6 +118,12 @@ const SettingsPage = () => {
               <Input type="number" step="0.5" value={settings.standard_shift_hours} onChange={(e) => setSettings({ ...settings, standard_shift_hours: parseFloat(e.target.value) })} />
             </div>
             <div className="space-y-2">
+              <Label>Daily Break Allowance (minutes)</Label>
+              <Input type="number" step="5" min="0" value={settings.break_allowance_minutes ?? 60} onChange={(e) => setSettings({ ...settings, break_allowance_minutes: parseFloat(e.target.value) })} />
+              <p className="text-xs text-muted-foreground">Used by the dashboard break countdown timer.</p>
+            </div>
+
+            <div className="space-y-2">
               <Label>Weekend Days <span className="text-xs text-muted-foreground">(excluded from leave & OT calculations)</span></Label>
               <div className="flex flex-wrap gap-3">
                 {DOW.map((d) => (
