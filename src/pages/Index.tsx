@@ -359,8 +359,21 @@ const Dashboard = () => {
                 <div className="text-3xl font-mono font-bold">
                   {getRunningDuration(todayLog.clock_in, todayLog.break_minutes || 0, isOnBreak ? todayLog.break_start : null)}
                 </div>
-                {(todayLog.break_minutes || 0) > 0 && (
-                  <p className="text-xs text-muted-foreground">Total breaks: {todayLog.break_minutes}m</p>
+                {isOnBreak && (() => {
+                  const usedSec = (Number(todayLog.break_minutes) || 0) * 60 +
+                    Math.max(0, (currentTime.getTime() - new Date(todayLog.break_start).getTime()) / 1000);
+                  const remaining = breakAllowance * 60 - usedSec;
+                  const over = remaining < 0;
+                  return (
+                    <div className="w-full rounded-lg border bg-muted/40 p-3 text-center">
+                      <p className="text-xs text-muted-foreground">{over ? "Break overrun" : "Break time remaining"}</p>
+                      <p className={`text-2xl font-mono font-bold ${over ? "text-destructive" : ""}`}>{fmtHMS(Math.abs(remaining))}</p>
+                      <p className="text-[11px] text-muted-foreground mt-1">Allowance {breakAllowance} min · used {fmtHMS(usedSec)}</p>
+                    </div>
+                  );
+                })()}
+                {(todayLog.break_minutes || 0) > 0 && !isOnBreak && (
+                  <p className="text-xs text-muted-foreground">Total breaks: {fmtHMS((todayLog.break_minutes || 0) * 60)}</p>
                 )}
                 <div className="flex gap-2 w-full">
                   {isOnBreak ? (
