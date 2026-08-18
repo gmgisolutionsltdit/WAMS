@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { Fragment, useEffect, useMemo, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -7,8 +7,10 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Badge } from "@/components/ui/badge";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Download } from "lucide-react";
+import { Download, ChevronDown, ChevronRight } from "lucide-react";
 import { format } from "date-fns";
+import { mergeDailySessions, sessionWorkedSeconds, type AttendanceSession } from "@/lib/attendance";
+import { fmtHMS, fmtClock, hoursToHMS } from "@/lib/time";
 
 const Reports = () => {
   const [logs, setLogs] = useState<any[]>([]);
@@ -18,6 +20,10 @@ const Reports = () => {
   const [department, setDepartment] = useState("all");
   const [month, setMonth] = useState(""); // YYYY-MM
   const [departments, setDepartments] = useState<string[]>([]);
+  const [expanded, setExpanded] = useState<Record<string, boolean>>({});
+
+  const days = useMemo(() => mergeDailySessions(logs as AttendanceSession[]), [logs]);
+
 
   const fetchLogs = async () => {
     let query = supabase
