@@ -381,6 +381,60 @@ export type Database = {
         }
         Relationships: []
       }
+      late_time_requests: {
+        Row: {
+          adjustment_minutes: number
+          approved_by: string | null
+          approver_note: string | null
+          assigned_approver_id: string | null
+          created_at: string
+          effective_date: string
+          id: string
+          late_minutes: number
+          reason: string | null
+          request_type: string
+          requested_end_time: string | null
+          requested_start_time: string | null
+          status: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          adjustment_minutes?: number
+          approved_by?: string | null
+          approver_note?: string | null
+          assigned_approver_id?: string | null
+          created_at?: string
+          effective_date: string
+          id?: string
+          late_minutes?: number
+          reason?: string | null
+          request_type?: string
+          requested_end_time?: string | null
+          requested_start_time?: string | null
+          status?: string
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          adjustment_minutes?: number
+          approved_by?: string | null
+          approver_note?: string | null
+          assigned_approver_id?: string | null
+          created_at?: string
+          effective_date?: string
+          id?: string
+          late_minutes?: number
+          reason?: string | null
+          request_type?: string
+          requested_end_time?: string | null
+          requested_start_time?: string | null
+          status?: string
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
       leave_balances: {
         Row: {
           allocated: number
@@ -567,6 +621,80 @@ export type Database = {
           updated_at?: string
         }
         Relationships: []
+      }
+      manual_time_requests: {
+        Row: {
+          applied_log_id: string | null
+          approved_by: string | null
+          approver_note: string | null
+          assigned_approver_id: string | null
+          break_minutes: number
+          clock_in: string
+          clock_out: string
+          created_at: string
+          date: string
+          due_hours: number
+          id: string
+          overtime_hours: number
+          reason: string | null
+          status: string
+          task_id: string | null
+          task_note: string | null
+          total_hours: number
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          applied_log_id?: string | null
+          approved_by?: string | null
+          approver_note?: string | null
+          assigned_approver_id?: string | null
+          break_minutes?: number
+          clock_in: string
+          clock_out: string
+          created_at?: string
+          date: string
+          due_hours?: number
+          id?: string
+          overtime_hours?: number
+          reason?: string | null
+          status?: string
+          task_id?: string | null
+          task_note?: string | null
+          total_hours?: number
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          applied_log_id?: string | null
+          approved_by?: string | null
+          approver_note?: string | null
+          assigned_approver_id?: string | null
+          break_minutes?: number
+          clock_in?: string
+          clock_out?: string
+          created_at?: string
+          date?: string
+          due_hours?: number
+          id?: string
+          overtime_hours?: number
+          reason?: string | null
+          status?: string
+          task_id?: string | null
+          task_note?: string | null
+          total_hours?: number
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "manual_time_requests_task_id_fkey"
+            columns: ["task_id"]
+            isOneToOne: false
+            referencedRelation: "tasks"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       notices: {
         Row: {
@@ -828,7 +956,10 @@ export type Database = {
           hourly_overtime_rate: number
           id: string
           joining_date: string | null
+          late_grace_minutes: number
           monthly_ot_cap: number
+          office_end_time: string
+          office_start_time: string
           pf_contribution_pct: number
           phone: string | null
           photo_url: string | null
@@ -853,7 +984,10 @@ export type Database = {
           hourly_overtime_rate?: number
           id: string
           joining_date?: string | null
+          late_grace_minutes?: number
           monthly_ot_cap?: number
+          office_end_time?: string
+          office_start_time?: string
           pf_contribution_pct?: number
           phone?: string | null
           photo_url?: string | null
@@ -878,7 +1012,10 @@ export type Database = {
           hourly_overtime_rate?: number
           id?: string
           joining_date?: string | null
+          late_grace_minutes?: number
           monthly_ot_cap?: number
+          office_end_time?: string
+          office_start_time?: string
           pf_contribution_pct?: number
           phone?: string | null
           photo_url?: string | null
