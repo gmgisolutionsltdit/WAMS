@@ -53,6 +53,10 @@ const Dashboard = () => {
   const [faceRequired, setFaceRequired] = useState(false);
   const [faceDialogOpen, setFaceDialogOpen] = useState(false);
   const [enrolledFace, setEnrolledFace] = useState<number[] | null>(null);
+  const [officeTimes, setOfficeTimes] = useState<{ start: string; end: string; grace: number }>({
+    start: DEFAULT_OFFICE_START, end: DEFAULT_OFFICE_END, grace: 11,
+  });
+
 
   useEffect(() => {
     (async () => {
