@@ -436,8 +436,16 @@ const LeaveManagement = () => {
         <TabsList>
           <TabsTrigger value="calendar">Calendar</TabsTrigger>
           <TabsTrigger value="my">My Requests</TabsTrigger>
-          {(role === "manager" || role === "admin") && <TabsTrigger value="team">Team Requests</TabsTrigger>}
+          {canApproveLeave && (
+            <TabsTrigger value="team" className="gap-2">
+              Team Requests
+              {pendingTeamCount > 0 && (
+                <Badge variant="destructive" className="h-5 min-w-5 justify-center px-1.5">{pendingTeamCount}</Badge>
+              )}
+            </TabsTrigger>
+          )}
         </TabsList>
+
 
         <TabsContent value="calendar">
           <div className="grid lg:grid-cols-2 gap-4">
