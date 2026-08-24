@@ -23,6 +23,10 @@ import { min48hDateISO, isWithin48h, RETRO_LOCK_MESSAGE } from "@/lib/dateRules"
 import { fmtHMS } from "@/lib/time";
 import { AttendancePunchCard } from "@/components/hrms/AttendancePunchCard";
 import { BiometricLogFeed } from "@/components/hrms/BiometricLogFeed";
+import ManualTimeEntryDialog from "@/components/ManualTimeEntryDialog";
+import LateTimeRequestDialog from "@/components/LateTimeRequestDialog";
+import { DEFAULT_OFFICE_END, DEFAULT_OFFICE_START } from "@/lib/officeTime";
+
 
 /** Return today's date string in the user's local timezone (yyyy-MM-dd). */
 const localToday = () => format(new Date(), "yyyy-MM-dd");
