@@ -45,8 +45,8 @@ const Dashboard = () => {
   const [stats, setStats] = useState({ totalOTToday: 0, pendingCount: 0, activeEmployees: 0 });
   const [approvalHistory, setApprovalHistory] = useState<any[]>([]);
 
-  const [manualOpen, setManualOpen] = useState(false);
-  const [manualForm, setManualForm] = useState({ employee_email: "", date: localToday(), clock_in: "09:00", clock_out: "18:00", overtime_hours: "1", due_hours: "8", break_minutes: "60" });
+
+
   const [breakAllowance, setBreakAllowance] = useState(60);
   const [workLogOpen, setWorkLogOpen] = useState(false);
   const [pendingClockOut, setPendingClockOut] = useState<{ clockOutTime: string; logId: string; totalHours: number; overtimeHours: number; breakMins: number } | null>(null);
