@@ -157,10 +157,22 @@ const Dashboard = () => {
 
   useEffect(() => {
     if (!user) return;
-    supabase.from("profiles").select("face_descriptor").eq("id", user.id).maybeSingle().then(({ data }) => {
-      if (data?.face_descriptor && Array.isArray(data.face_descriptor)) setEnrolledFace(data.face_descriptor as number[]);
-    });
+    supabase
+      .from("profiles")
+      .select("face_descriptor, office_start_time, office_end_time, late_grace_minutes")
+      .eq("id", user.id)
+      .maybeSingle()
+      .then(({ data }) => {
+        if (!data) return;
+        if (data.face_descriptor && Array.isArray(data.face_descriptor)) setEnrolledFace(data.face_descriptor as number[]);
+        setOfficeTimes({
+          start: (data.office_start_time as string | null) || DEFAULT_OFFICE_START,
+          end: (data.office_end_time as string | null) || DEFAULT_OFFICE_END,
+          grace: data.late_grace_minutes == null ? 11 : Number(data.late_grace_minutes),
+        });
+      });
   }, [user]);
+
 
   /** Step 1: capture end-of-day time and prompt for the optional Daily Work Log. */
   const handleClockOut = () => {
