@@ -513,46 +513,8 @@ const Dashboard = () => {
           <Card>
             <CardHeader className="flex flex-row items-center justify-between">
               <CardTitle className="flex items-center gap-2"><Clock className="h-5 w-5" /> Live Employee Tracker</CardTitle>
-              <Dialog open={manualOpen} onOpenChange={setManualOpen}>
-                <DialogTrigger asChild>
-                  <Button size="sm"><Plus className="mr-1 h-4 w-4" /> Manual Entry</Button>
-                </DialogTrigger>
-                <DialogContent>
-                  <DialogHeader><DialogTitle>Add Manual Attendance/OT Log</DialogTitle></DialogHeader>
-                  <div className="space-y-4">
-                    <div><Label>Employee Email</Label><Input value={manualForm.employee_email} onChange={(e) => setManualForm(f => ({ ...f, employee_email: e.target.value }))} placeholder="employee@company.com" /></div>
-                    <div>
-                      <Label>Date</Label>
-                      <Input
-                        type="date"
-                        value={manualForm.date}
-                        min={(role as string) !== "admin" ? min48hDateISO() : undefined}
-                        onChange={(e) => setManualForm(f => ({ ...f, date: e.target.value }))}
-                      />
-                      {(role as string) !== "admin" && !isWithin48h(manualForm.date) && (
-                        <p className="text-xs text-destructive mt-1">Employees cannot manually enter logs older than 48 hours.</p>
-                      )}
-                      {(role as string) !== "admin" && (
-                        <p className="text-xs text-muted-foreground mt-1">{RETRO_LOCK_MESSAGE}</p>
-                      )}
-                    </div>
-                    <div className="grid grid-cols-2 gap-4">
-                      <div><Label>Clock In</Label><Input type="time" value={manualForm.clock_in} onChange={(e) => setManualForm(f => ({ ...f, clock_in: e.target.value }))} /></div>
-                      <div><Label>Clock Out</Label><Input type="time" value={manualForm.clock_out} onChange={(e) => setManualForm(f => ({ ...f, clock_out: e.target.value }))} /></div>
-                    </div>
-                    <div className="grid grid-cols-2 gap-4">
-                      <div><Label>Due Time (hours)</Label><Input type="number" step="0.5" min="0" value={manualForm.due_hours} onChange={(e) => setManualForm(f => ({ ...f, due_hours: e.target.value }))} /></div>
-                      <div><Label>Break Time (minutes)</Label><Input type="number" step="5" min="0" value={manualForm.break_minutes} onChange={(e) => setManualForm(f => ({ ...f, break_minutes: e.target.value }))} /></div>
-                    </div>
-                    <div>
-                      <Label>Overtime Hours</Label>
-                      <Input type="number" step="0.5" value={manualForm.overtime_hours} onChange={(e) => setManualForm(f => ({ ...f, overtime_hours: e.target.value }))} placeholder="Leave blank to auto-calculate from Due Time" />
-                      <p className="text-xs text-muted-foreground mt-1">Leave blank to auto-calculate: worked time (minus break) beyond due time.</p>
-                    </div>
-                    <Button onClick={handleManualEntry} className="w-full">Add Entry</Button>
-                  </div>
-                </DialogContent>
-              </Dialog>
+              <ManualTimeEntryDialog onSubmitted={() => { fetchEmployeeData(); fetchAdminData(); }} />
+
             </CardHeader>
             <CardContent>
               <Table>
