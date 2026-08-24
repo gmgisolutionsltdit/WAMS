@@ -566,7 +566,7 @@ const LeaveManagement = () => {
           </Card>
         </TabsContent>
 
-        {(role === "manager" || role === "admin") && (
+        {canApproveLeave && (
           <TabsContent value="team">
             <Card>
               <CardContent className="pt-6">
