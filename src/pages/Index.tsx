@@ -433,6 +433,26 @@ const Dashboard = () => {
         </Card>
       </div>
 
+      {/* Self-service time actions — available to every role */}
+      <Card className="shadow-card">
+        <CardHeader className="pb-3">
+          <CardTitle className="text-base">Time Requests</CardTitle>
+          <CardDescription>
+            Add time you forgot to log, or raise a late-time / office-time request. Approval goes to your reporting
+            manager (or an admin).
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="flex flex-wrap gap-2">
+          <ManualTimeEntryDialog onSubmitted={() => { fetchEmployeeData(); fetchAdminData(); }} />
+          <LateTimeRequestDialog
+            officeStartTime={officeTimes.start}
+            officeEndTime={officeTimes.end}
+          />
+        </CardContent>
+      </Card>
+
+
+
       {/* Admin/Manager Section */}
       {isManagerOrAdmin && (
         <>
