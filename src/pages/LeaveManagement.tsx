@@ -170,9 +170,23 @@ const LeaveManagement = () => {
   const myBalances = useMemo(() => balances.filter((b) => b.user_id === user?.id), [balances, user]);
   const myRequests = useMemo(() => requests.filter((r) => r.user_id === user?.id), [requests, user]);
   const teamRequests = useMemo(
-    () => requests.filter((r) => r.user_id !== user?.id),
+    () =>
+      requests
+        .filter((r) => r.user_id !== user?.id)
+        .sort((a, b) => {
+          const ap = a.status === "pending" ? 0 : 1;
+          const bp = b.status === "pending" ? 0 : 1;
+          if (ap !== bp) return ap - bp;
+          return a.start_date < b.start_date ? 1 : -1;
+        }),
     [requests, user]
   );
+  const canApproveLeave = role === "manager" || role === "admin" || role === "hr" || role === "supervisor";
+  const pendingTeamCount = useMemo(
+    () => teamRequests.filter((r) => r.status === "pending").length,
+    [teamRequests]
+  );
+
 
   const submit = async () => {
     if (!form.leave_type_id || !form.start_date || !form.end_date) { toast.error("Fill leave type and dates"); return; }
