@@ -23,6 +23,10 @@ import { min48hDateISO, isWithin48h, RETRO_LOCK_MESSAGE } from "@/lib/dateRules"
 import { fmtHMS } from "@/lib/time";
 import { AttendancePunchCard } from "@/components/hrms/AttendancePunchCard";
 import { BiometricLogFeed } from "@/components/hrms/BiometricLogFeed";
+import ManualTimeEntryDialog from "@/components/ManualTimeEntryDialog";
+import LateTimeRequestDialog from "@/components/LateTimeRequestDialog";
+import { DEFAULT_OFFICE_END, DEFAULT_OFFICE_START } from "@/lib/officeTime";
+
 
 /** Return today's date string in the user's local timezone (yyyy-MM-dd). */
 const localToday = () => format(new Date(), "yyyy-MM-dd");
@@ -41,14 +45,18 @@ const Dashboard = () => {
   const [stats, setStats] = useState({ totalOTToday: 0, pendingCount: 0, activeEmployees: 0 });
   const [approvalHistory, setApprovalHistory] = useState<any[]>([]);
 
-  const [manualOpen, setManualOpen] = useState(false);
-  const [manualForm, setManualForm] = useState({ employee_email: "", date: localToday(), clock_in: "09:00", clock_out: "18:00", overtime_hours: "1", due_hours: "8", break_minutes: "60" });
+
+
   const [breakAllowance, setBreakAllowance] = useState(60);
   const [workLogOpen, setWorkLogOpen] = useState(false);
   const [pendingClockOut, setPendingClockOut] = useState<{ clockOutTime: string; logId: string; totalHours: number; overtimeHours: number; breakMins: number } | null>(null);
   const [faceRequired, setFaceRequired] = useState(false);
   const [faceDialogOpen, setFaceDialogOpen] = useState(false);
   const [enrolledFace, setEnrolledFace] = useState<number[] | null>(null);
+  const [officeTimes, setOfficeTimes] = useState<{ start: string; end: string; grace: number }>({
+    start: DEFAULT_OFFICE_START, end: DEFAULT_OFFICE_END, grace: 11,
+  });
+
 
   useEffect(() => {
     (async () => {
@@ -149,10 +157,22 @@ const Dashboard = () => {
 
   useEffect(() => {
     if (!user) return;
-    supabase.from("profiles").select("face_descriptor").eq("id", user.id).maybeSingle().then(({ data }) => {
-      if (data?.face_descriptor && Array.isArray(data.face_descriptor)) setEnrolledFace(data.face_descriptor as number[]);
-    });
+    supabase
+      .from("profiles")
+      .select("face_descriptor, office_start_time, office_end_time, late_grace_minutes")
+      .eq("id", user.id)
+      .maybeSingle()
+      .then(({ data }) => {
+        if (!data) return;
+        if (data.face_descriptor && Array.isArray(data.face_descriptor)) setEnrolledFace(data.face_descriptor as number[]);
+        setOfficeTimes({
+          start: (data.office_start_time as string | null) || DEFAULT_OFFICE_START,
+          end: (data.office_end_time as string | null) || DEFAULT_OFFICE_END,
+          grace: data.late_grace_minutes == null ? 11 : Number(data.late_grace_minutes),
+        });
+      });
   }, [user]);
+
 
   /** Step 1: capture end-of-day time and prompt for the optional Daily Work Log. */
   const handleClockOut = () => {
@@ -229,32 +249,8 @@ const Dashboard = () => {
     else { toast.success(`Request ${status}`); fetchAdminData(); }
   };
 
-  const handleManualEntry = async () => {
-    if (!user) return;
-    if (role === "employee" && !isWithin48h(manualForm.date)) {
-      toast.error("Employees cannot manually enter logs older than 48 hours.");
-      return;
-    }
-    const { data: profile } = await supabase.from("profiles").select("id").eq("email", manualForm.employee_email).single();
-    if (!profile) { toast.error("Employee not found"); return; }
-    const clockInTime = new Date(`${manualForm.date}T${manualForm.clock_in}:00`);
-    const clockOutTime = new Date(`${manualForm.date}T${manualForm.clock_out}:00`);
-    const breakMins = Math.max(0, parseFloat(manualForm.break_minutes) || 0);
-    const dueHours = Math.max(0, parseFloat(manualForm.due_hours) || 0);
-    const grossHours = (clockOutTime.getTime() - clockInTime.getTime()) / 3600000;
-    const totalHours = Math.max(0, Math.round((grossHours - breakMins / 60) * 100) / 100);
-    const otInput = manualForm.overtime_hours.trim();
-    const overtimeHours = otInput !== ""
-      ? parseFloat(otInput) || 0
-      : Math.max(0, Math.round((totalHours - dueHours) * 100) / 100);
-    const { error } = await supabase.from("attendance_logs").insert({
-      user_id: profile.id, date: manualForm.date, clock_in: clockInTime.toISOString(), clock_out: clockOutTime.toISOString(),
-      total_hours: totalHours, overtime_hours: overtimeHours, break_minutes: breakMins,
-    });
 
-    if (error) toast.error(error.message);
-    else { toast.success("Manual entry added"); setManualOpen(false); fetchAdminData(); }
-  };
+
 
   const getRunningDuration = (clockIn: string, breakMins: number = 0, breakStartStr?: string | null) => {
     let elapsed = currentTime.getTime() - new Date(clockIn).getTime();
@@ -433,6 +429,26 @@ const Dashboard = () => {
         </Card>
       </div>
 
+      {/* Self-service time actions — available to every role */}
+      <Card className="shadow-card">
+        <CardHeader className="pb-3">
+          <CardTitle className="text-base">Time Requests</CardTitle>
+          <CardDescription>
+            Add time you forgot to log, or raise a late-time / office-time request. Approval goes to your reporting
+            manager (or an admin).
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="flex flex-wrap gap-2">
+          <ManualTimeEntryDialog onSubmitted={() => { fetchEmployeeData(); fetchAdminData(); }} />
+          <LateTimeRequestDialog
+            officeStartTime={officeTimes.start}
+            officeEndTime={officeTimes.end}
+          />
+        </CardContent>
+      </Card>
+
+
+
       {/* Admin/Manager Section */}
       {isManagerOrAdmin && (
         <>
@@ -473,46 +489,8 @@ const Dashboard = () => {
           <Card>
             <CardHeader className="flex flex-row items-center justify-between">
               <CardTitle className="flex items-center gap-2"><Clock className="h-5 w-5" /> Live Employee Tracker</CardTitle>
-              <Dialog open={manualOpen} onOpenChange={setManualOpen}>
-                <DialogTrigger asChild>
-                  <Button size="sm"><Plus className="mr-1 h-4 w-4" /> Manual Entry</Button>
-                </DialogTrigger>
-                <DialogContent>
-                  <DialogHeader><DialogTitle>Add Manual Attendance/OT Log</DialogTitle></DialogHeader>
-                  <div className="space-y-4">
-                    <div><Label>Employee Email</Label><Input value={manualForm.employee_email} onChange={(e) => setManualForm(f => ({ ...f, employee_email: e.target.value }))} placeholder="employee@company.com" /></div>
-                    <div>
-                      <Label>Date</Label>
-                      <Input
-                        type="date"
-                        value={manualForm.date}
-                        min={(role as string) !== "admin" ? min48hDateISO() : undefined}
-                        onChange={(e) => setManualForm(f => ({ ...f, date: e.target.value }))}
-                      />
-                      {(role as string) !== "admin" && !isWithin48h(manualForm.date) && (
-                        <p className="text-xs text-destructive mt-1">Employees cannot manually enter logs older than 48 hours.</p>
-                      )}
-                      {(role as string) !== "admin" && (
-                        <p className="text-xs text-muted-foreground mt-1">{RETRO_LOCK_MESSAGE}</p>
-                      )}
-                    </div>
-                    <div className="grid grid-cols-2 gap-4">
-                      <div><Label>Clock In</Label><Input type="time" value={manualForm.clock_in} onChange={(e) => setManualForm(f => ({ ...f, clock_in: e.target.value }))} /></div>
-                      <div><Label>Clock Out</Label><Input type="time" value={manualForm.clock_out} onChange={(e) => setManualForm(f => ({ ...f, clock_out: e.target.value }))} /></div>
-                    </div>
-                    <div className="grid grid-cols-2 gap-4">
-                      <div><Label>Due Time (hours)</Label><Input type="number" step="0.5" min="0" value={manualForm.due_hours} onChange={(e) => setManualForm(f => ({ ...f, due_hours: e.target.value }))} /></div>
-                      <div><Label>Break Time (minutes)</Label><Input type="number" step="5" min="0" value={manualForm.break_minutes} onChange={(e) => setManualForm(f => ({ ...f, break_minutes: e.target.value }))} /></div>
-                    </div>
-                    <div>
-                      <Label>Overtime Hours</Label>
-                      <Input type="number" step="0.5" value={manualForm.overtime_hours} onChange={(e) => setManualForm(f => ({ ...f, overtime_hours: e.target.value }))} placeholder="Leave blank to auto-calculate from Due Time" />
-                      <p className="text-xs text-muted-foreground mt-1">Leave blank to auto-calculate: worked time (minus break) beyond due time.</p>
-                    </div>
-                    <Button onClick={handleManualEntry} className="w-full">Add Entry</Button>
-                  </div>
-                </DialogContent>
-              </Dialog>
+              <ManualTimeEntryDialog onSubmitted={() => { fetchEmployeeData(); fetchAdminData(); }} />
+
             </CardHeader>
             <CardContent>
               <Table>
