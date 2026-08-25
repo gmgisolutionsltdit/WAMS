@@ -27,6 +27,10 @@ const Approvals = () => {
   const [pending, setPending] = useState<any[]>([]);
   const [history, setHistory] = useState<any[]>([]);
   const [stats, setStats] = useState({ totalOT: 0, pendingCount: 0, activeEmployees: 0 });
+  const [manualPending, setManualPending] = useState<any[]>([]);
+  const [latePending, setLatePending] = useState<any[]>([]);
+  const [names, setNames] = useState<Record<string, string>>({});
+  const [notes, setNotes] = useState<Record<string, string>>({});
 
   const [editOpen, setEditOpen] = useState(false);
   const [editReq, setEditReq] = useState<any>(null);
@@ -34,7 +38,7 @@ const Approvals = () => {
 
   const fetchData = useCallback(async () => {
     if (!user) return;
-    const [{ data: requests }, { data: resolved }] = await Promise.all([
+    const [{ data: requests }, { data: resolved }, { data: manualReqs }, { data: lateReqs }] = await Promise.all([
       supabase
         .from("overtime_requests")
         .select("*, profiles!overtime_requests_user_id_fkey(full_name, email)")
@@ -46,9 +50,21 @@ const Approvals = () => {
         .neq("status", "pending")
         .order("updated_at", { ascending: false })
         .limit(20),
+      supabase.from("manual_time_requests").select("*").eq("status", "pending").order("created_at", { ascending: false }),
+      supabase.from("late_time_requests").select("*").eq("status", "pending").order("created_at", { ascending: false }),
     ]);
     setPending(requests || []);
     setHistory(resolved || []);
+    setManualPending(manualReqs || []);
+    setLatePending(lateReqs || []);
+
+    const ids = Array.from(new Set([...(manualReqs || []), ...(lateReqs || [])].map((r: any) => r.user_id)));
+    if (ids.length) {
+      const { data: profs } = await supabase.from("profiles").select("id, full_name, email").in("id", ids);
+      const map: Record<string, string> = {};
+      (profs || []).forEach((p: any) => { map[p.id] = p.full_name || p.email || "Unknown"; });
+      setNames(map);
+    }
 
     const now = new Date();
     const monthStart = format(new Date(now.getFullYear(), now.getMonth(), 1), "yyyy-MM-dd");
@@ -61,6 +77,45 @@ const Approvals = () => {
   useEffect(() => { fetchData(); }, [fetchData]);
 
   useRealtimeSubscription("overtime_requests", fetchData, "approvals-page");
+  useRealtimeSubscription("manual_time_requests", fetchData, "approvals-manual");
+  useRealtimeSubscription("late_time_requests", fetchData, "approvals-late");
+
+  const decideManual = async (req: any, status: "approved" | "rejected") => {
+    if (!user) return;
+    const { error } = await supabase
+      .from("manual_time_requests")
+      .update({ status, approved_by: user.id, approver_note: notes[req.id] || null })
+      .eq("id", req.id);
+    if (error) { toast.error(error.message); return; }
+    toast.success(`Manual time request ${status}`);
+    await notifyEmployee(
+      req.user_id,
+      `Manual Time Request ${status.charAt(0).toUpperCase() + status.slice(1)}`,
+      `Your manual time entry for ${format(new Date(req.date), "MMM d")} was ${status}.`,
+      req.id,
+      { route: "/attendance", type: "manual_time_update" }
+    );
+    fetchData();
+  };
+
+  const decideLate = async (req: any, status: "approved" | "rejected") => {
+    if (!user) return;
+    const { error } = await supabase
+      .from("late_time_requests")
+      .update({ status, approved_by: user.id, approver_note: notes[req.id] || null })
+      .eq("id", req.id);
+    if (error) { toast.error(error.message); return; }
+    toast.success(`Late time request ${status}`);
+    await notifyEmployee(
+      req.user_id,
+      `Late Time Request ${status.charAt(0).toUpperCase() + status.slice(1)}`,
+      `Your ${req.request_type === "office_time_change" ? "office time change" : "late adjustment"} request for ${format(new Date(req.effective_date), "MMM d")} was ${status}.`,
+      req.id,
+      { route: "/", type: "late_time_update" }
+    );
+    fetchData();
+  };
+
 
   const handleAction = async (req: any, status: "approved" | "rejected") => {
     if (!user) return;
