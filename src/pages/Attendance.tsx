@@ -19,15 +19,18 @@ const Attendance = () => {
   const [logs, setLogs] = useState<AttendanceSession[]>([]);
   const [approvedOT, setApprovedOT] = useState<any[]>([]);
   const [expanded, setExpanded] = useState<Record<string, boolean>>({});
+  const [officeProfile, setOfficeProfile] = useState<OfficeTime | null>(null);
 
   const fetchData = () => {
     if (!user) return;
     Promise.all([
       supabase.from("attendance_logs").select("*").eq("user_id", user.id).order("date", { ascending: false }),
       supabase.from("overtime_requests").select("*").eq("user_id", user.id).in("status", ["approved", "modified"]).order("date", { ascending: false }),
-    ]).then(([{ data: logsData }, { data: otData }]) => {
+      supabase.from("profiles").select("office_start_time, office_end_time, late_grace_minutes").eq("id", user.id).maybeSingle(),
+    ]).then(([{ data: logsData }, { data: otData }, { data: prof }]) => {
       setLogs((logsData || []) as AttendanceSession[]);
       setApprovedOT(otData || []);
+      setOfficeProfile((prof as OfficeTime) || null);
     });
   };
 
@@ -37,6 +40,7 @@ const Attendance = () => {
   useRealtimeSubscription("overtime_requests", fetchData, "attendance-page-ot");
 
   const days = mergeDailySessions(logs).sort((a, b) => b.date.localeCompare(a.date));
+
 
   return (
     <Card>
