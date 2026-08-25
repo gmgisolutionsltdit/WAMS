@@ -10,6 +10,7 @@ import { ChevronDown, ChevronRight } from "lucide-react";
 import { useRealtimeSubscription } from "@/hooks/useRealtimeSubscription";
 import { fmtHMS, fmtClock, spanToHMS } from "@/lib/time";
 import { mergeDailySessions, sessionWorkedSeconds, type AttendanceSession } from "@/lib/attendance";
+import { evaluateArrival, humanMinutes, officeStart, type OfficeTime } from "@/lib/officeTime";
 
 const STANDARD_HOURS = 7;
 const STANDARD_SECONDS = STANDARD_HOURS * 3600;
