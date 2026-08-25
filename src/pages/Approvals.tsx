@@ -238,6 +238,124 @@ const Approvals = () => {
         </CardContent>
       </Card>
 
+      {/* Manual Time Requests */}
+      <Card>
+        <CardHeader>
+          <CardTitle>Pending Manual Time Requests</CardTitle>
+          <CardDescription>Approved entries are written straight into the employee's attendance record.</CardDescription>
+        </CardHeader>
+        <CardContent>
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead>Employee</TableHead>
+                <TableHead>Date</TableHead>
+                <TableHead>In / Out</TableHead>
+                <TableHead>Total</TableHead>
+                <TableHead>Reason / Task</TableHead>
+                <TableHead>Note</TableHead>
+                <TableHead>Actions</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {manualPending.length === 0 ? (
+                <TableRow><TableCell colSpan={7} className="text-center text-muted-foreground">No pending manual time requests</TableCell></TableRow>
+              ) : manualPending.map((req) => (
+                <TableRow key={req.id}>
+                  <TableCell className="font-medium">{names[req.user_id] || "Unknown"}</TableCell>
+                  <TableCell className="whitespace-nowrap">{format(new Date(req.date), "MMM d, yyyy")}</TableCell>
+                  <TableCell className="whitespace-nowrap text-xs font-mono">
+                    {format(new Date(req.clock_in), "HH:mm")} – {format(new Date(req.clock_out), "HH:mm")}
+                    {Number(req.break_minutes) > 0 && <span className="text-muted-foreground"> (−{req.break_minutes}m)</span>}
+                  </TableCell>
+                  <TableCell>
+                    <Badge>{Number(req.total_hours).toFixed(2)}h</Badge>
+                    {Number(req.overtime_hours) > 0 && <Badge variant="outline" className="ml-1">OT {Number(req.overtime_hours).toFixed(2)}h</Badge>}
+                  </TableCell>
+                  <TableCell className="max-w-48 truncate">{req.task_note || req.reason || "—"}</TableCell>
+                  <TableCell>
+                    <Input
+                      placeholder="Optional note"
+                      value={notes[req.id] || ""}
+                      onChange={(e) => setNotes((n) => ({ ...n, [req.id]: e.target.value }))}
+                      className="h-8 w-40"
+                    />
+                  </TableCell>
+                  <TableCell className="space-x-1 whitespace-nowrap">
+                    <Button size="sm" className="bg-lime-500 hover:bg-lime-600 text-white" onClick={() => decideManual(req, "approved")}>
+                      <Check className="h-4 w-4 mr-1" /> Approve
+                    </Button>
+                    <Button size="sm" className="bg-[#FF6347] hover:bg-[#E5533D] text-white" onClick={() => decideManual(req, "rejected")}>
+                      <X className="h-4 w-4 mr-1" /> Reject
+                    </Button>
+                  </TableCell>
+                </TableRow>
+              ))}
+            </TableBody>
+          </Table>
+        </CardContent>
+      </Card>
+
+      {/* Late Time Requests */}
+      <Card>
+        <CardHeader>
+          <CardTitle>Pending Late Time Requests</CardTitle>
+          <CardDescription>Late penalty adjustments and approved office-time changes.</CardDescription>
+        </CardHeader>
+        <CardContent>
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead>Employee</TableHead>
+                <TableHead>Type</TableHead>
+                <TableHead>Effective</TableHead>
+                <TableHead>Details</TableHead>
+                <TableHead>Reason</TableHead>
+                <TableHead>Note</TableHead>
+                <TableHead>Actions</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {latePending.length === 0 ? (
+                <TableRow><TableCell colSpan={7} className="text-center text-muted-foreground">No pending late time requests</TableCell></TableRow>
+              ) : latePending.map((req) => (
+                <TableRow key={req.id}>
+                  <TableCell className="font-medium">{names[req.user_id] || "Unknown"}</TableCell>
+                  <TableCell>
+                    <Badge variant="outline">{req.request_type === "office_time_change" ? "Office time change" : "Late adjustment"}</Badge>
+                  </TableCell>
+                  <TableCell className="whitespace-nowrap">{format(new Date(req.effective_date), "MMM d, yyyy")}</TableCell>
+                  <TableCell className="text-xs whitespace-nowrap">
+                    {req.request_type === "office_time_change"
+                      ? `${String(req.requested_start_time).slice(0, 5)} – ${String(req.requested_end_time).slice(0, 5)}`
+                      : `Late ${humanMinutes(Number(req.late_minutes) || 0)} · waive ${humanMinutes(Number(req.adjustment_minutes) || 0)}`}
+                  </TableCell>
+                  <TableCell className="max-w-48 truncate">{req.reason || "—"}</TableCell>
+                  <TableCell>
+                    <Input
+                      placeholder="Optional note"
+                      value={notes[req.id] || ""}
+                      onChange={(e) => setNotes((n) => ({ ...n, [req.id]: e.target.value }))}
+                      className="h-8 w-40"
+                    />
+                  </TableCell>
+                  <TableCell className="space-x-1 whitespace-nowrap">
+                    <Button size="sm" className="bg-lime-500 hover:bg-lime-600 text-white" onClick={() => decideLate(req, "approved")}>
+                      <Check className="h-4 w-4 mr-1" /> Approve
+                    </Button>
+                    <Button size="sm" className="bg-[#FF6347] hover:bg-[#E5533D] text-white" onClick={() => decideLate(req, "rejected")}>
+                      <X className="h-4 w-4 mr-1" /> Reject
+                    </Button>
+                  </TableCell>
+                </TableRow>
+              ))}
+            </TableBody>
+          </Table>
+        </CardContent>
+      </Card>
+
+
+
       {/* Approval History */}
       <Card>
         <CardHeader><CardTitle>Approval History</CardTitle></CardHeader>
