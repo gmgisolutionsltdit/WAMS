@@ -3,6 +3,8 @@ import { supabase } from "@/integrations/supabase/client";
 
 type TableName =
   | "overtime_requests"
+  | "manual_time_requests"
+  | "late_time_requests"
   | "notifications"
   | "attendance_logs"
   | "profiles"
