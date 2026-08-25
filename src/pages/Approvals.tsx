@@ -14,6 +14,7 @@ import { Check, X, Clock, Users, Timer, Pencil } from "lucide-react";
 import { useRealtimeSubscription } from "@/hooks/useRealtimeSubscription";
 import { notifyEmployee } from "@/lib/notifications";
 import { applyOTFulfillment } from "@/lib/otFulfillment";
+import { humanMinutes } from "@/lib/officeTime";
 
 const otStatusStyle = (status: string) => {
   if (status === "approved") return "bg-lime-500 text-white hover:bg-lime-600 border-lime-500";
