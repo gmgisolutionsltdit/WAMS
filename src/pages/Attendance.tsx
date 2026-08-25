@@ -58,6 +58,7 @@ const Attendance = () => {
               <TableRow>
                 <TableHead className="w-8" />
                 <TableHead>Date</TableHead>
+                <TableHead>Status</TableHead>
                 <TableHead>First In</TableHead>
                 <TableHead>Last Out</TableHead>
                 <TableHead>Sessions</TableHead>
@@ -72,12 +73,14 @@ const Attendance = () => {
             </TableHeader>
             <TableBody>
               {days.length === 0 ? (
-                <TableRow><TableCell colSpan={12} className="text-center text-muted-foreground">No attendance records</TableCell></TableRow>
+                <TableRow><TableCell colSpan={13} className="text-center text-muted-foreground">No attendance records</TableCell></TableRow>
               ) : days.map((day) => {
                 const worked = day.workedSeconds;
                 const closed = !day.open && !!day.lastOut;
-                const dueSeconds = closed && worked < STANDARD_SECONDS ? STANDARD_SECONDS - worked : 0;
-                const otRegular = closed && worked > STANDARD_SECONDS ? worked - STANDARD_SECONDS : 0;
+                const arrival = evaluateArrival(day.firstIn, officeProfile);
+                const requiredSeconds = STANDARD_SECONDS + arrival.penaltyMinutes * 60;
+                const dueSeconds = closed && worked < requiredSeconds ? requiredSeconds - worked : 0;
+                const otRegular = closed && worked > requiredSeconds ? worked - requiredSeconds : 0;
                 const rawApproved = approvedOT
                   .filter((ot) => ot.date === day.date)
                   .reduce((sum: number, ot: any) => sum + (ot.requested_hours || 0), 0) * 3600;
@@ -100,6 +103,18 @@ const Attendance = () => {
                         </Button>
                       </TableCell>
                       <TableCell className="whitespace-nowrap">{format(new Date(day.date), "MMM d, yyyy")}</TableCell>
+                      <TableCell className="whitespace-nowrap">
+                        {arrival.late ? (
+                          <Badge
+                            variant="destructive"
+                            title={`Arrived ${humanMinutes(arrival.lateMinutes)} after ${officeStart(officeProfile).slice(0, 5)} — extra ${humanMinutes(arrival.penaltyMinutes)} of work required`}
+                          >
+                            Late {humanMinutes(arrival.lateMinutes)}
+                          </Badge>
+                        ) : (
+                          <Badge variant="outline">On time</Badge>
+                        )}
+                      </TableCell>
                       <TableCell className="font-mono text-xs">{fmtClock(day.firstIn)}</TableCell>
                       <TableCell className="font-mono text-xs">{day.open ? <Badge variant="secondary">In progress</Badge> : fmtClock(day.lastOut)}</TableCell>
                       <TableCell><Badge variant="outline">{day.sessions.length}</Badge></TableCell>
@@ -107,9 +122,14 @@ const Attendance = () => {
                       <TableCell className="font-mono text-xs">{fmtHMS(worked)}</TableCell>
                       <TableCell>
                         {dueSeconds > 0
-                          ? <Badge variant="destructive" className="font-mono">{fmtHMS(dueSeconds)}</Badge>
+                          ? (
+                            <Badge variant="destructive" className="font-mono" title={arrival.late ? `Includes ${humanMinutes(arrival.penaltyMinutes)} late penalty` : undefined}>
+                              {fmtHMS(dueSeconds)}
+                            </Badge>
+                          )
                           : <span className="text-muted-foreground font-mono text-xs">00:00:00</span>}
                       </TableCell>
+
                       <TableCell>
                         {otRegular > 0
                           ? <Badge variant="outline" className="font-mono">{fmtHMS(otRegular)}</Badge>
