@@ -63,7 +63,7 @@ const Dashboard = () => {
       const { data } = await supabase.from("settings").select("break_allowance_minutes, standard_shift_hours").limit(1).maybeSingle();
       if (data) {
         setBreakAllowance(Number(data.break_allowance_minutes) || 60);
-        setManualForm((f) => ({ ...f, due_hours: String(Number(data.standard_shift_hours) || 8), break_minutes: String(Number(data.break_allowance_minutes) || 60) }));
+
       }
     })();
   }, []);

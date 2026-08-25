@@ -14,6 +14,7 @@ import { Check, X, Clock, Users, Timer, Pencil } from "lucide-react";
 import { useRealtimeSubscription } from "@/hooks/useRealtimeSubscription";
 import { notifyEmployee } from "@/lib/notifications";
 import { applyOTFulfillment } from "@/lib/otFulfillment";
+import { humanMinutes } from "@/lib/officeTime";
 
 const otStatusStyle = (status: string) => {
   if (status === "approved") return "bg-lime-500 text-white hover:bg-lime-600 border-lime-500";
@@ -27,6 +28,10 @@ const Approvals = () => {
   const [pending, setPending] = useState<any[]>([]);
   const [history, setHistory] = useState<any[]>([]);
   const [stats, setStats] = useState({ totalOT: 0, pendingCount: 0, activeEmployees: 0 });
+  const [manualPending, setManualPending] = useState<any[]>([]);
+  const [latePending, setLatePending] = useState<any[]>([]);
+  const [names, setNames] = useState<Record<string, string>>({});
+  const [notes, setNotes] = useState<Record<string, string>>({});
 
   const [editOpen, setEditOpen] = useState(false);
   const [editReq, setEditReq] = useState<any>(null);
@@ -34,7 +39,7 @@ const Approvals = () => {
 
   const fetchData = useCallback(async () => {
     if (!user) return;
-    const [{ data: requests }, { data: resolved }] = await Promise.all([
+    const [{ data: requests }, { data: resolved }, { data: manualReqs }, { data: lateReqs }] = await Promise.all([
       supabase
         .from("overtime_requests")
         .select("*, profiles!overtime_requests_user_id_fkey(full_name, email)")
@@ -46,9 +51,21 @@ const Approvals = () => {
         .neq("status", "pending")
         .order("updated_at", { ascending: false })
         .limit(20),
+      supabase.from("manual_time_requests").select("*").eq("status", "pending").order("created_at", { ascending: false }),
+      supabase.from("late_time_requests").select("*").eq("status", "pending").order("created_at", { ascending: false }),
     ]);
     setPending(requests || []);
     setHistory(resolved || []);
+    setManualPending(manualReqs || []);
+    setLatePending(lateReqs || []);
+
+    const ids = Array.from(new Set([...(manualReqs || []), ...(lateReqs || [])].map((r: any) => r.user_id)));
+    if (ids.length) {
+      const { data: profs } = await supabase.from("profiles").select("id, full_name, email").in("id", ids);
+      const map: Record<string, string> = {};
+      (profs || []).forEach((p: any) => { map[p.id] = p.full_name || p.email || "Unknown"; });
+      setNames(map);
+    }
 
     const now = new Date();
     const monthStart = format(new Date(now.getFullYear(), now.getMonth(), 1), "yyyy-MM-dd");
@@ -61,6 +78,45 @@ const Approvals = () => {
   useEffect(() => { fetchData(); }, [fetchData]);
 
   useRealtimeSubscription("overtime_requests", fetchData, "approvals-page");
+  useRealtimeSubscription("manual_time_requests", fetchData, "approvals-manual");
+  useRealtimeSubscription("late_time_requests", fetchData, "approvals-late");
+
+  const decideManual = async (req: any, status: "approved" | "rejected") => {
+    if (!user) return;
+    const { error } = await supabase
+      .from("manual_time_requests")
+      .update({ status, approved_by: user.id, approver_note: notes[req.id] || null })
+      .eq("id", req.id);
+    if (error) { toast.error(error.message); return; }
+    toast.success(`Manual time request ${status}`);
+    await notifyEmployee(
+      req.user_id,
+      `Manual Time Request ${status.charAt(0).toUpperCase() + status.slice(1)}`,
+      `Your manual time entry for ${format(new Date(req.date), "MMM d")} was ${status}.`,
+      req.id,
+      { route: "/attendance", type: "manual_time_update" }
+    );
+    fetchData();
+  };
+
+  const decideLate = async (req: any, status: "approved" | "rejected") => {
+    if (!user) return;
+    const { error } = await supabase
+      .from("late_time_requests")
+      .update({ status, approved_by: user.id, approver_note: notes[req.id] || null })
+      .eq("id", req.id);
+    if (error) { toast.error(error.message); return; }
+    toast.success(`Late time request ${status}`);
+    await notifyEmployee(
+      req.user_id,
+      `Late Time Request ${status.charAt(0).toUpperCase() + status.slice(1)}`,
+      `Your ${req.request_type === "office_time_change" ? "office time change" : "late adjustment"} request for ${format(new Date(req.effective_date), "MMM d")} was ${status}.`,
+      req.id,
+      { route: "/", type: "late_time_update" }
+    );
+    fetchData();
+  };
+
 
   const handleAction = async (req: any, status: "approved" | "rejected") => {
     if (!user) return;
@@ -182,6 +238,124 @@ const Approvals = () => {
           </Table>
         </CardContent>
       </Card>
+
+      {/* Manual Time Requests */}
+      <Card>
+        <CardHeader>
+          <CardTitle>Pending Manual Time Requests</CardTitle>
+          <CardDescription>Approved entries are written straight into the employee's attendance record.</CardDescription>
+        </CardHeader>
+        <CardContent>
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead>Employee</TableHead>
+                <TableHead>Date</TableHead>
+                <TableHead>In / Out</TableHead>
+                <TableHead>Total</TableHead>
+                <TableHead>Reason / Task</TableHead>
+                <TableHead>Note</TableHead>
+                <TableHead>Actions</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {manualPending.length === 0 ? (
+                <TableRow><TableCell colSpan={7} className="text-center text-muted-foreground">No pending manual time requests</TableCell></TableRow>
+              ) : manualPending.map((req) => (
+                <TableRow key={req.id}>
+                  <TableCell className="font-medium">{names[req.user_id] || "Unknown"}</TableCell>
+                  <TableCell className="whitespace-nowrap">{format(new Date(req.date), "MMM d, yyyy")}</TableCell>
+                  <TableCell className="whitespace-nowrap text-xs font-mono">
+                    {format(new Date(req.clock_in), "HH:mm")} – {format(new Date(req.clock_out), "HH:mm")}
+                    {Number(req.break_minutes) > 0 && <span className="text-muted-foreground"> (−{req.break_minutes}m)</span>}
+                  </TableCell>
+                  <TableCell>
+                    <Badge>{Number(req.total_hours).toFixed(2)}h</Badge>
+                    {Number(req.overtime_hours) > 0 && <Badge variant="outline" className="ml-1">OT {Number(req.overtime_hours).toFixed(2)}h</Badge>}
+                  </TableCell>
+                  <TableCell className="max-w-48 truncate">{req.task_note || req.reason || "—"}</TableCell>
+                  <TableCell>
+                    <Input
+                      placeholder="Optional note"
+                      value={notes[req.id] || ""}
+                      onChange={(e) => setNotes((n) => ({ ...n, [req.id]: e.target.value }))}
+                      className="h-8 w-40"
+                    />
+                  </TableCell>
+                  <TableCell className="space-x-1 whitespace-nowrap">
+                    <Button size="sm" className="bg-lime-500 hover:bg-lime-600 text-white" onClick={() => decideManual(req, "approved")}>
+                      <Check className="h-4 w-4 mr-1" /> Approve
+                    </Button>
+                    <Button size="sm" className="bg-[#FF6347] hover:bg-[#E5533D] text-white" onClick={() => decideManual(req, "rejected")}>
+                      <X className="h-4 w-4 mr-1" /> Reject
+                    </Button>
+                  </TableCell>
+                </TableRow>
+              ))}
+            </TableBody>
+          </Table>
+        </CardContent>
+      </Card>
+
+      {/* Late Time Requests */}
+      <Card>
+        <CardHeader>
+          <CardTitle>Pending Late Time Requests</CardTitle>
+          <CardDescription>Late penalty adjustments and approved office-time changes.</CardDescription>
+        </CardHeader>
+        <CardContent>
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead>Employee</TableHead>
+                <TableHead>Type</TableHead>
+                <TableHead>Effective</TableHead>
+                <TableHead>Details</TableHead>
+                <TableHead>Reason</TableHead>
+                <TableHead>Note</TableHead>
+                <TableHead>Actions</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {latePending.length === 0 ? (
+                <TableRow><TableCell colSpan={7} className="text-center text-muted-foreground">No pending late time requests</TableCell></TableRow>
+              ) : latePending.map((req) => (
+                <TableRow key={req.id}>
+                  <TableCell className="font-medium">{names[req.user_id] || "Unknown"}</TableCell>
+                  <TableCell>
+                    <Badge variant="outline">{req.request_type === "office_time_change" ? "Office time change" : "Late adjustment"}</Badge>
+                  </TableCell>
+                  <TableCell className="whitespace-nowrap">{format(new Date(req.effective_date), "MMM d, yyyy")}</TableCell>
+                  <TableCell className="text-xs whitespace-nowrap">
+                    {req.request_type === "office_time_change"
+                      ? `${String(req.requested_start_time).slice(0, 5)} – ${String(req.requested_end_time).slice(0, 5)}`
+                      : `Late ${humanMinutes(Number(req.late_minutes) || 0)} · waive ${humanMinutes(Number(req.adjustment_minutes) || 0)}`}
+                  </TableCell>
+                  <TableCell className="max-w-48 truncate">{req.reason || "—"}</TableCell>
+                  <TableCell>
+                    <Input
+                      placeholder="Optional note"
+                      value={notes[req.id] || ""}
+                      onChange={(e) => setNotes((n) => ({ ...n, [req.id]: e.target.value }))}
+                      className="h-8 w-40"
+                    />
+                  </TableCell>
+                  <TableCell className="space-x-1 whitespace-nowrap">
+                    <Button size="sm" className="bg-lime-500 hover:bg-lime-600 text-white" onClick={() => decideLate(req, "approved")}>
+                      <Check className="h-4 w-4 mr-1" /> Approve
+                    </Button>
+                    <Button size="sm" className="bg-[#FF6347] hover:bg-[#E5533D] text-white" onClick={() => decideLate(req, "rejected")}>
+                      <X className="h-4 w-4 mr-1" /> Reject
+                    </Button>
+                  </TableCell>
+                </TableRow>
+              ))}
+            </TableBody>
+          </Table>
+        </CardContent>
+      </Card>
+
+
 
       {/* Approval History */}
       <Card>
