@@ -647,7 +647,7 @@ const EmployeeManagement = () => {
             <SelectTrigger className="w-[130px]"><SelectValue /></SelectTrigger>
             <SelectContent>
               <SelectItem value="all">All Wings</SelectItem>
-              {WINGS.map((w) => <SelectItem key={w} value={w}>{w}</SelectItem>)}
+              {activeWings.map((w) => <SelectItem key={w.id} value={w.id}>{w.name}</SelectItem>)}
             </SelectContent>
           </Select>
           <Select value={filterRole} onValueChange={setFilterRole}>
