@@ -445,6 +445,7 @@ const EmployeeManagement = () => {
   }
   const isAdmin = role === "admin";
   const canEditPayroll = role === "admin" || role === "hr" || role === "executive";
+  const canManageWings = role === "admin" || role === "hr";
 
   const statusBadge = (s: string) => {
     if (s === "Active") return "bg-green-100 text-green-700 border-green-300";
