@@ -296,7 +296,7 @@ const EmployeeManagement = () => {
               department: form.department,
               designation: form.designation,
               phone: form.phone,
-              company_wing: form.company_wing,
+              company_wing: legacyWing,
               service_status: form.service_status,
               employee_status: form.employee_status,
               joining_date: form.joining_date || null,
@@ -312,10 +312,14 @@ const EmployeeManagement = () => {
           return;
         }
         const created = data as any;
-        // Apply photo if uploaded before saving
-        if (form.photo_url) {
-          await supabase.from("profiles").update({ photo_url: form.photo_url }).eq("id", created.userId);
+        // Apply photo / wing selection made before saving
+        const postCreate: any = {};
+        if (form.photo_url) postCreate.photo_url = form.photo_url;
+        if (form.wing_id) postCreate.wing_id = form.wing_id;
+        if (Object.keys(postCreate).length) {
+          await supabase.from("profiles").update(postCreate).eq("id", created.userId);
         }
+
         setTempCredentials({ email: created.email, password: created.tempPassword });
         toast.success("Employee created");
         setDialogOpen(false);
