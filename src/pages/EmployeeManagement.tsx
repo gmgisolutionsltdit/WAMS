@@ -88,16 +88,22 @@ const EmployeeManagement = () => {
   const [fetchError, setFetchError] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const csvInputRef = useRef<HTMLInputElement>(null);
+  const [wings, setWings] = useState<WingRow[]>([]);
+  const [addWingOpen, setAddWingOpen] = useState(false);
+  const [newWing, setNewWing] = useState({ name: "", code: "" });
+  const [savingWing, setSavingWing] = useState(false);
 
   const initialForm = {
     full_name: "", email: "", department: "", designation: "", phone: "",
     role: "employee" as string, reporting_manager_id: "" as string,
-    company_wing: "GMGI", service_status: "Permanent", employee_status: "Active",
+    company_wing: "GMGI", wing_id: "" as string,
+    service_status: "Permanent", employee_status: "Active",
     joining_date: "", promotion_date: "", resign_date: "",
     daily_ot_cap: "4", monthly_ot_cap: "40",
     photo_url: "" as string,
     base_salary: "0", hourly_overtime_rate: "0", pf_contribution_pct: "0",
   };
+
   const [form, setForm] = useState(initialForm);
 
   const fetchEmployees = useCallback(async () => {
