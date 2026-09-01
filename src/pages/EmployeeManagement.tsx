@@ -143,9 +143,28 @@ const EmployeeManagement = () => {
     setLoadingList(false);
   }, [role, user]);
 
+  const fetchWings = useCallback(async () => {
+    const { data, error } = await supabase
+      .from("company_wings")
+      .select("id, name, code, active")
+      .order("name", { ascending: true });
+    if (error) { console.error("[EmployeeManagement] Wings fetch error:", error); return; }
+    setWings((data || []) as WingRow[]);
+  }, []);
+
   useEffect(() => { fetchEmployees(); }, [fetchEmployees]);
+  useEffect(() => { fetchWings(); }, [fetchWings]);
   useRealtimeSubscription("profiles", fetchEmployees, "emp-mgmt-profiles");
   useRealtimeSubscription("user_roles", fetchEmployees, "emp-mgmt-roles");
+
+  const activeWings = wings.filter((w) => w.active);
+
+  /** Resolve the wing id for an employee, falling back to name match for legacy rows. */
+  const wingIdFor = (emp: { wing_id?: string | null; company_wing?: string | null }) =>
+    emp.wing_id || wings.find((w) => w.name === emp.company_wing)?.id || "";
+
+  const wingLabelFor = (emp: { wing_id?: string | null; company_wing?: string | null }) =>
+    wings.find((w) => w.id === emp.wing_id)?.name || emp.company_wing || "—";
 
   const resetForm = () => { setForm(initialForm); setEditingId(null); };
 
@@ -158,6 +177,8 @@ const EmployeeManagement = () => {
       phone: emp.phone || "", role: emp._role || "employee",
       reporting_manager_id: emp.reporting_manager_id || "",
       company_wing: emp.company_wing || "GMGI",
+      wing_id: wingIdFor(emp),
+
       service_status: emp.service_status || "Permanent",
       employee_status: emp.employee_status || "Active",
       joining_date: emp.joining_date || "", promotion_date: emp.promotion_date || "",
