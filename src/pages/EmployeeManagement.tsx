@@ -52,6 +52,8 @@ type EmployeeRow = {
   phone: string | null;
   photo_url: string | null;
   company_wing: string;
+  wing_id: string | null;
+
   service_status: string;
   employee_status: string;
   joining_date: string | null;
