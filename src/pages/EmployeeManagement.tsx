@@ -430,7 +430,7 @@ const EmployeeManagement = () => {
       (emp.email || "").toLowerCase().includes(searchQuery.toLowerCase()) ||
       (emp.department || "").toLowerCase().includes(searchQuery.toLowerCase());
     const matchesRole = filterRole === "all" || emp._role === filterRole;
-    const matchesWing = filterWing === "all" || emp.company_wing === filterWing;
+    const matchesWing = filterWing === "all" || wingIdFor(emp) === filterWing;
     const matchesStatus = filterStatus === "all" || emp.employee_status === filterStatus;
     return matchesSearch && matchesRole && matchesWing && matchesStatus;
   });
