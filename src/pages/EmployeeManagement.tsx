@@ -25,7 +25,10 @@ import { useNavigate } from "react-router-dom";
 
 const SERVICE_STATUS = ["Permanent", "Contractual", "Intern", "Short-Term", "Consultant"];
 const EMPLOYEE_STATUS = ["Active", "Inactive", "Resigned"];
-const WINGS = ["GMGI", "MORU"];
+const LEGACY_WINGS = ["GMGI", "MORU"];
+
+type WingRow = { id: string; name: string; code: string; active: boolean };
+
 
 /** Extracts the real error text from a Supabase edge-function failure (non-2xx bodies). */
 async function edgeErrorMessage(error: any, data: any, fallback: string) {
