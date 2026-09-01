@@ -25,7 +25,10 @@ import { useNavigate } from "react-router-dom";
 
 const SERVICE_STATUS = ["Permanent", "Contractual", "Intern", "Short-Term", "Consultant"];
 const EMPLOYEE_STATUS = ["Active", "Inactive", "Resigned"];
-const WINGS = ["GMGI", "MORU"];
+const LEGACY_WINGS = ["GMGI", "MORU"];
+
+type WingRow = { id: string; name: string; code: string; active: boolean };
+
 
 /** Extracts the real error text from a Supabase edge-function failure (non-2xx bodies). */
 async function edgeErrorMessage(error: any, data: any, fallback: string) {
@@ -49,6 +52,8 @@ type EmployeeRow = {
   phone: string | null;
   photo_url: string | null;
   company_wing: string;
+  wing_id: string | null;
+
   service_status: string;
   employee_status: string;
   joining_date: string | null;
@@ -83,16 +88,22 @@ const EmployeeManagement = () => {
   const [fetchError, setFetchError] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const csvInputRef = useRef<HTMLInputElement>(null);
+  const [wings, setWings] = useState<WingRow[]>([]);
+  const [addWingOpen, setAddWingOpen] = useState(false);
+  const [newWing, setNewWing] = useState({ name: "", code: "" });
+  const [savingWing, setSavingWing] = useState(false);
 
   const initialForm = {
     full_name: "", email: "", department: "", designation: "", phone: "",
     role: "employee" as string, reporting_manager_id: "" as string,
-    company_wing: "GMGI", service_status: "Permanent", employee_status: "Active",
+    company_wing: "GMGI", wing_id: "" as string,
+    service_status: "Permanent", employee_status: "Active",
     joining_date: "", promotion_date: "", resign_date: "",
     daily_ot_cap: "4", monthly_ot_cap: "40",
     photo_url: "" as string,
     base_salary: "0", hourly_overtime_rate: "0", pf_contribution_pct: "0",
   };
+
   const [form, setForm] = useState(initialForm);
 
   const fetchEmployees = useCallback(async () => {
@@ -132,9 +143,28 @@ const EmployeeManagement = () => {
     setLoadingList(false);
   }, [role, user]);
 
+  const fetchWings = useCallback(async () => {
+    const { data, error } = await supabase
+      .from("company_wings")
+      .select("id, name, code, active")
+      .order("name", { ascending: true });
+    if (error) { console.error("[EmployeeManagement] Wings fetch error:", error); return; }
+    setWings((data || []) as WingRow[]);
+  }, []);
+
   useEffect(() => { fetchEmployees(); }, [fetchEmployees]);
+  useEffect(() => { fetchWings(); }, [fetchWings]);
   useRealtimeSubscription("profiles", fetchEmployees, "emp-mgmt-profiles");
   useRealtimeSubscription("user_roles", fetchEmployees, "emp-mgmt-roles");
+
+  const activeWings = wings.filter((w) => w.active);
+
+  /** Resolve the wing id for an employee, falling back to name match for legacy rows. */
+  const wingIdFor = (emp: { wing_id?: string | null; company_wing?: string | null }) =>
+    emp.wing_id || wings.find((w) => w.name === emp.company_wing)?.id || "";
+
+  const wingLabelFor = (emp: { wing_id?: string | null; company_wing?: string | null }) =>
+    wings.find((w) => w.id === emp.wing_id)?.name || emp.company_wing || "—";
 
   const resetForm = () => { setForm(initialForm); setEditingId(null); };
 
@@ -147,6 +177,8 @@ const EmployeeManagement = () => {
       phone: emp.phone || "", role: emp._role || "employee",
       reporting_manager_id: emp.reporting_manager_id || "",
       company_wing: emp.company_wing || "GMGI",
+      wing_id: wingIdFor(emp),
+
       service_status: emp.service_status || "Permanent",
       employee_status: emp.employee_status || "Active",
       joining_date: emp.joining_date || "", promotion_date: emp.promotion_date || "",
@@ -185,16 +217,49 @@ const EmployeeManagement = () => {
     }
   };
 
+  const handleCreateWing = async () => {
+    const name = newWing.name.trim();
+    const code = (newWing.code.trim() || name.slice(0, 4)).toUpperCase();
+    if (!name) { toast.error("Wing name is required"); return; }
+    setSavingWing(true);
+    try {
+      const { data, error } = await supabase
+        .from("company_wings")
+        .insert({ name, code, active: true })
+        .select("id, name, code, active")
+        .single();
+      if (error) { toast.error(error.message); return; }
+      const created = data as WingRow;
+      setWings((prev) => [...prev, created].sort((a, b) => a.name.localeCompare(b.name)));
+      setForm((f) => ({
+        ...f,
+        wing_id: created.id,
+        company_wing: LEGACY_WINGS.includes(created.name) ? created.name : f.company_wing,
+      }));
+      setNewWing({ name: "", code: "" });
+      setAddWingOpen(false);
+      toast.success(`Wing "${created.name}" created`);
+    } finally {
+      setSavingWing(false);
+    }
+  };
+
   const handleSave = async () => {
     if (!form.full_name || !form.email) { toast.error("Name and email are required"); return; }
     setSaving(true);
     try {
+      const selectedWing = wings.find((w) => w.id === form.wing_id);
+      const legacyWing = selectedWing && LEGACY_WINGS.includes(selectedWing.name)
+        ? selectedWing.name
+        : form.company_wing;
       const profilePayload: any = {
         full_name: form.full_name,
         department: form.department || null, designation: form.designation || null,
         phone: form.phone || null,
         reporting_manager_id: form.reporting_manager_id || null,
-        company_wing: form.company_wing as any,
+        company_wing: legacyWing as any,
+        wing_id: form.wing_id || null,
+
         service_status: form.service_status as any,
         employee_status: form.employee_status as any,
         joining_date: form.joining_date || null,
@@ -231,7 +296,7 @@ const EmployeeManagement = () => {
               department: form.department,
               designation: form.designation,
               phone: form.phone,
-              company_wing: form.company_wing,
+              company_wing: legacyWing,
               service_status: form.service_status,
               employee_status: form.employee_status,
               joining_date: form.joining_date || null,
@@ -247,10 +312,14 @@ const EmployeeManagement = () => {
           return;
         }
         const created = data as any;
-        // Apply photo if uploaded before saving
-        if (form.photo_url) {
-          await supabase.from("profiles").update({ photo_url: form.photo_url }).eq("id", created.userId);
+        // Apply photo / wing selection made before saving
+        const postCreate: any = {};
+        if (form.photo_url) postCreate.photo_url = form.photo_url;
+        if (form.wing_id) postCreate.wing_id = form.wing_id;
+        if (Object.keys(postCreate).length) {
+          await supabase.from("profiles").update(postCreate).eq("id", created.userId);
         }
+
         setTempCredentials({ email: created.email, password: created.tempPassword });
         toast.success("Employee created");
         setDialogOpen(false);
@@ -361,7 +430,7 @@ const EmployeeManagement = () => {
       (emp.email || "").toLowerCase().includes(searchQuery.toLowerCase()) ||
       (emp.department || "").toLowerCase().includes(searchQuery.toLowerCase());
     const matchesRole = filterRole === "all" || emp._role === filterRole;
-    const matchesWing = filterWing === "all" || emp.company_wing === filterWing;
+    const matchesWing = filterWing === "all" || wingIdFor(emp) === filterWing;
     const matchesStatus = filterStatus === "all" || emp.employee_status === filterStatus;
     return matchesSearch && matchesRole && matchesWing && matchesStatus;
   });
@@ -376,6 +445,7 @@ const EmployeeManagement = () => {
   }
   const isAdmin = role === "admin";
   const canEditPayroll = role === "admin" || role === "hr" || role === "executive";
+  const canManageWings = role === "admin" || role === "hr";
 
   const statusBadge = (s: string) => {
     if (s === "Active") return "bg-green-100 text-green-700 border-green-300";
@@ -457,11 +527,27 @@ const EmployeeManagement = () => {
               <div><Label>Designation</Label><Input value={form.designation} onChange={(e) => setForm((f) => ({ ...f, designation: e.target.value }))} /></div>
               <div>
                 <Label>Wing</Label>
-                <Select value={form.company_wing} onValueChange={(v) => setForm((f) => ({ ...f, company_wing: v }))}>
-                  <SelectTrigger><SelectValue /></SelectTrigger>
-                  <SelectContent>{WINGS.map((w) => <SelectItem key={w} value={w}>{w}</SelectItem>)}</SelectContent>
+                <Select
+                  value={form.wing_id || "none"}
+                  onValueChange={(v) => {
+                    if (v === "__add__") { setAddWingOpen(true); return; }
+                    const w = wings.find((x) => x.id === v);
+                    setForm((f) => ({
+                      ...f,
+                      wing_id: v === "none" ? "" : v,
+                      company_wing: w && LEGACY_WINGS.includes(w.name) ? w.name : f.company_wing,
+                    }));
+                  }}
+                >
+                  <SelectTrigger><SelectValue placeholder="Select wing" /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="none">Unassigned</SelectItem>
+                    {activeWings.map((w) => <SelectItem key={w.id} value={w.id}>{w.name}</SelectItem>)}
+                    {canManageWings && <SelectItem value="__add__">+ Add new wing</SelectItem>}
+                  </SelectContent>
                 </Select>
               </div>
+
               <div>
                 <Label>Role</Label>
                 <Select value={form.role} onValueChange={(v) => setForm((f) => ({ ...f, role: v }))} disabled={!isAdmin}>
@@ -561,7 +647,7 @@ const EmployeeManagement = () => {
             <SelectTrigger className="w-[130px]"><SelectValue /></SelectTrigger>
             <SelectContent>
               <SelectItem value="all">All Wings</SelectItem>
-              {WINGS.map((w) => <SelectItem key={w} value={w}>{w}</SelectItem>)}
+              {activeWings.map((w) => <SelectItem key={w.id} value={w.id}>{w.name}</SelectItem>)}
             </SelectContent>
           </Select>
           <Select value={filterRole} onValueChange={setFilterRole}>
@@ -634,7 +720,7 @@ const EmployeeManagement = () => {
                     </div>
                   </div>
                 </TableCell>
-                <TableCell><Badge variant="outline">{emp.company_wing}</Badge></TableCell>
+                <TableCell><Badge variant="outline">{wingLabelFor(emp)}</Badge></TableCell>
                 <TableCell>{emp.department || "—"}</TableCell>
                 <TableCell>{emp.designation || "—"}</TableCell>
                 <TableCell>
@@ -780,7 +866,32 @@ const EmployeeManagement = () => {
           )}
         </DialogContent>
       </Dialog>
+
+      {/* Add wing dialog */}
+      <Dialog open={addWingOpen} onOpenChange={(o) => { setAddWingOpen(o); if (!o) setNewWing({ name: "", code: "" }); }}>
+        <DialogContent className="max-w-sm">
+          <DialogHeader>
+            <DialogTitle>Add New Wing</DialogTitle>
+            <DialogDescription>Create a company wing and assign it to this employee.</DialogDescription>
+          </DialogHeader>
+          <div className="space-y-3">
+            <div>
+              <Label>Wing Name *</Label>
+              <Input value={newWing.name} onChange={(e) => setNewWing((w) => ({ ...w, name: e.target.value }))} placeholder="e.g. Logistics" />
+            </div>
+            <div>
+              <Label>Short Code</Label>
+              <Input value={newWing.code} onChange={(e) => setNewWing((w) => ({ ...w, code: e.target.value }))} placeholder="e.g. LOG" />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setAddWingOpen(false)}>Cancel</Button>
+            <Button onClick={handleCreateWing} disabled={savingWing}>{savingWing ? "Saving…" : "Create Wing"}</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </Card>
+
   );
 };
 
