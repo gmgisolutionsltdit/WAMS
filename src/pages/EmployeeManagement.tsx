@@ -526,11 +526,27 @@ const EmployeeManagement = () => {
               <div><Label>Designation</Label><Input value={form.designation} onChange={(e) => setForm((f) => ({ ...f, designation: e.target.value }))} /></div>
               <div>
                 <Label>Wing</Label>
-                <Select value={form.company_wing} onValueChange={(v) => setForm((f) => ({ ...f, company_wing: v }))}>
-                  <SelectTrigger><SelectValue /></SelectTrigger>
-                  <SelectContent>{WINGS.map((w) => <SelectItem key={w} value={w}>{w}</SelectItem>)}</SelectContent>
+                <Select
+                  value={form.wing_id || "none"}
+                  onValueChange={(v) => {
+                    if (v === "__add__") { setAddWingOpen(true); return; }
+                    const w = wings.find((x) => x.id === v);
+                    setForm((f) => ({
+                      ...f,
+                      wing_id: v === "none" ? "" : v,
+                      company_wing: w && LEGACY_WINGS.includes(w.name) ? w.name : f.company_wing,
+                    }));
+                  }}
+                >
+                  <SelectTrigger><SelectValue placeholder="Select wing" /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="none">Unassigned</SelectItem>
+                    {activeWings.map((w) => <SelectItem key={w.id} value={w.id}>{w.name}</SelectItem>)}
+                    {canManageWings && <SelectItem value="__add__">+ Add new wing</SelectItem>}
+                  </SelectContent>
                 </Select>
               </div>
+
               <div>
                 <Label>Role</Label>
                 <Select value={form.role} onValueChange={(v) => setForm((f) => ({ ...f, role: v }))} disabled={!isAdmin}>
