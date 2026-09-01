@@ -866,7 +866,32 @@ const EmployeeManagement = () => {
           )}
         </DialogContent>
       </Dialog>
+
+      {/* Add wing dialog */}
+      <Dialog open={addWingOpen} onOpenChange={(o) => { setAddWingOpen(o); if (!o) setNewWing({ name: "", code: "" }); }}>
+        <DialogContent className="max-w-sm">
+          <DialogHeader>
+            <DialogTitle>Add New Wing</DialogTitle>
+            <DialogDescription>Create a company wing and assign it to this employee.</DialogDescription>
+          </DialogHeader>
+          <div className="space-y-3">
+            <div>
+              <Label>Wing Name *</Label>
+              <Input value={newWing.name} onChange={(e) => setNewWing((w) => ({ ...w, name: e.target.value }))} placeholder="e.g. Logistics" />
+            </div>
+            <div>
+              <Label>Short Code</Label>
+              <Input value={newWing.code} onChange={(e) => setNewWing((w) => ({ ...w, code: e.target.value }))} placeholder="e.g. LOG" />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setAddWingOpen(false)}>Cancel</Button>
+            <Button onClick={handleCreateWing} disabled={savingWing}>{savingWing ? "Saving…" : "Create Wing"}</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </Card>
+
   );
 };
 
