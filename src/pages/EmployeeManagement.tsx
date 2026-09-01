@@ -720,7 +720,7 @@ const EmployeeManagement = () => {
                     </div>
                   </div>
                 </TableCell>
-                <TableCell><Badge variant="outline">{emp.company_wing}</Badge></TableCell>
+                <TableCell><Badge variant="outline">{wingLabelFor(emp)}</Badge></TableCell>
                 <TableCell>{emp.department || "—"}</TableCell>
                 <TableCell>{emp.designation || "—"}</TableCell>
                 <TableCell>
