@@ -217,16 +217,49 @@ const EmployeeManagement = () => {
     }
   };
 
+  const handleCreateWing = async () => {
+    const name = newWing.name.trim();
+    const code = (newWing.code.trim() || name.slice(0, 4)).toUpperCase();
+    if (!name) { toast.error("Wing name is required"); return; }
+    setSavingWing(true);
+    try {
+      const { data, error } = await supabase
+        .from("company_wings")
+        .insert({ name, code, active: true })
+        .select("id, name, code, active")
+        .single();
+      if (error) { toast.error(error.message); return; }
+      const created = data as WingRow;
+      setWings((prev) => [...prev, created].sort((a, b) => a.name.localeCompare(b.name)));
+      setForm((f) => ({
+        ...f,
+        wing_id: created.id,
+        company_wing: LEGACY_WINGS.includes(created.name) ? created.name : f.company_wing,
+      }));
+      setNewWing({ name: "", code: "" });
+      setAddWingOpen(false);
+      toast.success(`Wing "${created.name}" created`);
+    } finally {
+      setSavingWing(false);
+    }
+  };
+
   const handleSave = async () => {
     if (!form.full_name || !form.email) { toast.error("Name and email are required"); return; }
     setSaving(true);
     try {
+      const selectedWing = wings.find((w) => w.id === form.wing_id);
+      const legacyWing = selectedWing && LEGACY_WINGS.includes(selectedWing.name)
+        ? selectedWing.name
+        : form.company_wing;
       const profilePayload: any = {
         full_name: form.full_name,
         department: form.department || null, designation: form.designation || null,
         phone: form.phone || null,
         reporting_manager_id: form.reporting_manager_id || null,
-        company_wing: form.company_wing as any,
+        company_wing: legacyWing as any,
+        wing_id: form.wing_id || null,
+
         service_status: form.service_status as any,
         employee_status: form.employee_status as any,
         joining_date: form.joining_date || null,
