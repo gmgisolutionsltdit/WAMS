@@ -22,3 +22,10 @@ dist-ssr
 *.njsproj
 *.sln
 *.sw?
+
+# Local credentials and deployment state
+.env
+.env.*
+!.env.example
+.vercel
+supabase/.temp/
