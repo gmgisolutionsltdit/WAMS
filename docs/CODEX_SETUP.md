@@ -17,20 +17,25 @@ only thing you ever do is **edit files and merge to `main`**.
 
 ## One-time setup — add repository secrets
 
-GitHub → repo **Settings → Secrets and variables → Actions → New repository secret**:
+GitHub → repo **Settings → Secrets and variables → Actions → New repository secret**.
+**These are already set** — listed here for rotation / reference:
 
 | Secret | How to get it |
 | --- | --- |
-| `VERCEL_TOKEN` | https://vercel.com/account/tokens (signed in as **gmgisolutionsltdit-8300**). Create a token, scope it to the **GMGI** team, no expiration (or rotate on a schedule). |
-| `SUPABASE_DB_URL` | Supabase dashboard → project `vnocjkpeuprzowffsgfe` → **Project Settings → Database → Connection string → URI**, pick the **Session pooler** (port `5432`). If the password contains symbols, percent-encode them. Shape: `postgresql://postgres.vnocjkpeuprzowffsgfe:<PASSWORD>@aws-0-us-east-1.pooler.supabase.com:5432/postgres` |
+| `VERCEL_TOKEN` | https://vercel.com/account/tokens (signed in as **gmgisolutionsltdit-8300**). A project token for `wams` is enough. `vercel deploy` works with it; `vercel pull` / `vercel build` do not (they need team-level reads) — that's why `deploy.yml` builds server-side. |
+| `SUPABASE_DB_URL` | Supabase dashboard → project `vnocjkpeuprzowffsgfe` → **Project Settings → Database → Connection string → URI**, pick the **Session pooler** (port `5432`). Percent-encode symbols in the password. Shape: `postgresql://postgres.vnocjkpeuprzowffsgfe:<PASSWORD>@aws-0-us-east-1.pooler.supabase.com:5432/postgres` |
 | `SUPABASE_URL` | `https://vnocjkpeuprzowffsgfe.supabase.co` |
 | `SUPABASE_SERVICE_ROLE_KEY` | Supabase dashboard → **Project Settings → API → `service_role` secret**. Only used by the *Manage admin user* workflow. |
 
-`VERCEL_ORG_ID` and `VERCEL_PROJECT_ID` are not secret and are already hard-coded
-in `deploy.yml`:
+The Vercel project/org IDs are not secret and are committed in
+`.vercel/project.json`:
 
 - org (team `gmgi`): `team_Cf4jFHGaoEIprOnJnp9HxtF8`
 - project `wams`: `prj_peLoedwajLddA6H2O9C5eOfkcqa6`
+
+The frontend's `VITE_SUPABASE_URL` / `VITE_SUPABASE_PUBLISHABLE_KEY` are set as
+env vars **on the Vercel project itself**, so the cloud build picks them up — they
+are not needed as GitHub secrets.
 
 ## Day-to-day flow with Codex
 

@@ -1,0 +1,14 @@
+{
+  "projectId": "prj_peLoedwajLddA6H2O9C5eOfkcqa6",
+  "orgId": "team_Cf4jFHGaoEIprOnJnp9HxtF8",
+  "projectName": "wams",
+  "settings": {
+    "framework": "vite",
+    "devCommand": null,
+    "installCommand": "npm ci",
+    "buildCommand": "npm run build",
+    "outputDirectory": "dist",
+    "rootDirectory": null,
+    "nodeVersion": "24.x"
+  }
+}
