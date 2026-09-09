@@ -1,6 +1,6 @@
 # Workforce & Attendance Management System (WAMS)
 
-WAMS manages employees, attendance, overtime, leave, projects, expenses, and payroll. Built with React, TypeScript, Vite, and Supabase (PostgreSQL, Auth, Storage, and Edge Functions).
+WAMS manages employees, attendance, overtime, leave, projects, expenses, and payroll. Built with React, TypeScript, Vite, and Supabase (PostgreSQL, Auth, Storage) and Vercel Functions (employee administration).
 
 Repository: https://github.com/gmgisolutionsltdit/WAMS
 
@@ -34,10 +34,9 @@ npx supabase login
 npx supabase link --project-ref YOUR_PROJECT_REF
 npx supabase db push --dry-run
 npx supabase db push
-npx supabase functions deploy admin-user-management --project-ref YOUR_PROJECT_REF
 ```
 
-The migrations create the application schema, access policies, and the `avatars` and `task-attachments` storage buckets. `supabase/config.toml` retains the original project identifier; explicitly link/select the intended project before remote commands. The admin function uses Supabase-provided server secrets and validates the caller's session and admin role.
+The migrations create the application schema, access policies, and the `avatars` and `task-attachments` storage buckets. `supabase/config.toml` identifies the WAMS Supabase project. Explicitly link/select the intended project before remote commands. Employee administration runs at `/api/admin-user-management` on Vercel and validates the caller's Supabase session and admin role. Set `SUPABASE_URL` and `SUPABASE_SERVICE_ROLE_KEY` as server-only Vercel environment variables; never prefix the service-role key with `VITE_`. Use `npx vercel dev` to run frontend and API together locally.
 
 Migrations do **not** transfer existing users, attendance records, or uploaded files. To move an existing installation, export and restore its database/auth data and storage objects with source and destination access before switching environment variables. Do not apply a fresh-project migration sequence blindly to an existing database.
 
@@ -45,7 +44,7 @@ In Supabase Authentication:
 
 - Set Site URL to the final deployment origin.
 - Allow that origin and its `/reset-password` URL, plus `http://localhost:8080` and `http://localhost:8080/reset-password` for development.
-- Enable and configure the Google provider to use Google sign-in, including the Supabase callback URL in the Google OAuth client.
+- Enable and configure the Google provider to use Google sign-in, including the Supabase callback URL in the Google OAuth client, then set `VITE_ENABLE_GOOGLE_AUTH=true` and redeploy. The button is hidden until this is enabled.
 - Configure email delivery for password recovery.
 - Create the initial administrator through the dashboard. Existing migrations grant admin to the configured bootstrap email; for a different administrator, assign the `admin` role in `public.user_roles` using the trusted dashboard after creating the auth user.
 
@@ -60,3 +59,9 @@ Vercel Hobby is restricted to personal, non-commercial use. Company operations r
 5. Verify email login, Google login (if enabled), password recovery, a direct visit to `/attendance`, admin user creation, and file uploads against the selected backend.
 
 A successful frontend build does not confirm that a new database has been provisioned, migrated, or configured for authentication.
+
+## Production
+
+Frontend: https://wams-five.vercel.app
+
+Supabase project: `vnocjkpeuprzowffsgfe`. The initial schema is managed through the checked-in migrations. Only public Supabase values are included in the browser build.

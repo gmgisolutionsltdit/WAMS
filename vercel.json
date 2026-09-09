@@ -6,8 +6,13 @@
   "outputDirectory": "dist",
   "rewrites": [
     {
-      "source": "/((?!assets/|favicon.svg|robots.txt|placeholder.svg).*)",
+      "source": "/((?!api/|assets/|favicon.svg|robots.txt|placeholder.svg).*)",
       "destination": "/index.html"
     }
-  ]
+  ],
+  "functions": {
+    "api/admin-user-management.ts": {
+      "maxDuration": 60
+    }
+  }
 }

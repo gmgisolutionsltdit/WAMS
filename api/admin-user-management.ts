@@ -1,6 +1,6 @@
-// Admin User Management edge function
+// Admin User Management API hosted on Vercel
 // Actions: create_user, reset_password, set_password, delete_user, bulk_create
-import { createClient } from "https://esm.sh/@supabase/supabase-js@2.49.4";
+import { createClient } from "@supabase/supabase-js";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -9,8 +9,8 @@ const corsHeaders = {
   "Access-Control-Allow-Methods": "POST, OPTIONS",
 };
 
-const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
-const SERVICE_ROLE = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
+const SUPABASE_URL = process.env.SUPABASE_URL!;
+const SERVICE_ROLE = process.env.SUPABASE_SERVICE_ROLE_KEY!;
 
 interface CreateUserPayload {
   email: string;
@@ -114,8 +114,10 @@ async function createSingleUser(admin: any, p: CreateUserPayload) {
   return { userId, email, tempPassword: password };
 }
 
-Deno.serve(async (req) => {
+export default { async fetch(req: Request): Promise<Response> {
   if (req.method === "OPTIONS") return new Response("ok", { headers: corsHeaders });
+
+  if (req.method !== "POST") return json({ error: "Method not allowed" }, 405);
 
   try {
     const auth = req.headers.get("Authorization");
@@ -204,11 +206,11 @@ Deno.serve(async (req) => {
     console.error("admin-user-management error:", (e as Error).message);
     return json({ error: (e as Error).message }, 400);
   }
-});
+} };
 
 function json(payload: unknown, status = 200) {
   return new Response(JSON.stringify(payload), {
     status,
-    headers: { ...corsHeaders, "Content-Type": "application/json" },
+    headers: { ...corsHeaders, "Content-Type": "application/json", "Cache-Control": "no-store" },
   });
 }

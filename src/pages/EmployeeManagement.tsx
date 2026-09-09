@@ -1,3 +1,4 @@
+import { invokeAdminUserManagement } from "@/lib/adminUsers";
 import { useEffect, useState, useCallback, useRef } from "react";
 import { useAuth } from "@/contexts/AuthContext";
 import { supabase } from "@/integrations/supabase/client";
@@ -286,8 +287,8 @@ const EmployeeManagement = () => {
         resetForm();
         fetchEmployees();
       } else {
-        // Admin create with temp password via edge function
-        const { data, error } = await supabase.functions.invoke("admin-user-management", {
+        // Admin create with temp password via the authenticated API
+        const { data, error } = await invokeAdminUserManagement({
           body: {
             action: "create_user",
             payload: {
@@ -332,7 +333,7 @@ const EmployeeManagement = () => {
   };
 
   const handleResetPassword = async (emp: EmployeeRow) => {
-    const { data, error } = await supabase.functions.invoke("admin-user-management", {
+    const { data, error } = await invokeAdminUserManagement({
       body: { action: "reset_password", user_id: emp.id },
     });
     if (error || (data as any)?.error) {
@@ -344,7 +345,7 @@ const EmployeeManagement = () => {
   };
 
   const handleDelete = async (emp: EmployeeRow) => {
-    const { data, error } = await supabase.functions.invoke("admin-user-management", {
+    const { data, error } = await invokeAdminUserManagement({
       body: { action: "delete_user", user_id: emp.id },
     });
     if (error || (data as any)?.error) {
@@ -410,7 +411,7 @@ const EmployeeManagement = () => {
     }));
 
     toast.info(`Uploading ${payload.length} employees...`);
-    const { data, error } = await supabase.functions.invoke("admin-user-management", {
+    const { data, error } = await invokeAdminUserManagement({
       body: { action: "bulk_create", payload },
     });
     if (error) { toast.error(error.message); return; }
