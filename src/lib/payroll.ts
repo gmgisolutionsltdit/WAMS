@@ -140,7 +140,7 @@ export function downloadPayslipPDF(args: {
   companyName?: string;
 }) {
   const { profile, record } = args;
-  const company = args.companyName || "Workforce & Attendance Management System (WAMS)";
+  const company = args.companyName || "Office Management System";
   const doc = new jsPDF({ unit: "pt", format: "a4" });
   const left = 48;
   let y = 56;

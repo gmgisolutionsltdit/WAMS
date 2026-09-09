@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
+import { lovable } from "@/integrations/lovable";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
@@ -28,9 +29,8 @@ const Login = () => {
 
   const handleGoogleLogin = async () => {
     setLoading(true);
-    const result = await supabase.auth.signInWithOAuth({
-      provider: "google",
-      options: { redirectTo: window.location.origin },
+    const result = await lovable.auth.signInWithOAuth("google", {
+      redirect_uri: window.location.origin,
     });
     if (result.error) {
       toast.error(result.error.message);
@@ -45,7 +45,7 @@ const Login = () => {
           <div className="mx-auto mb-2 flex h-12 w-12 items-center justify-center rounded-full bg-primary/10">
             <Clock className="h-6 w-6 text-primary" />
           </div>
-          <CardTitle className="text-2xl">Workforce & Attendance Management System (WAMS)</CardTitle>
+          <CardTitle className="text-2xl">Office Management System</CardTitle>
           <CardDescription>Sign in to your account</CardDescription>
         </CardHeader>
         <form onSubmit={handleLogin}>

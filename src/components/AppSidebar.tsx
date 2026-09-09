@@ -56,7 +56,7 @@ export function AppSidebar() {
         <SidebarGroup>
           <SidebarGroupLabel>
             <Clock className="mr-2 h-4 w-4" />
-            {!collapsed && "WAMS"}
+            {!collapsed && "OT Tracker"}
           </SidebarGroupLabel>
           <SidebarGroupContent>
             <SidebarMenu>

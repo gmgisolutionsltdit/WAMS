@@ -25,7 +25,7 @@ const PayslipPrint = ({ record, employee }: Props) => {
               <p className="text-sm text-slate-600">{monthName}</p>
             </div>
             <div className="text-right text-sm">
-              <p className="font-semibold">WAMS</p>
+              <p className="font-semibold">Enterprise OMS</p>
               <p className="text-slate-600">Generated {format(new Date(record.generated_at || record.created_at), "MMM d, yyyy")}</p>
             </div>
           </div>
