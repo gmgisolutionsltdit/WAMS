@@ -2,7 +2,7 @@
 
 WAMS manages employees, attendance, overtime, leave, projects, expenses, and payroll. Built with React, TypeScript, Vite, and Supabase (PostgreSQL, Auth, Storage, and Edge Functions).
 
-Repository: https://github.com/GMGI-Solutions-LTD/WAMS
+Repository: https://github.com/gmgisolutionsltdit/WAMS
 
 ## Local development
 
