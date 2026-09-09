@@ -17,7 +17,7 @@ export function AppLayout({ children }: { children: ReactNode }) {
           <header className="h-14 flex items-center border-b px-2 sm:px-4 justify-between gap-2 bg-card sticky top-0 z-30">
             <div className="flex items-center gap-2 sm:gap-3 min-w-0">
               <SidebarTrigger className="shrink-0 h-9 w-9" />
-              <h1 className="text-base sm:text-lg font-semibold truncate">Enterprise OMS</h1>
+              <h1 className="text-base sm:text-lg font-semibold truncate">WAMS</h1>
               {profile.id && (
                 <div className="hidden md:flex items-center gap-2">
                   <Badge variant="secondary" className="text-xs">{profile.company_wing}</Badge>
