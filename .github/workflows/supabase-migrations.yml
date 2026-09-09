@@ -1,0 +1,47 @@
+name: Supabase migrations
+
+# Applies any new SQL files under supabase/migrations/ to the production
+# Supabase database (project ref vnocjkpeuprzowffsgfe).
+#
+# Codex / web edits just add a timestamped .sql file to supabase/migrations/.
+# On merge to main this workflow runs `supabase db push`, which applies only the
+# migrations not yet recorded in the remote `supabase_migrations.schema_migrations`
+# table. Already-applied migrations are skipped, so re-runs are safe.
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "supabase/migrations/**"
+      - ".github/workflows/supabase-migrations.yml"
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: "Only print pending migrations, do not apply"
+        type: boolean
+        default: false
+
+concurrency:
+  group: supabase-migrate
+  cancel-in-progress: false
+
+jobs:
+  migrate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: supabase/setup-cli@v1
+        with:
+          version: latest
+
+      - name: Show pending migrations
+        run: supabase db push --db-url "$SUPABASE_DB_URL" --dry-run
+        env:
+          SUPABASE_DB_URL: ${{ secrets.SUPABASE_DB_URL }}
+
+      - name: Apply migrations
+        if: ${{ !inputs.dry_run }}
+        run: supabase db push --db-url "$SUPABASE_DB_URL" --yes
+        env:
+          SUPABASE_DB_URL: ${{ secrets.SUPABASE_DB_URL }}

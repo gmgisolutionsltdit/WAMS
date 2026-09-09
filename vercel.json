@@ -14,5 +14,10 @@
     "api/admin-user-management.ts": {
       "maxDuration": 60
     }
+  },
+  "git": {
+    "deploymentEnabled": {
+      "main": false
+    }
   }
 }

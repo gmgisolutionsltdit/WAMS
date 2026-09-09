@@ -1,0 +1,45 @@
+name: Manage admin user
+
+# Manually create or reset a WAMS administrator without a local machine.
+# Run from the Actions tab -> "Manage admin user" -> Run workflow.
+#
+# The generated (or supplied) password is printed to the run summary, which is
+# visible to repository collaborators. Change it after first sign-in.
+
+on:
+  workflow_dispatch:
+    inputs:
+      email:
+        description: "Administrator email"
+        required: true
+        default: "admin@gmgisolutionsltd.com"
+      password:
+        description: "Password (leave blank to generate one)"
+        required: false
+      full_name:
+        description: "Full name"
+        required: false
+        default: "WAMS Administrator"
+
+concurrency:
+  group: admin-user
+  cancel-in-progress: false
+
+jobs:
+  run:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - name: Create / reset admin
+        run: node scripts/create-admin.mjs
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+          ADMIN_EMAIL: ${{ inputs.email }}
+          ADMIN_PASSWORD: ${{ inputs.password }}
+          ADMIN_FULL_NAME: ${{ inputs.full_name }}
