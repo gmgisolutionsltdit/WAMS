@@ -304,6 +304,7 @@ const Dashboard = () => {
                 return `${greet}, ${name} 👋`;
               })()}
             </h1>
+            <p className="text-xs opacity-70 mt-0.5">Workforce &amp; Attendance Management System</p>
             <p className="text-sm/6 opacity-90 mt-1 capitalize">{role} dashboard · live updates enabled</p>
           </div>
           <div className="text-right">
