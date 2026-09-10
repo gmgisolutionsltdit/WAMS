@@ -26,6 +26,7 @@ import { BiometricLogFeed } from "@/components/hrms/BiometricLogFeed";
 import ManualTimeEntryDialog from "@/components/ManualTimeEntryDialog";
 import LateTimeRequestDialog from "@/components/LateTimeRequestDialog";
 import { DEFAULT_OFFICE_END, DEFAULT_OFFICE_START } from "@/lib/officeTime";
+import { computeDailyTotals, type WorkSchedule } from "@/lib/workSchedule";
 
 
 /** Return today's date string in the user's local timezone (yyyy-MM-dd). */
@@ -56,6 +57,7 @@ const Dashboard = () => {
   const [officeTimes, setOfficeTimes] = useState<{ start: string; end: string; grace: number }>({
     start: DEFAULT_OFFICE_START, end: DEFAULT_OFFICE_END, grace: 11,
   });
+  const [workSchedule, setWorkSchedule] = useState<WorkSchedule | null>(null);
 
 
   useEffect(() => {
@@ -170,6 +172,39 @@ const Dashboard = () => {
           end: (data.office_end_time as string | null) || DEFAULT_OFFICE_END,
           grace: data.late_grace_minutes == null ? 11 : Number(data.late_grace_minutes),
         });
+        setWorkSchedule({
+          office_start_time: data.office_start_time as string | null,
+          office_end_time: data.office_end_time as string | null,
+          late_grace_minutes: data.late_grace_minutes as number | null,
+        });
+      });
+
+    // Per-employee schedule overrides live behind a later migration, so a
+    // deploy that lands before it must fall back to the defaults rather than
+    // breaking the dashboard.
+    type ScheduleOverrides = Pick<
+      WorkSchedule,
+      "standard_daily_hours" | "unpaid_break_minutes" | "working_days"
+    >;
+    const scheduleQuery = supabase.from("profiles") as unknown as {
+      select(columns: string): {
+        eq(column: string, value: string): {
+          maybeSingle(): PromiseLike<{ data: ScheduleOverrides | null; error: unknown }>;
+        };
+      };
+    };
+    scheduleQuery
+      .select("standard_daily_hours, unpaid_break_minutes, working_days")
+      .eq("id", user.id)
+      .maybeSingle()
+      .then(({ data, error }) => {
+        if (error || !data) return;
+        setWorkSchedule((prev) => ({
+          ...prev,
+          standard_daily_hours: data.standard_daily_hours ?? null,
+          unpaid_break_minutes: data.unpaid_break_minutes ?? null,
+          working_days: data.working_days ?? null,
+        }));
       });
   }, [user]);
 
@@ -178,18 +213,18 @@ const Dashboard = () => {
   const handleClockOut = () => {
     if (!user || !todayLog) return;
     const now = new Date();
-    const clockIn = new Date(todayLog.clock_in);
-    const totalMinutes = (now.getTime() - clockIn.getTime()) / 60000;
-    const breakMins = todayLog.break_minutes || 0;
-    const netMinutes = totalMinutes - breakMins;
-    const totalHours = Math.round((netMinutes / 60) * 100) / 100;
-    const overtimeHours = Math.max(0, Math.round((totalHours - 8) * 100) / 100);
+    const totals = computeDailyTotals({
+      clockIn: todayLog.clock_in,
+      clockOut: now,
+      breakMinutes: todayLog.break_minutes || 0,
+      schedule: workSchedule,
+    });
     setPendingClockOut({
       clockOutTime: now.toISOString(),
       logId: todayLog.id,
-      totalHours,
-      overtimeHours,
-      breakMins,
+      totalHours: totals.totalHours,
+      overtimeHours: totals.overtimeHours,
+      breakMins: totals.breakMinutes,
     });
     setWorkLogOpen(true);
   };
