@@ -2,17 +2,17 @@
  * Per-employee work schedule and the single source of truth for daily
  * worked-hours / overtime maths.
  *
- * A scheduled day is defined as `standard_daily_hours` of *net* work plus an
- * unpaid break that sits inside the office window. So the default 8h day with a
- * 60m break means an employee starting at 09:00 is due to leave at 18:00.
+ * `standard_daily_hours` is the length of the office window, with the unpaid
+ * break sitting *inside* it. The default 8h day with a 60m break means an
+ * employee starting at 09:00 is due to leave at 17:00 having worked 7h net.
  *
- * Overtime is measured against the employee's own standard hours after the
- * unpaid break is deducted — a 09:00-17:00 day is a 7h day, not 8h + 1h OT.
+ * Overtime is measured against that net requirement once the break is
+ * deducted, so a plain 09:00-17:00 day is a complete day — not 8h + 1h OT.
  */
 
 import { officeEnd, officeStart, timeToMinutes, type OfficeTime } from "./officeTime";
 
-/** Net work required per day when the profile does not override it. */
+/** Length of the office window, break included, when not overridden. */
 export const DEFAULT_STANDARD_DAILY_HOURS = 8;
 /** Unpaid break that sits inside the office window. */
 export const DEFAULT_UNPAID_BREAK_MINUTES = 60;
@@ -43,15 +43,25 @@ export const workingDays = (s?: WorkSchedule | null): number[] => {
 
 export const workingDaysPerWeek = (s?: WorkSchedule | null): number => workingDays(s).length;
 
+/**
+ * Net hours an employee must actually work: the office window less the unpaid
+ * break. Defaults to 7h — an 08:00-long day holding a 60m break.
+ */
+export const netRequiredHours = (s?: WorkSchedule | null): number =>
+  Math.max(0, standardDailyHours(s) - unpaidBreakMinutes(s) / 60);
+
 /** True when the given date falls on one of the employee's working days. */
 export const isWorkingDay = (date: Date | string, s?: WorkSchedule | null): boolean => {
   const d = typeof date === "string" ? new Date(`${date}T00:00:00`) : date;
   return workingDays(s).includes(d.getDay());
 };
 
-/** Expected clock-out = office start + net hours + unpaid break, in minutes past midnight. */
+/**
+ * Expected clock-out, in minutes past midnight. The break already sits inside
+ * the window, so it is not added on top.
+ */
 export const expectedEndMinutes = (s?: WorkSchedule | null): number =>
-  timeToMinutes(officeStart(s)) + standardDailyHours(s) * 60 + unpaidBreakMinutes(s);
+  timeToMinutes(officeStart(s)) + standardDailyHours(s) * 60;
 
 /**
  * Break length in seconds. Kept at second precision so short breaks are not
@@ -75,18 +85,18 @@ export type DailyTotals = {
   breakMinutes: number;
   /** Net worked hours after the break is deducted. */
   totalHours: number;
-  /** Hours beyond the employee's standard day. */
+  /** Hours beyond the employee's net requirement. */
   overtimeHours: number;
-  /** Hours short of the standard day (0 when the day is complete). */
+  /** Hours short of the net requirement (0 when the day is complete). */
   shortfallHours: number;
 };
 
 /**
  * Compute the worked/overtime split for one attendance session.
  *
- * The unpaid break is always deducted: an employee who records no break still
- * owes the scheduled one, which is what stops a plain 09:00-17:00 day from
- * being reported as 8h worked plus an hour of overtime.
+ * The unpaid break is always deducted, and the requirement it is measured
+ * against drops by the same amount, so a plain 09:00-17:00 day settles as a
+ * complete 7h day rather than 8h worked plus an hour of overtime.
  */
 export const computeDailyTotals = (input: {
   clockIn: string | Date | null | undefined;
@@ -101,7 +111,7 @@ export const computeDailyTotals = (input: {
     breakMinutes: 0,
     totalHours: 0,
     overtimeHours: 0,
-    shortfallHours: standardDailyHours(schedule),
+    shortfallHours: netRequiredHours(schedule),
   };
   if (!clockIn || !clockOut) return empty;
 
@@ -111,14 +121,14 @@ export const computeDailyTotals = (input: {
   const recorded = Math.max(0, Number(input.breakMinutes) || 0);
   const deducted = Math.max(recorded, unpaidBreakMinutes(schedule));
   const net = Math.max(0, span - deducted / 60);
-  const standard = standardDailyHours(schedule);
+  const required = netRequiredHours(schedule);
 
   return {
     grossHours: round2(span),
     breakMinutes: round2(deducted),
     totalHours: round2(net),
-    overtimeHours: round2(Math.max(0, net - standard)),
-    shortfallHours: round2(Math.max(0, standard - net)),
+    overtimeHours: round2(Math.max(0, net - required)),
+    shortfallHours: round2(Math.max(0, required - net)),
   };
 };
 

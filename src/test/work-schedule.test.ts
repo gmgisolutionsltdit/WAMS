@@ -4,6 +4,7 @@ import {
   computeDailyTotals,
   expectedEndMinutes,
   isWorkingDay,
+  netRequiredHours,
   standardDailyHours,
   workingDaysPerWeek,
 } from "@/lib/workSchedule";
@@ -11,46 +12,49 @@ import {
 const day = (time: string) => new Date(`2026-09-06T${time}:00`);
 
 describe("computeDailyTotals", () => {
-  it("does not report overtime for a 09:00-17:00 day", () => {
+  it("settles a 09:00-17:00 day as complete with no overtime", () => {
     const t = computeDailyTotals({ clockIn: day("09:00"), clockOut: day("17:00") });
     expect(t.grossHours).toBe(8);
     expect(t.totalHours).toBe(7);
     expect(t.overtimeHours).toBe(0);
-    expect(t.shortfallHours).toBe(1);
-  });
-
-  it("reports a full day once the unpaid break is served", () => {
-    const t = computeDailyTotals({ clockIn: day("09:00"), clockOut: day("18:00") });
-    expect(t.totalHours).toBe(8);
-    expect(t.overtimeHours).toBe(0);
     expect(t.shortfallHours).toBe(0);
   });
 
-  it("counts overtime beyond the standard day", () => {
-    const t = computeDailyTotals({ clockIn: day("09:00"), clockOut: day("19:30") });
-    expect(t.totalHours).toBe(9.5);
-    expect(t.overtimeHours).toBe(1.5);
+  it("counts overtime only past the 17:00 window", () => {
+    const t = computeDailyTotals({ clockIn: day("09:00"), clockOut: day("18:00") });
+    expect(t.totalHours).toBe(8);
+    expect(t.overtimeHours).toBe(1);
+    expect(t.shortfallHours).toBe(0);
+  });
+
+  it("reports a shortfall for an early finish", () => {
+    const t = computeDailyTotals({ clockIn: day("09:00"), clockOut: day("15:00") });
+    expect(t.totalHours).toBe(5);
+    expect(t.overtimeHours).toBe(0);
+    expect(t.shortfallHours).toBe(2);
   });
 
   it("honours a 9-hour employee override", () => {
     const t = computeDailyTotals({
       clockIn: day("09:00"),
-      clockOut: day("19:00"),
+      clockOut: day("18:00"),
       schedule: { standard_daily_hours: 9 },
     });
-    expect(t.totalHours).toBe(9);
+    expect(t.totalHours).toBe(8);
     expect(t.overtimeHours).toBe(0);
+    expect(t.shortfallHours).toBe(0);
   });
 
   it("deducts a longer recorded break instead of the scheduled one", () => {
     const t = computeDailyTotals({
       clockIn: day("09:00"),
-      clockOut: day("18:00"),
+      clockOut: day("17:00"),
       breakMinutes: 90,
     });
     expect(t.breakMinutes).toBe(90);
-    expect(t.totalHours).toBe(7.5);
+    expect(t.totalHours).toBe(6.5);
     expect(t.overtimeHours).toBe(0);
+    expect(t.shortfallHours).toBe(0.5);
   });
 
   it("returns an empty day for a missing or inverted clock-out", () => {
@@ -70,9 +74,14 @@ describe("break precision", () => {
 });
 
 describe("schedule configuration", () => {
-  it("defaults to an 8-hour, 5-day week", () => {
+  it("defaults to an 8-hour window holding 7h of net work, 5 days a week", () => {
     expect(standardDailyHours(null)).toBe(8);
+    expect(netRequiredHours(null)).toBe(7);
     expect(workingDaysPerWeek(null)).toBe(5);
+  });
+
+  it("treats a 9-hour window as 8h of net work", () => {
+    expect(netRequiredHours({ standard_daily_hours: 9 })).toBe(8);
   });
 
   it("supports a 6-day working week", () => {
@@ -82,10 +91,11 @@ describe("schedule configuration", () => {
     expect(isWorkingDay("2026-09-11", six)).toBe(false); // Friday
   });
 
-  it("derives the expected end time from start + hours + break", () => {
-    expect(expectedEndMinutes({ office_start_time: "09:00" })).toBe(18 * 60);
-    expect(expectedEndMinutes({ office_start_time: "09:50", standard_daily_hours: 7 })).toBe(
-      17 * 60 + 50,
+  it("derives the expected end time from the window, break included", () => {
+    expect(expectedEndMinutes({ office_start_time: "09:00" })).toBe(17 * 60);
+    expect(expectedEndMinutes({ office_start_time: "09:50" })).toBe(17 * 60 + 50);
+    expect(expectedEndMinutes({ office_start_time: "09:00", standard_daily_hours: 9 })).toBe(
+      18 * 60,
     );
   });
 });
