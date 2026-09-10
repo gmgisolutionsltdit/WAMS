@@ -296,7 +296,7 @@ const Dashboard = () => {
         <div className="relative z-10 flex flex-col md:flex-row md:items-center md:justify-between gap-4 text-brand-foreground">
           <div>
             <p className="text-sm/6 opacity-80">{format(currentTime, "EEEE, MMMM d, yyyy")}</p>
-            <h1 className="text-2xl md:text-3xl font-semibold mt-1">
+            <h1 className="text-2xl md:text-3xl font-semibold mt-1 text-white">
               {(() => {
                 const h = currentTime.getHours();
                 const greet = h < 12 ? "Good morning" : h < 18 ? "Good afternoon" : "Good evening";
