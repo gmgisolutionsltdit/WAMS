@@ -12,6 +12,7 @@ import { toast } from "sonner";
 import { format } from "date-fns";
 import { min48hDateISO, isWithin48h, RETRO_LOCK_MESSAGE } from "@/lib/dateRules";
 import { notifyManagersAndAdmins } from "@/lib/notifications";
+import { computeDailyTotals } from "@/lib/workSchedule";
 
 const localToday = () => format(new Date(), "yyyy-MM-dd");
 
@@ -73,12 +74,16 @@ export const ManualTimeEntryDialog = ({ onSubmitted }: Props) => {
     const outT = new Date(`${form.date}T${form.clock_out}:00`);
     const breakMins = Math.max(0, parseFloat(form.break_minutes) || 0);
     const dueHours = Math.max(0, parseFloat(form.due_hours) || 0);
-    const gross = (outT.getTime() - inT.getTime()) / 3600000;
-    const total = Math.max(0, Math.round((gross - breakMins / 60) * 100) / 100);
+    const totals = computeDailyTotals({
+      clockIn: inT,
+      clockOut: outT,
+      breakMinutes: breakMins,
+      schedule: dueHours > 0 ? { standard_daily_hours: dueHours } : null,
+    });
     const ot = form.overtime_hours.trim() !== ""
       ? parseFloat(form.overtime_hours) || 0
-      : Math.max(0, Math.round((total - dueHours) * 100) / 100);
-    return { inT, outT, breakMins, dueHours, total, ot };
+      : totals.overtimeHours;
+    return { inT, outT, breakMins: totals.breakMinutes, dueHours, total: totals.totalHours, ot };
   }, [form]);
 
   const submit = async () => {
