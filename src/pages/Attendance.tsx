@@ -11,6 +11,8 @@ import { useRealtimeSubscription } from "@/hooks/useRealtimeSubscription";
 import { fmtHMS, fmtClock, spanToHMS } from "@/lib/time";
 import { mergeDailySessions, sessionWorkedSeconds, type AttendanceSession } from "@/lib/attendance";
 import { evaluateArrival, humanMinutes, officeStart, type OfficeTime } from "@/lib/officeTime";
+import { ManualTimeEntryDialog } from "@/components/ManualTimeEntryDialog";
+import { Pencil } from "lucide-react";
 
 const STANDARD_HOURS = 7;
 const STANDARD_SECONDS = STANDARD_HOURS * 3600;
@@ -69,21 +71,32 @@ const Attendance = () => {
                 <TableHead>Approved OT</TableHead>
                 <TableHead>Total Overtime</TableHead>
                 <TableHead>IP Address</TableHead>
+                <TableHead>Actions</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
               {days.length === 0 ? (
-                <TableRow><TableCell colSpan={13} className="text-center text-muted-foreground">No attendance records</TableCell></TableRow>
+                <TableRow><TableCell colSpan={14} className="text-center text-muted-foreground">No attendance records</TableCell></TableRow>
               ) : days.map((day) => {
                 const worked = day.workedSeconds;
                 const closed = !day.open && !!day.lastOut;
                 const arrival = evaluateArrival(day.firstIn, officeProfile);
                 const requiredSeconds = STANDARD_SECONDS + arrival.penaltyMinutes * 60;
                 const dueSeconds = closed && worked < requiredSeconds ? requiredSeconds - worked : 0;
-                const otRegular = closed && worked > requiredSeconds ? worked - requiredSeconds : 0;
+                // Overtime an approver has already signed off on (a manual
+                // entry's reviewed overtime_hours) is credited as approved
+                // rather than counted again as unreviewed "regular" OT.
+                const manualApprovedOTSeconds = day.sessions
+                  .filter((s) => s.device_source === "manual")
+                  .reduce((sum, s) => sum + (Number(s.overtime_hours) || 0) * 3600, 0);
+                const autoWorkedSeconds = day.sessions
+                  .filter((s) => s.device_source !== "manual")
+                  .reduce((sum, s) => sum + sessionWorkedSeconds(s), 0);
+                const otRegular = closed && autoWorkedSeconds > requiredSeconds ? autoWorkedSeconds - requiredSeconds : 0;
                 const rawApproved = approvedOT
                   .filter((ot) => ot.date === day.date)
-                  .reduce((sum: number, ot: any) => sum + (ot.requested_hours || 0), 0) * 3600;
+                  .reduce((sum: number, ot: any) => sum + (ot.requested_hours || 0), 0) * 3600
+                  + manualApprovedOTSeconds;
                 const approvedAdjusted = Math.max(0, rawApproved - dueSeconds);
                 const totalOT = approvedAdjusted + otRegular;
                 const isOpen = !!expanded[day.key];
@@ -148,11 +161,28 @@ const Attendance = () => {
                           : <span className="text-muted-foreground font-mono text-xs">00:00:00</span>}
                       </TableCell>
                       <TableCell className="text-xs text-muted-foreground">{ips.length ? ips.join(", ") : "—"}</TableCell>
+                      <TableCell>
+                        <ManualTimeEntryDialog
+                          onSubmitted={fetchData}
+                          initial={{
+                            date: day.date,
+                            clock_in: day.firstIn ? format(new Date(day.firstIn), "HH:mm") : "09:00",
+                            clock_out: day.lastOut ? format(new Date(day.lastOut), "HH:mm") : "17:00",
+                            break_minutes: String(Math.round(day.breakSeconds / 60)),
+                            reason: "Correction to attendance record",
+                          }}
+                          trigger={
+                            <Button variant="ghost" size="icon" className="h-7 w-7" aria-label="Edit this day">
+                              <Pencil className="h-3.5 w-3.5" />
+                            </Button>
+                          }
+                        />
+                      </TableCell>
                     </TableRow>
                     {isOpen && (
                       <TableRow className="bg-muted/40 hover:bg-muted/40">
                         <TableCell />
-                        <TableCell colSpan={12} className="p-0">
+                        <TableCell colSpan={13} className="p-0">
                           <div className="p-3">
                             <p className="text-xs font-medium text-muted-foreground mb-2">Individual sessions</p>
                             <Table>

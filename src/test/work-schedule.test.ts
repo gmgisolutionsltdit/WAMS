@@ -57,6 +57,24 @@ describe("computeDailyTotals", () => {
     expect(t.shortfallHours).toBe(0.5);
   });
 
+  it("floors a short break at the scheduled minimum by default", () => {
+    const t = computeDailyTotals({ clockIn: day("09:00"), clockOut: day("17:00"), breakMinutes: 20 });
+    expect(t.breakMinutes).toBe(60);
+    expect(t.totalHours).toBe(7);
+  });
+
+  it("credits a shorter-than-scheduled break to worked time when useActualBreak is set", () => {
+    const t = computeDailyTotals({
+      clockIn: day("09:00"),
+      clockOut: day("17:00"),
+      breakMinutes: 20,
+      useActualBreak: true,
+    });
+    expect(t.breakMinutes).toBe(20);
+    expect(t.totalHours).toBe(7.67);
+    expect(t.overtimeHours).toBe(0.67);
+  });
+
   it("returns an empty day for a missing or inverted clock-out", () => {
     expect(computeDailyTotals({ clockIn: day("09:00"), clockOut: null }).totalHours).toBe(0);
     expect(computeDailyTotals({ clockIn: day("18:00"), clockOut: day("09:00") }).totalHours).toBe(0);
