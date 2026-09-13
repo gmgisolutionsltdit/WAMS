@@ -32,6 +32,9 @@ import { computeDailyTotals, type WorkSchedule } from "@/lib/workSchedule";
 /** Return today's date string in the user's local timezone (yyyy-MM-dd). */
 const localToday = () => format(new Date(), "yyyy-MM-dd");
 
+/** Minutes kept to 4dp so a stored break stays exact to the second. */
+const toStoredMinutes = (minutes: number) => Math.round(minutes * 10000) / 10000;
+
 const Dashboard = () => {
   const { user, role } = useAuth();
   const [currentTime, setCurrentTime] = useState(new Date());
@@ -265,15 +268,17 @@ const Dashboard = () => {
     setLoading(true);
     const now = new Date();
     const breakStart = new Date(todayLog.break_start);
-    const breakDuration = Math.round((now.getTime() - breakStart.getTime()) / 60000);
-    const totalBreak = (todayLog.break_minutes || 0) + breakDuration;
+    // Kept at second precision: rounding to whole minutes dropped the seconds
+    // from every report and made sub-minute breaks vanish entirely.
+    const breakSecs = Math.max(0, Math.round((now.getTime() - breakStart.getTime()) / 1000));
+    const totalBreak = toStoredMinutes((Number(todayLog.break_minutes) || 0) + breakSecs / 60);
     const { error } = await supabase.from("attendance_logs").update({
       break_end: now.toISOString(),
       break_start: null,
       break_minutes: totalBreak,
     }).eq("id", todayLog.id);
     if (error) toast.error(error.message);
-    else { toast.success(`Break ended (${breakDuration} min)`); fetchEmployeeData(); }
+    else { toast.success(`Break ended (${fmtHMS(breakSecs)})`); fetchEmployeeData(); }
     setLoading(false);
   };
 
@@ -393,20 +398,34 @@ const Dashboard = () => {
                   {getRunningDuration(todayLog.clock_in, todayLog.break_minutes || 0, isOnBreak ? todayLog.break_start : null)}
                 </div>
                 {isOnBreak && (() => {
-                  const usedSec = (Number(todayLog.break_minutes) || 0) * 60 +
-                    Math.max(0, (currentTime.getTime() - new Date(todayLog.break_start).getTime()) / 1000);
-                  const remaining = breakAllowance * 60 - usedSec;
+                  // This break only — it restarts at 00:00:00 each time a break
+                  // begins, while earlier breaks stay in the cumulative total.
+                  const currentSec = Math.max(
+                    0,
+                    (currentTime.getTime() - new Date(todayLog.break_start).getTime()) / 1000,
+                  );
+                  const earlierSec = (Number(todayLog.break_minutes) || 0) * 60;
+                  const remaining = breakAllowance * 60 - (earlierSec + currentSec);
                   const over = remaining < 0;
                   return (
                     <div className="w-full rounded-lg border bg-muted/40 p-3 text-center">
-                      <p className="text-xs text-muted-foreground">{over ? "Break overrun" : "Break time remaining"}</p>
-                      <p className={`text-2xl font-mono font-bold ${over ? "text-destructive" : ""}`}>{fmtHMS(Math.abs(remaining))}</p>
-                      <p className="text-[11px] text-muted-foreground mt-1">Allowance {breakAllowance} min · used {fmtHMS(usedSec)}</p>
+                      <p className="text-xs text-muted-foreground">Current break</p>
+                      <p className="text-2xl font-mono font-bold">{fmtHMS(currentSec)}</p>
+                      <p className={`text-[11px] mt-1 ${over ? "text-destructive" : "text-muted-foreground"}`}>
+                        {over ? "Overrun " : "Remaining "}{fmtHMS(Math.abs(remaining))} of {breakAllowance} min
+                      </p>
+                      {earlierSec > 0 && (
+                        <p className="text-[11px] text-muted-foreground">
+                          Earlier breaks {fmtHMS(earlierSec)}
+                        </p>
+                      )}
                     </div>
                   );
                 })()}
-                {(todayLog.break_minutes || 0) > 0 && !isOnBreak && (
-                  <p className="text-xs text-muted-foreground">Total breaks: {fmtHMS((todayLog.break_minutes || 0) * 60)}</p>
+                {!isOnBreak && (Number(todayLog.break_minutes) || 0) > 0 && (
+                  <p className="text-xs text-muted-foreground">
+                    Paused {fmtHMS((Number(todayLog.break_minutes) || 0) * 60)} so far
+                  </p>
                 )}
                 <div className="flex gap-2 w-full">
                   {isOnBreak ? (
