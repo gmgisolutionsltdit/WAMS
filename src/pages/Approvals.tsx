@@ -32,6 +32,7 @@ const Approvals = () => {
   const [latePending, setLatePending] = useState<any[]>([]);
   const [names, setNames] = useState<Record<string, string>>({});
   const [notes, setNotes] = useState<Record<string, string>>({});
+  const [manualOT, setManualOT] = useState<Record<string, string>>({});
 
   const [editOpen, setEditOpen] = useState(false);
   const [editReq, setEditReq] = useState<any>(null);
@@ -83,9 +84,25 @@ const Approvals = () => {
 
   const decideManual = async (req: any, status: "approved" | "rejected") => {
     if (!user) return;
+    // The overtime figure is editable right up to approval, so an approver
+    // can sign off on a different OT amount than the employee's auto-calculated one.
+    let overtimeOverride: number | undefined;
+    if (status === "approved") {
+      const otOverride = manualOT[req.id];
+      if (otOverride !== undefined && otOverride.trim() !== "") {
+        const parsed = parseFloat(otOverride);
+        if (isNaN(parsed) || parsed < 0) { toast.error("Invalid overtime hours"); return; }
+        overtimeOverride = parsed;
+      }
+    }
     const { error } = await supabase
       .from("manual_time_requests")
-      .update({ status, approved_by: user.id, approver_note: notes[req.id] || null })
+      .update({
+        status,
+        approved_by: user.id,
+        approver_note: notes[req.id] || null,
+        ...(overtimeOverride !== undefined ? { overtime_hours: overtimeOverride } : {}),
+      })
       .eq("id", req.id);
     if (error) { toast.error(error.message); return; }
     toast.success(`Manual time request ${status}`);
@@ -253,6 +270,7 @@ const Approvals = () => {
                 <TableHead>Date</TableHead>
                 <TableHead>In / Out</TableHead>
                 <TableHead>Total</TableHead>
+                <TableHead>Approve OT (h)</TableHead>
                 <TableHead>Reason / Task</TableHead>
                 <TableHead>Note</TableHead>
                 <TableHead>Actions</TableHead>
@@ -260,7 +278,7 @@ const Approvals = () => {
             </TableHeader>
             <TableBody>
               {manualPending.length === 0 ? (
-                <TableRow><TableCell colSpan={7} className="text-center text-muted-foreground">No pending manual time requests</TableCell></TableRow>
+                <TableRow><TableCell colSpan={8} className="text-center text-muted-foreground">No pending manual time requests</TableCell></TableRow>
               ) : manualPending.map((req) => (
                 <TableRow key={req.id}>
                   <TableCell className="font-medium">{names[req.user_id] || "Unknown"}</TableCell>
@@ -271,7 +289,17 @@ const Approvals = () => {
                   </TableCell>
                   <TableCell>
                     <Badge>{Number(req.total_hours).toFixed(2)}h</Badge>
-                    {Number(req.overtime_hours) > 0 && <Badge variant="outline" className="ml-1">OT {Number(req.overtime_hours).toFixed(2)}h</Badge>}
+                  </TableCell>
+                  <TableCell>
+                    <Input
+                      type="number"
+                      step="0.5"
+                      min="0"
+                      placeholder={Number(req.overtime_hours).toFixed(2)}
+                      value={manualOT[req.id] ?? ""}
+                      onChange={(e) => setManualOT((m) => ({ ...m, [req.id]: e.target.value }))}
+                      className="h-8 w-24 font-mono"
+                    />
                   </TableCell>
                   <TableCell className="max-w-48 truncate">{req.task_note || req.reason || "—"}</TableCell>
                   <TableCell>

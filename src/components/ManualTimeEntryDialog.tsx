@@ -10,14 +10,45 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Plus } from "lucide-react";
 import { toast } from "sonner";
 import { format } from "date-fns";
+import type { ReactNode } from "react";
 import { min48hDateISO, isWithin48h, RETRO_LOCK_MESSAGE } from "@/lib/dateRules";
 import { notifyManagersAndAdmins } from "@/lib/notifications";
 import { computeDailyTotals } from "@/lib/workSchedule";
 
 const localToday = () => format(new Date(), "yyyy-MM-dd");
 
+type FormState = {
+  employee_email: string;
+  date: string;
+  clock_in: string;
+  clock_out: string;
+  due_hours: string;
+  break_minutes: string;
+  overtime_hours: string;
+  task_id: string;
+  task_note: string;
+  reason: string;
+};
+
+const defaultForm: FormState = {
+  employee_email: "",
+  date: localToday(),
+  clock_in: "09:00",
+  clock_out: "17:00",
+  due_hours: "8",
+  break_minutes: "60",
+  overtime_hours: "",
+  task_id: "none",
+  task_note: "",
+  reason: "",
+};
+
 interface Props {
   onSubmitted?: () => void;
+  /** Custom open trigger — defaults to the "+ Manual Entry" button. */
+  trigger?: ReactNode;
+  /** Pre-fills the form, e.g. when correcting an existing attendance day. */
+  initial?: Partial<FormState>;
 }
 
 /**
@@ -25,26 +56,19 @@ interface Props {
  * Employees submit a request routed to their reporting manager (or an admin);
  * admins can record the entry for any employee and it is applied immediately.
  */
-export const ManualTimeEntryDialog = ({ onSubmitted }: Props) => {
+export const ManualTimeEntryDialog = ({ onSubmitted, trigger, initial }: Props) => {
   const { user, role } = useAuth();
   const isAdmin = role === "admin";
+  const isEdit = !!initial;
   const [open, setOpen] = useState(false);
   const [saving, setSaving] = useState(false);
   const [tasks, setTasks] = useState<{ id: string; title: string }[]>([]);
-  const [form, setForm] = useState({
-    employee_email: "",
-    date: localToday(),
-    clock_in: "09:00",
-    clock_out: "17:00",
-    due_hours: "8",
-    break_minutes: "60",
-    overtime_hours: "",
-    task_id: "none",
-    task_note: "",
-    reason: "",
-  });
+  const [form, setForm] = useState<FormState>({ ...defaultForm, ...initial });
 
   useEffect(() => {
+    // An edit prefill already carries the real figures for that day; the
+    // org-wide defaults would otherwise clobber them on mount.
+    if (isEdit) return;
     (async () => {
       const { data } = await supabase.from("settings").select("standard_shift_hours, break_allowance_minutes").limit(1).maybeSingle();
       if (data) {
@@ -79,11 +103,22 @@ export const ManualTimeEntryDialog = ({ onSubmitted }: Props) => {
       clockOut: outT,
       breakMinutes: breakMins,
       schedule: dueHours > 0 ? { standard_daily_hours: dueHours } : null,
+      // The break minutes typed here are the actual break taken, not an
+      // estimate — a manual entry should never pad a short break up to the
+      // scheduled hour and dock the employee for time they did work.
+      useActualBreak: true,
     });
     const ot = form.overtime_hours.trim() !== ""
       ? parseFloat(form.overtime_hours) || 0
       : totals.overtimeHours;
-    return { inT, outT, breakMins: totals.breakMinutes, dueHours, total: totals.totalHours, ot };
+    return {
+      inT, outT,
+      breakMins: totals.breakMinutes,
+      dueHours,
+      total: totals.totalHours,
+      autoOt: totals.overtimeHours,
+      ot,
+    };
   }, [form]);
 
   const submit = async () => {
@@ -157,11 +192,11 @@ export const ManualTimeEntryDialog = ({ onSubmitted }: Props) => {
   return (
     <Dialog open={open} onOpenChange={setOpen}>
       <DialogTrigger asChild>
-        <Button size="sm"><Plus className="mr-1 h-4 w-4" /> Manual Entry</Button>
+        {trigger ?? <Button size="sm"><Plus className="mr-1 h-4 w-4" /> Manual Entry</Button>}
       </DialogTrigger>
       <DialogContent className="max-h-[90vh] overflow-y-auto">
         <DialogHeader>
-          <DialogTitle>Manual Time Entry</DialogTitle>
+          <DialogTitle>{isEdit ? "Correct Attendance Entry" : "Manual Time Entry"}</DialogTitle>
           <DialogDescription>
             {isAdmin
               ? "Recorded immediately as an admin-approved entry."
@@ -217,7 +252,7 @@ export const ManualTimeEntryDialog = ({ onSubmitted }: Props) => {
             <Label>Overtime Hours</Label>
             <Input type="number" step="0.5" value={form.overtime_hours} onChange={(e) => setForm((f) => ({ ...f, overtime_hours: e.target.value }))} placeholder="Blank = auto-calculate" />
             <p className="text-xs text-muted-foreground mt-1">
-              Worked: {computed.total}h · Auto overtime: {Math.max(0, Math.round((computed.total - computed.dueHours) * 100) / 100)}h
+              Worked: {computed.total}h (break: {computed.breakMins}m) · Auto overtime: {computed.autoOt}h
             </p>
           </div>
           <div>

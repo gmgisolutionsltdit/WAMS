@@ -104,6 +104,15 @@ export const computeDailyTotals = (input: {
   /** Break recorded by the employee, in minutes. Fractions are kept. */
   breakMinutes?: number | null;
   schedule?: WorkSchedule | null;
+  /**
+   * Deduct exactly the recorded break instead of flooring it at the
+   * schedule's unpaid break. A punch clock can't tell whether a break was
+   * skipped, so it assumes the full scheduled break was taken; a manual
+   * entry's break figure is an explicit record of what actually happened,
+   * so a break shorter than the standard hour should credit the difference
+   * back to worked time rather than being padded up to it.
+   */
+  useActualBreak?: boolean;
 }): DailyTotals => {
   const { clockIn, clockOut, schedule } = input;
   const empty: DailyTotals = {
@@ -119,7 +128,7 @@ export const computeDailyTotals = (input: {
   if (!(span > 0)) return empty;
 
   const recorded = Math.max(0, Number(input.breakMinutes) || 0);
-  const deducted = Math.max(recorded, unpaidBreakMinutes(schedule));
+  const deducted = input.useActualBreak ? recorded : Math.max(recorded, unpaidBreakMinutes(schedule));
   const net = Math.max(0, span - deducted / 60);
   const required = netRequiredHours(schedule);
 
