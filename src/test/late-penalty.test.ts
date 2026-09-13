@@ -14,10 +14,33 @@ const session = (over: Record<string, unknown>) => ({
 describe("late-arrival penalty recorded at clock-in", () => {
   it("carries the penalty fixed on the first session of the day", () => {
     const [day] = mergeDailySessions([
-      session({ clock_in: "2026-09-10T09:30:00Z", late_minutes: 30, penalty_minutes: 160 }),
+      session({ clock_in: "2026-09-10T09:30:00Z", late_minutes: 30, penalty_minutes: 160, penalty_reviewed: true }),
     ]);
     expect(day.lateMinutes).toBe(30);
     expect(day.penaltyMinutes).toBe(160);
+    expect(day.penaltyReviewed).toBe(true);
+    expect(day.approvedStartTime).toBe("2026-09-10T09:30:00Z");
+  });
+
+  it("reflects an approved waiver via approved_start_time", () => {
+    const [day] = mergeDailySessions([
+      session({
+        clock_in: "2026-09-10T09:30:00Z",
+        late_minutes: 30,
+        penalty_minutes: 0,
+        penalty_reviewed: true,
+        approved_start_time: "2026-09-10T09:00:00Z",
+      }),
+    ]);
+    expect(day.penaltyMinutes).toBe(0);
+    expect(day.approvedStartTime).toBe("2026-09-10T09:00:00Z");
+    expect(day.approvedStartTime).not.toBe(day.firstIn);
+  });
+
+  it("falls back to the raw clock-in as the approved time when nothing has been set", () => {
+    const [day] = mergeDailySessions([session({ clock_in: "2026-09-10T09:00:00Z" })]);
+    expect(day.approvedStartTime).toBe("2026-09-10T09:00:00Z");
+    expect(day.penaltyReviewed).toBe(false);
   });
 
   it("defaults to no penalty for an on-time day", () => {

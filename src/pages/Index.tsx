@@ -148,6 +148,8 @@ const Dashboard = () => {
       face_verified: !!faceDescriptor,
       late_minutes: arrival.lateMinutes,
       penalty_minutes: arrival.penaltyMinutes,
+      approved_start_time: now.toISOString(),
+      penalty_reviewed: true,
     });
     if (error) toast.error(error.message);
     else {

@@ -20,6 +20,10 @@ export type AttendanceSession = {
   late_minutes?: number | null;
   /** Extra work minutes owed for a late arrival, fixed at clock-in. */
   penalty_minutes?: number | null;
+  /** True once late_minutes/penalty_minutes are authoritative for this row. */
+  penalty_reviewed?: boolean | null;
+  /** Start time that officially counts once approved (may waive a late arrival). */
+  approved_start_time?: string | null;
   [key: string]: unknown;
 };
 
@@ -40,6 +44,10 @@ export type MergedDay<T extends AttendanceSession = AttendanceSession> = {
   /** Late-arrival penalty recorded at clock-in for the day's first session, if any. */
   lateMinutes: number;
   penaltyMinutes: number;
+  /** True when lateMinutes/penaltyMinutes are authoritative rather than a pre-feature default. */
+  penaltyReviewed: boolean;
+  /** Start time that officially counts once approved; equals firstIn until a waiver changes it. */
+  approvedStartTime: string | null;
   /** True when at least one session has no clock-out yet. */
   open: boolean;
   sessions: T[];
@@ -79,6 +87,8 @@ export const mergeDailySessions = <T extends AttendanceSession>(
         overtimeHours: 0,
         lateMinutes: 0,
         penaltyMinutes: 0,
+        penaltyReviewed: false,
+        approvedStartTime: null,
         open: false,
         sessions: [],
         profiles: (row as AttendanceSession).profiles,
@@ -96,6 +106,8 @@ export const mergeDailySessions = <T extends AttendanceSession>(
       day.firstIn = row.clock_in;
       day.lateMinutes = Number(row.late_minutes) || 0;
       day.penaltyMinutes = Number(row.penalty_minutes) || 0;
+      day.penaltyReviewed = !!row.penalty_reviewed;
+      day.approvedStartTime = row.approved_start_time ?? row.clock_in;
     }
     if (row.clock_out) {
       if (!day.lastOut || row.clock_out > day.lastOut) day.lastOut = row.clock_out;

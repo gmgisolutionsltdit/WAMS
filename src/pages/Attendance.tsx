@@ -62,6 +62,7 @@ const Attendance = () => {
                 <TableHead>Date</TableHead>
                 <TableHead>Status</TableHead>
                 <TableHead>First In</TableHead>
+                <TableHead>Approved Time</TableHead>
                 <TableHead>Last Out</TableHead>
                 <TableHead>Sessions</TableHead>
                 <TableHead>Break Time</TableHead>
@@ -76,11 +77,17 @@ const Attendance = () => {
             </TableHeader>
             <TableBody>
               {days.length === 0 ? (
-                <TableRow><TableCell colSpan={14} className="text-center text-muted-foreground">No attendance records</TableCell></TableRow>
+                <TableRow><TableCell colSpan={15} className="text-center text-muted-foreground">No attendance records</TableCell></TableRow>
               ) : days.map((day) => {
                 const worked = day.workedSeconds;
                 const closed = !day.open && !!day.lastOut;
-                const arrival = evaluateArrival(day.firstIn, officeProfile);
+                // A row recorded by the current clock-in flow (or since
+                // adjusted by an approval) carries its own authoritative
+                // penalty; older rows fall back to a live recomputation.
+                const liveArrival = evaluateArrival(day.firstIn, officeProfile);
+                const arrival = day.penaltyReviewed
+                  ? { late: day.penaltyMinutes > 0 || day.lateMinutes > 0, lateMinutes: day.lateMinutes, penaltyMinutes: day.penaltyMinutes }
+                  : liveArrival;
                 const requiredSeconds = STANDARD_SECONDS + arrival.penaltyMinutes * 60;
                 const dueSeconds = closed && worked < requiredSeconds ? requiredSeconds - worked : 0;
                 // Overtime an approver has already signed off on (a manual
@@ -129,6 +136,15 @@ const Attendance = () => {
                         )}
                       </TableCell>
                       <TableCell className="font-mono text-xs">{fmtClock(day.firstIn)}</TableCell>
+                      <TableCell className="font-mono text-xs">
+                        {day.approvedStartTime && day.approvedStartTime !== day.firstIn ? (
+                          <Badge className="bg-lime-500 text-white border-lime-500 font-mono" title="Late penalty waived by an approved late-time request">
+                            {fmtClock(day.approvedStartTime)}
+                          </Badge>
+                        ) : (
+                          fmtClock(day.approvedStartTime ?? day.firstIn)
+                        )}
+                      </TableCell>
                       <TableCell className="font-mono text-xs">{day.open ? <Badge variant="secondary">In progress</Badge> : fmtClock(day.lastOut)}</TableCell>
                       <TableCell><Badge variant="outline">{day.sessions.length}</Badge></TableCell>
                       <TableCell className="font-mono text-xs">{day.breakSeconds > 0 ? fmtHMS(day.breakSeconds) : "—"}</TableCell>
@@ -182,7 +198,7 @@ const Attendance = () => {
                     {isOpen && (
                       <TableRow className="bg-muted/40 hover:bg-muted/40">
                         <TableCell />
-                        <TableCell colSpan={13} className="p-0">
+                        <TableCell colSpan={14} className="p-0">
                           <div className="p-3">
                             <p className="text-xs font-medium text-muted-foreground mb-2">Individual sessions</p>
                             <Table>
