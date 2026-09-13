@@ -12,6 +12,7 @@ import { fmtHMS, fmtClock, spanToHMS } from "@/lib/time";
 import { mergeDailySessions, sessionWorkedSeconds, type AttendanceSession } from "@/lib/attendance";
 import { evaluateArrival, humanMinutes, officeStart, type OfficeTime } from "@/lib/officeTime";
 import { ManualTimeEntryDialog } from "@/components/ManualTimeEntryDialog";
+import { classifyDay, DEFAULT_WEEKEND_DAYS } from "@/lib/workSchedule";
 import { Pencil } from "lucide-react";
 
 const STANDARD_HOURS = 7;
@@ -23,17 +24,29 @@ const Attendance = () => {
   const [approvedOT, setApprovedOT] = useState<any[]>([]);
   const [expanded, setExpanded] = useState<Record<string, boolean>>({});
   const [officeProfile, setOfficeProfile] = useState<OfficeTime | null>(null);
+  const [holidays, setHolidays] = useState<Map<string, string>>(new Map());
+  const [weekendDays, setWeekendDays] = useState<number[]>(DEFAULT_WEEKEND_DAYS);
 
   const fetchData = () => {
     if (!user) return;
     Promise.all([
       supabase.from("attendance_logs").select("*").eq("user_id", user.id).order("date", { ascending: false }),
       supabase.from("overtime_requests").select("*").eq("user_id", user.id).in("status", ["approved", "modified"]).order("date", { ascending: false }),
-      supabase.from("profiles").select("office_start_time, office_end_time, late_grace_minutes").eq("id", user.id).maybeSingle(),
-    ]).then(([{ data: logsData }, { data: otData }, { data: prof }]) => {
+      supabase.from("profiles").select("office_start_time, office_end_time, late_grace_minutes, company_wing").eq("id", user.id).maybeSingle(),
+      supabase.from("holidays").select("holiday_date, name, wing"),
+      supabase.from("settings").select("weekend_days").limit(1).maybeSingle(),
+    ]).then(([{ data: logsData }, { data: otData }, { data: prof }, { data: holidayRows }, { data: cfg }]) => {
       setLogs((logsData || []) as AttendanceSession[]);
       setApprovedOT(otData || []);
       setOfficeProfile((prof as OfficeTime) || null);
+      // A holiday with no wing applies to everyone; otherwise only to its wing.
+      const wing = (prof as { company_wing?: string } | null)?.company_wing;
+      const map = new Map<string, string>();
+      (holidayRows || [])
+        .filter((h: { wing: string | null }) => h.wing === null || h.wing === wing)
+        .forEach((h: { holiday_date: string; name: string }) => map.set(h.holiday_date, h.name));
+      setHolidays(map);
+      if (cfg?.weekend_days) setWeekendDays(cfg.weekend_days as number[]);
     });
   };
 
@@ -85,10 +98,18 @@ const Attendance = () => {
                 // adjusted by an approval) carries its own authoritative
                 // penalty; older rows fall back to a live recomputation.
                 const liveArrival = evaluateArrival(day.firstIn, officeProfile);
-                const arrival = day.penaltyReviewed
+                const storedArrival = day.penaltyReviewed
                   ? { late: day.penaltyMinutes > 0 || day.lateMinutes > 0, lateMinutes: day.lateMinutes, penaltyMinutes: day.penaltyMinutes }
                   : liveArrival;
-                const requiredSeconds = STANDARD_SECONDS + arrival.penaltyMinutes * 60;
+                // On a holiday or weekend there is no shift to be late for and
+                // no standard hours to meet, so every hour worked is overtime.
+                // This matches the rule applyOTFulfillment already enforces
+                // when approving OT requests.
+                const dayKind = classifyDay(day.date, holidays, weekendDays);
+                const arrival = dayKind.nonWorking
+                  ? { late: false, lateMinutes: 0, penaltyMinutes: 0 }
+                  : storedArrival;
+                const requiredSeconds = dayKind.nonWorking ? 0 : STANDARD_SECONDS + arrival.penaltyMinutes * 60;
                 const dueSeconds = closed && worked < requiredSeconds ? requiredSeconds - worked : 0;
                 // Overtime an approver has already signed off on (a manual
                 // entry's reviewed overtime_hours) is credited as approved
@@ -124,7 +145,14 @@ const Attendance = () => {
                       </TableCell>
                       <TableCell className="whitespace-nowrap">{format(new Date(day.date), "MMM d, yyyy")}</TableCell>
                       <TableCell className="whitespace-nowrap">
-                        {arrival.late ? (
+                        {dayKind.nonWorking ? (
+                          <Badge
+                            className="bg-warning/20 text-warning border-warning/40"
+                            title={`${dayKind.reason === "holiday" ? dayKind.holidayName ?? "Holiday" : "Weekend"} — no standard hours required, all time worked counts as overtime`}
+                          >
+                            {dayKind.reason === "holiday" ? dayKind.holidayName ?? "Holiday" : "Weekend"}
+                          </Badge>
+                        ) : arrival.late ? (
                           <Badge
                             variant="destructive"
                             title={`Arrived ${humanMinutes(arrival.lateMinutes)} after ${officeStart(officeProfile).slice(0, 5)} — extra ${humanMinutes(arrival.penaltyMinutes)} of work required`}

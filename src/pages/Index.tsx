@@ -26,7 +26,7 @@ import { BiometricLogFeed } from "@/components/hrms/BiometricLogFeed";
 import ManualTimeEntryDialog from "@/components/ManualTimeEntryDialog";
 import LateTimeRequestDialog from "@/components/LateTimeRequestDialog";
 import { DEFAULT_OFFICE_END, DEFAULT_OFFICE_START, evaluateArrival, humanMinutes } from "@/lib/officeTime";
-import { computeDailyTotals, type WorkSchedule } from "@/lib/workSchedule";
+import { computeDailyTotals, DEFAULT_WEEKEND_DAYS, type WorkSchedule } from "@/lib/workSchedule";
 import { notifyManagersAndAdmins } from "@/lib/notifications";
 
 
@@ -136,12 +136,23 @@ const Dashboard = () => {
     if (!user) return;
     setLoading(true);
     const now = new Date();
+    const today = localToday();
+    // There is no shift to be late for on a holiday or weekend, so no penalty
+    // applies — the same rule applyOTFulfillment uses when approving OT.
+    const [{ data: holidayRow }, { data: cfg }] = await Promise.all([
+      supabase.from("holidays").select("id").eq("holiday_date", today).maybeSingle(),
+      supabase.from("settings").select("weekend_days").limit(1).maybeSingle(),
+    ]);
+    const weekendDays = (cfg?.weekend_days as number[] | undefined) ?? DEFAULT_WEEKEND_DAYS;
+    const nonWorkingDay = !!holidayRow || weekendDays.includes(now.getDay());
     // Fixed at the moment of arrival so a later office-time change never
     // rewrites what was actually owed for this specific day.
-    const arrival = evaluateArrival(now, workSchedule);
+    const arrival = nonWorkingDay
+      ? { late: false, lateMinutes: 0, penaltyMinutes: 0 }
+      : evaluateArrival(now, workSchedule);
     const { error } = await supabase.from("attendance_logs").insert({
       user_id: user.id,
-      date: localToday(),
+      date: today,
       clock_in: now.toISOString(),
       ip_address: "192.168.1.1 (simulated)",
       device_source: faceDescriptor ? "Web-Face" : "web",

@@ -144,3 +144,36 @@ export const computeDailyTotals = (input: {
 /** Convenience: office window label, e.g. "09:00 - 18:00". */
 export const scheduleLabel = (s?: WorkSchedule | null): string =>
   `${officeStart(s)} - ${officeEnd(s)}`;
+
+/** Weekend days when the organisation has not configured its own. */
+export const DEFAULT_WEEKEND_DAYS = [5, 6];
+
+export type NonWorkingDay = {
+  nonWorking: boolean;
+  reason: "holiday" | "weekend" | null;
+  /** Name of the matched holiday, when the day is one. */
+  holidayName: string | null;
+};
+
+/**
+ * Classify a date as a holiday, a weekend, or a normal working day.
+ *
+ * Attendance, overtime and payroll all need the same answer to "was this a
+ * day the employee was actually expected to work?" — on a holiday or weekend
+ * there is no standard-hours requirement at all, so every hour worked counts
+ * as overtime rather than being measured against a shift that did not exist.
+ */
+export const classifyDay = (
+  dateISO: string,
+  holidays: Map<string, string> | Set<string>,
+  weekendDays: number[] = DEFAULT_WEEKEND_DAYS,
+): NonWorkingDay => {
+  const holidayName = holidays instanceof Map ? holidays.get(dateISO) ?? null : null;
+  const isHoliday = holidays instanceof Map ? holidays.has(dateISO) : holidays.has(dateISO);
+  if (isHoliday) return { nonWorking: true, reason: "holiday", holidayName };
+
+  const dow = new Date(`${dateISO}T00:00:00`).getDay();
+  if (weekendDays.includes(dow)) return { nonWorking: true, reason: "weekend", holidayName: null };
+
+  return { nonWorking: false, reason: null, holidayName: null };
+};
