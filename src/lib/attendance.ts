@@ -16,6 +16,14 @@ export type AttendanceSession = {
   break_end?: string | null;
   ip_address?: string | null;
   device_source?: string | null;
+  /** Minutes past the approved start time, fixed at clock-in. */
+  late_minutes?: number | null;
+  /** Extra work minutes owed for a late arrival, fixed at clock-in. */
+  penalty_minutes?: number | null;
+  /** True once late_minutes/penalty_minutes are authoritative for this row. */
+  penalty_reviewed?: boolean | null;
+  /** Start time that officially counts once approved (may waive a late arrival). */
+  approved_start_time?: string | null;
   [key: string]: unknown;
 };
 
@@ -33,6 +41,13 @@ export type MergedDay<T extends AttendanceSession = AttendanceSession> = {
   breakSeconds: number;
   /** Sum of stored overtime hours across sessions. */
   overtimeHours: number;
+  /** Late-arrival penalty recorded at clock-in for the day's first session, if any. */
+  lateMinutes: number;
+  penaltyMinutes: number;
+  /** True when lateMinutes/penaltyMinutes are authoritative rather than a pre-feature default. */
+  penaltyReviewed: boolean;
+  /** Start time that officially counts once approved; equals firstIn until a waiver changes it. */
+  approvedStartTime: string | null;
   /** True when at least one session has no clock-out yet. */
   open: boolean;
   sessions: T[];
@@ -70,6 +85,10 @@ export const mergeDailySessions = <T extends AttendanceSession>(
         workedSeconds: 0,
         breakSeconds: 0,
         overtimeHours: 0,
+        lateMinutes: 0,
+        penaltyMinutes: 0,
+        penaltyReviewed: false,
+        approvedStartTime: null,
         open: false,
         sessions: [],
         profiles: (row as AttendanceSession).profiles,
@@ -80,7 +99,16 @@ export const mergeDailySessions = <T extends AttendanceSession>(
     day.workedSeconds += sessionWorkedSeconds(row, now);
     day.breakSeconds += (Number(row.break_minutes) || 0) * 60;
     day.overtimeHours += Number(row.overtime_hours) || 0;
-    if (row.clock_in && (!day.firstIn || row.clock_in < day.firstIn)) day.firstIn = row.clock_in;
+    // The penalty is a fact about the day's actual arrival, recorded on
+    // whichever session was the first clock-in — carry it along as that
+    // session is discovered rather than summing it across every punch.
+    if (row.clock_in && (!day.firstIn || row.clock_in < day.firstIn)) {
+      day.firstIn = row.clock_in;
+      day.lateMinutes = Number(row.late_minutes) || 0;
+      day.penaltyMinutes = Number(row.penalty_minutes) || 0;
+      day.penaltyReviewed = !!row.penalty_reviewed;
+      day.approvedStartTime = row.approved_start_time ?? row.clock_in;
+    }
     if (row.clock_out) {
       if (!day.lastOut || row.clock_out > day.lastOut) day.lastOut = row.clock_out;
     } else if (row.clock_in) {

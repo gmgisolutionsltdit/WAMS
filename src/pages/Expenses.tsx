@@ -14,6 +14,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Receipt, Plus, Check, X, FileText } from "lucide-react";
 import { toast } from "sonner";
 import { format } from "date-fns";
+import { notifyManagersAndAdmins, notifyEmployee } from "@/lib/notifications";
 
 const CATEGORIES = ["Travel", "Meals", "Office Supplies", "Software", "Training", "Client Entertainment", "Other"];
 
@@ -26,7 +27,8 @@ const Expenses = () => {
   const [uploading, setUploading] = useState(false);
 
   const fetchClaims = async () => {
-    const { data } = await supabase.from("expense_claims").select("*, profiles!expense_claims_user_id_fkey(full_name,email,photo_url)").order("created_at", { ascending: false });
+    const { data, error } = await supabase.from("expense_claims").select("*, profiles!expense_claims_user_id_fkey(full_name,email,photo_url)").order("created_at", { ascending: false });
+    if (error) { toast.error(error.message); return; }
     setClaims(data || []);
   };
 
@@ -46,25 +48,41 @@ const Expenses = () => {
 
   const submit = async () => {
     if (!form.amount) return toast.error("Amount required");
-    const { error } = await supabase.from("expense_claims").insert({
+    const { data: inserted, error } = await supabase.from("expense_claims").insert({
       user_id: user?.id,
       category: form.category,
       amount: Number(form.amount),
       claim_date: form.claim_date,
       description: form.description,
       receipt_url: form.receipt_url || null,
-    });
+    }).select().single();
     if (error) return toast.error(error.message);
     toast.success("Expense submitted");
     setOpen(false);
     setForm({ category: "Travel", amount: "", claim_date: format(new Date(), "yyyy-MM-dd"), description: "", receipt_url: "" });
+    await notifyManagersAndAdmins(
+      "Expense Claim Submitted",
+      `${user?.email} submitted a ${form.category} claim for ${form.amount}.`,
+      inserted?.id,
+      { route: "/expenses", type: "expense_claim", requesterId: user?.id },
+    );
     fetchClaims();
   };
 
   const decide = async (id: string, status: "approved" | "rejected") => {
+    const claim = claims.find((c) => c.id === id);
     const { error } = await supabase.from("expense_claims").update({ status, approver_id: user?.id, approved_at: new Date().toISOString() }).eq("id", id);
     if (error) return toast.error(error.message);
     toast.success(`Claim ${status}`);
+    if (claim) {
+      await notifyEmployee(
+        claim.user_id,
+        `Expense Claim ${status.charAt(0).toUpperCase() + status.slice(1)}`,
+        `Your ${claim.category} claim for ${claim.amount} was ${status}.`,
+        id,
+        { route: "/expenses", type: "expense_claim_update" },
+      );
+    }
     fetchClaims();
   };
 

@@ -16,6 +16,7 @@ export type Database = {
     Tables: {
       attendance_logs: {
         Row: {
+          approved_start_time: string | null
           break_end: string | null
           break_minutes: number | null
           break_start: string | null
@@ -27,12 +28,16 @@ export type Database = {
           face_verified: boolean | null
           id: string
           ip_address: string | null
+          late_minutes: number
           overtime_hours: number | null
+          penalty_minutes: number
+          penalty_reviewed: boolean
           total_hours: number | null
           updated_at: string
           user_id: string
         }
         Insert: {
+          approved_start_time?: string | null
           break_end?: string | null
           break_minutes?: number | null
           break_start?: string | null
@@ -44,12 +49,16 @@ export type Database = {
           face_verified?: boolean | null
           id?: string
           ip_address?: string | null
+          late_minutes?: number
           overtime_hours?: number | null
+          penalty_minutes?: number
+          penalty_reviewed?: boolean
           total_hours?: number | null
           updated_at?: string
           user_id: string
         }
         Update: {
+          approved_start_time?: string | null
           break_end?: string | null
           break_minutes?: number | null
           break_start?: string | null
@@ -61,7 +70,10 @@ export type Database = {
           face_verified?: boolean | null
           id?: string
           ip_address?: string | null
+          late_minutes?: number
           overtime_hours?: number | null
+          penalty_minutes?: number
+          penalty_reviewed?: boolean
           total_hours?: number | null
           updated_at?: string
           user_id?: string
