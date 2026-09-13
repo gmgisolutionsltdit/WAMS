@@ -27,7 +27,9 @@ export type Database = {
           face_verified: boolean | null
           id: string
           ip_address: string | null
+          late_minutes: number
           overtime_hours: number | null
+          penalty_minutes: number
           total_hours: number | null
           updated_at: string
           user_id: string
@@ -44,7 +46,9 @@ export type Database = {
           face_verified?: boolean | null
           id?: string
           ip_address?: string | null
+          late_minutes?: number
           overtime_hours?: number | null
+          penalty_minutes?: number
           total_hours?: number | null
           updated_at?: string
           user_id: string
@@ -61,7 +65,9 @@ export type Database = {
           face_verified?: boolean | null
           id?: string
           ip_address?: string | null
+          late_minutes?: number
           overtime_hours?: number | null
+          penalty_minutes?: number
           total_hours?: number | null
           updated_at?: string
           user_id?: string
