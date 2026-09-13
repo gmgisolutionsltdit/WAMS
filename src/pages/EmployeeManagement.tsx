@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Checkbox } from "@/components/ui/checkbox";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
@@ -93,6 +94,9 @@ const EmployeeManagement = () => {
   const [addWingOpen, setAddWingOpen] = useState(false);
   const [newWing, setNewWing] = useState({ name: "", code: "" });
   const [savingWing, setSavingWing] = useState(false);
+  const [projects, setProjects] = useState<{ id: string; name: string; key: string }[]>([]);
+  /** Project memberships keyed by employee id, for the list column and edit form. */
+  const [memberProjects, setMemberProjects] = useState<Record<string, string[]>>({});
 
   const initialForm = {
     full_name: "", email: "", department: "", designation: "", phone: "",
@@ -103,6 +107,7 @@ const EmployeeManagement = () => {
     daily_ot_cap: "4", monthly_ot_cap: "40",
     photo_url: "" as string,
     base_salary: "0", hourly_overtime_rate: "0", pf_contribution_pct: "0",
+    project_ids: [] as string[],
   };
 
   const [form, setForm] = useState(initialForm);
@@ -153,8 +158,26 @@ const EmployeeManagement = () => {
     setWings((data || []) as WingRow[]);
   }, []);
 
+  const fetchProjects = useCallback(async () => {
+    const [{ data: projectRows, error: projErr }, { data: memberRows, error: memErr }] = await Promise.all([
+      supabase.from("projects").select("id, name, key").eq("archived", false).order("name", { ascending: true }),
+      supabase.from("project_members").select("project_id, user_id"),
+    ]);
+    if (projErr || memErr) {
+      console.error("[EmployeeManagement] Projects fetch error:", { projErr, memErr });
+      return;
+    }
+    setProjects((projectRows || []) as { id: string; name: string; key: string }[]);
+    const byUser: Record<string, string[]> = {};
+    (memberRows || []).forEach((m: { project_id: string; user_id: string }) => {
+      (byUser[m.user_id] ||= []).push(m.project_id);
+    });
+    setMemberProjects(byUser);
+  }, []);
+
   useEffect(() => { fetchEmployees(); }, [fetchEmployees]);
   useEffect(() => { fetchWings(); }, [fetchWings]);
+  useEffect(() => { fetchProjects(); }, [fetchProjects]);
   useRealtimeSubscription("profiles", fetchEmployees, "emp-mgmt-profiles");
   useRealtimeSubscription("user_roles", fetchEmployees, "emp-mgmt-roles");
 
@@ -190,6 +213,7 @@ const EmployeeManagement = () => {
       base_salary: String(emp.base_salary ?? 0),
       hourly_overtime_rate: String(emp.hourly_overtime_rate ?? 0),
       pf_contribution_pct: String(emp.pf_contribution_pct ?? 0),
+      project_ids: memberProjects[emp.id] ?? [],
     });
     setEditingId(emp.id);
     setDialogOpen(true);
@@ -245,6 +269,28 @@ const EmployeeManagement = () => {
     }
   };
 
+  /** Reconcile an employee's project memberships against the form selection. */
+  const syncProjectMembers = async (userId: string) => {
+    const current = memberProjects[userId] ?? [];
+    const selected = form.project_ids;
+    const added = selected.filter((id) => !current.includes(id));
+    const removed = current.filter((id) => !selected.includes(id));
+    if (added.length) {
+      const { error } = await supabase
+        .from("project_members")
+        .upsert(added.map((project_id) => ({ project_id, user_id: userId })), { onConflict: "project_id,user_id" });
+      if (error) toast.error(`Project assignment failed: ${error.message}`);
+    }
+    if (removed.length) {
+      const { error } = await supabase
+        .from("project_members")
+        .delete()
+        .eq("user_id", userId)
+        .in("project_id", removed);
+      if (error) toast.error(`Project removal failed: ${error.message}`);
+    }
+  };
+
   const handleSave = async () => {
     if (!form.full_name || !form.email) { toast.error("Name and email are required"); return; }
     setSaving(true);
@@ -282,10 +328,12 @@ const EmployeeManagement = () => {
         const { data: existing } = await supabase.from("user_roles").select("id").eq("user_id", editingId).maybeSingle();
         if (existing) await supabase.from("user_roles").update({ role: form.role as any }).eq("user_id", editingId);
         else await supabase.from("user_roles").insert({ user_id: editingId, role: form.role as any });
+        await syncProjectMembers(editingId);
         toast.success("Employee updated");
         setDialogOpen(false);
         resetForm();
         fetchEmployees();
+        fetchProjects();
       } else {
         // Admin create with temp password via the authenticated API
         const { data, error } = await invokeAdminUserManagement({
@@ -320,12 +368,14 @@ const EmployeeManagement = () => {
         if (Object.keys(postCreate).length) {
           await supabase.from("profiles").update(postCreate).eq("id", created.userId);
         }
+        await syncProjectMembers(created.userId);
 
         setTempCredentials({ email: created.email, password: created.tempPassword });
         toast.success("Employee created");
         setDialogOpen(false);
         resetForm();
         fetchEmployees();
+        fetchProjects();
       }
     } finally {
       setSaving(false);
@@ -549,6 +599,40 @@ const EmployeeManagement = () => {
                 </Select>
               </div>
 
+              <div className="col-span-2">
+                <Label>Projects</Label>
+                {projects.length === 0 ? (
+                  <p className="text-xs text-muted-foreground mt-1">
+                    No active projects yet — create one on the Projects page to assign it here.
+                  </p>
+                ) : (
+                  <div className="mt-1 flex flex-wrap gap-2 rounded-md border p-2 max-h-32 overflow-y-auto">
+                    {projects.map((p) => {
+                      const checked = form.project_ids.includes(p.id);
+                      return (
+                        <label
+                          key={p.id}
+                          className={`flex items-center gap-2 rounded-md border px-2 py-1 text-sm cursor-pointer ${checked ? "bg-primary/10 border-primary/40" : ""}`}
+                        >
+                          <Checkbox
+                            checked={checked}
+                            onCheckedChange={() =>
+                              setForm((f) => ({
+                                ...f,
+                                project_ids: checked
+                                  ? f.project_ids.filter((id) => id !== p.id)
+                                  : [...f.project_ids, p.id],
+                              }))
+                            }
+                          />
+                          {p.name}
+                        </label>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
+
               <div>
                 <Label>Role</Label>
                 <Select value={form.role} onValueChange={(v) => setForm((f) => ({ ...f, role: v }))} disabled={!isAdmin}>
@@ -674,6 +758,7 @@ const EmployeeManagement = () => {
             <TableRow>
               <TableHead>Employee</TableHead>
               <TableHead>Wing</TableHead>
+              <TableHead>Projects</TableHead>
               <TableHead>Department</TableHead>
               <TableHead>Designation</TableHead>
               <TableHead>Role</TableHead>
@@ -687,7 +772,7 @@ const EmployeeManagement = () => {
           <TableBody>
             {loadingList ? (
               <TableRow>
-                <TableCell colSpan={10} className="text-center py-8 text-muted-foreground">
+                <TableCell colSpan={11} className="text-center py-8 text-muted-foreground">
                   <div className="flex items-center justify-center gap-2">
                     <span className="inline-block h-4 w-4 border-2 border-primary border-t-transparent rounded-full animate-spin" />
                     Loading employees…
@@ -696,13 +781,13 @@ const EmployeeManagement = () => {
               </TableRow>
             ) : fetchError ? (
               <TableRow>
-                <TableCell colSpan={10} className="text-center py-8 text-destructive">
+                <TableCell colSpan={11} className="text-center py-8 text-destructive">
                   <div className="font-medium">Failed to load employees</div>
                   <div className="text-xs text-muted-foreground mt-1">{fetchError}</div>
                 </TableCell>
               </TableRow>
             ) : filtered.length === 0 ? (
-              <TableRow><TableCell colSpan={10} className="text-center text-muted-foreground">No employees found</TableCell></TableRow>
+              <TableRow><TableCell colSpan={11} className="text-center text-muted-foreground">No employees found</TableCell></TableRow>
             ) : filtered.map((emp) => (
               <TableRow
                 key={emp.id}
@@ -722,6 +807,19 @@ const EmployeeManagement = () => {
                   </div>
                 </TableCell>
                 <TableCell><Badge variant="outline">{wingLabelFor(emp)}</Badge></TableCell>
+                <TableCell>
+                  {(() => {
+                    const names = (memberProjects[emp.id] ?? [])
+                      .map((id) => projects.find((p) => p.id === id)?.name)
+                      .filter(Boolean) as string[];
+                    if (names.length === 0) return <span className="text-muted-foreground">—</span>;
+                    return (
+                      <div className="flex flex-wrap gap-1">
+                        {names.map((n) => <Badge key={n} variant="secondary" className="text-xs">{n}</Badge>)}
+                      </div>
+                    );
+                  })()}
+                </TableCell>
                 <TableCell>{emp.department || "—"}</TableCell>
                 <TableCell>{emp.designation || "—"}</TableCell>
                 <TableCell>
