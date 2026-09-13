@@ -20,6 +20,7 @@ import { useRealtimeSubscription } from "@/hooks/useRealtimeSubscription";
 import { format } from "date-fns";
 import { notifyManagersAndAdmins, notifyEmployee } from "@/lib/notifications";
 import { min48hDateISO, isWithin48h, canBypass48h, RETRO_LOCK_MESSAGE } from "@/lib/dateRules";
+import LeaveDatePicker from "@/components/LeaveDatePicker";
 
 type LeaveType = {
   id: string; name: string; code: string; color: string; annual_quota: number;
@@ -396,8 +397,31 @@ const LeaveManagement = () => {
                 </Select>
               </div>
               <div className="grid grid-cols-2 gap-3">
-                <div><Label>Start Date</Label><Input type="date" min={canBypass48h(role) ? undefined : min48hDateISO()} value={form.start_date} onChange={(e) => setForm((f) => ({ ...f, start_date: e.target.value }))} /></div>
-                <div><Label>End Date</Label><Input type="date" min={form.start_date || (canBypass48h(role) ? undefined : min48hDateISO())} value={form.end_date} onChange={(e) => setForm((f) => ({ ...f, end_date: e.target.value }))} /></div>
+                <div>
+                  <Label>Start Date</Label>
+                  <LeaveDatePicker
+                    value={form.start_date}
+                    onChange={(iso) => setForm((f) => ({
+                      ...f,
+                      start_date: iso,
+                      // Keep the range coherent when the new start passes the end.
+                      end_date: f.end_date && f.end_date < iso ? iso : f.end_date,
+                    }))}
+                    min={canBypass48h(role) ? undefined : min48hDateISO()}
+                    holidays={holidaySet}
+                    weekendDays={settings.weekend_days}
+                  />
+                </div>
+                <div>
+                  <Label>End Date</Label>
+                  <LeaveDatePicker
+                    value={form.end_date}
+                    onChange={(iso) => setForm((f) => ({ ...f, end_date: iso }))}
+                    min={form.start_date || (canBypass48h(role) ? undefined : min48hDateISO())}
+                    holidays={holidaySet}
+                    weekendDays={settings.weekend_days}
+                  />
+                </div>
               </div>
               <div>
                 <Label>Day Type</Label>
@@ -644,11 +668,26 @@ const LeaveManagement = () => {
               <div className="grid grid-cols-2 gap-3">
                 <div>
                   <Label>Start Date</Label>
-                  <Input type="date" value={modForm.start_date} onChange={(e) => setModForm((f) => ({ ...f, start_date: e.target.value }))} />
+                  <LeaveDatePicker
+                    value={modForm.start_date}
+                    onChange={(iso) => setModForm((f) => ({
+                      ...f,
+                      start_date: iso,
+                      end_date: f.end_date && f.end_date < iso ? iso : f.end_date,
+                    }))}
+                    holidays={holidaySet}
+                    weekendDays={settings.weekend_days}
+                  />
                 </div>
                 <div>
                   <Label>End Date</Label>
-                  <Input type="date" value={modForm.end_date} onChange={(e) => setModForm((f) => ({ ...f, end_date: e.target.value }))} />
+                  <LeaveDatePicker
+                    value={modForm.end_date}
+                    onChange={(iso) => setModForm((f) => ({ ...f, end_date: iso }))}
+                    min={modForm.start_date || undefined}
+                    holidays={holidaySet}
+                    weekendDays={settings.weekend_days}
+                  />
                 </div>
               </div>
               <div>
