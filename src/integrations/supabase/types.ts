@@ -650,6 +650,7 @@ export type Database = {
           overtime_hours: number
           reason: string | null
           status: string
+          supersedes_log_id: string | null
           task_id: string | null
           task_note: string | null
           total_hours: number
@@ -671,6 +672,7 @@ export type Database = {
           overtime_hours?: number
           reason?: string | null
           status?: string
+          supersedes_log_id?: string | null
           task_id?: string | null
           task_note?: string | null
           total_hours?: number
@@ -692,6 +694,7 @@ export type Database = {
           overtime_hours?: number
           reason?: string | null
           status?: string
+          supersedes_log_id?: string | null
           task_id?: string | null
           task_note?: string | null
           total_hours?: number
@@ -704,6 +707,13 @@ export type Database = {
             columns: ["task_id"]
             isOneToOne: false
             referencedRelation: "tasks"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "manual_time_requests_supersedes_log_id_fkey"
+            columns: ["supersedes_log_id"]
+            isOneToOne: false
+            referencedRelation: "attendance_logs"
             referencedColumns: ["id"]
           },
         ]

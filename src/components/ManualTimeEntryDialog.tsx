@@ -6,7 +6,6 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Plus } from "lucide-react";
 import { toast } from "sonner";
 import { format } from "date-fns";
@@ -49,6 +48,12 @@ interface Props {
   trigger?: ReactNode;
   /** Pre-fills the form, e.g. when correcting an existing attendance day. */
   initial?: Partial<FormState>;
+  /**
+   * attendance_logs row this edit replaces. Once the correction is applied
+   * (immediately for an admin, on approval otherwise) that row is deleted,
+   * so editing a session no longer leaves the old, wrong punch behind it.
+   */
+  supersedesLogId?: string;
 }
 
 /**
@@ -56,13 +61,12 @@ interface Props {
  * Employees submit a request routed to their reporting manager (or an admin);
  * admins can record the entry for any employee and it is applied immediately.
  */
-export const ManualTimeEntryDialog = ({ onSubmitted, trigger, initial }: Props) => {
+export const ManualTimeEntryDialog = ({ onSubmitted, trigger, initial, supersedesLogId }: Props) => {
   const { user, role } = useAuth();
   const isAdmin = role === "admin";
   const isEdit = !!initial;
   const [open, setOpen] = useState(false);
   const [saving, setSaving] = useState(false);
-  const [tasks, setTasks] = useState<{ id: string; title: string }[]>([]);
   const [form, setForm] = useState<FormState>({ ...defaultForm, ...initial });
 
   useEffect(() => {
@@ -80,18 +84,6 @@ export const ManualTimeEntryDialog = ({ onSubmitted, trigger, initial }: Props) 
       }
     })();
   }, []);
-
-  useEffect(() => {
-    if (!user || !open) return;
-    supabase
-      .from("tasks")
-      .select("id, title")
-      .or(`assignee_id.eq.${user.id},reporter_id.eq.${user.id}`)
-      .neq("status", "done")
-      .order("updated_at", { ascending: false })
-      .limit(50)
-      .then(({ data }) => setTasks((data || []) as any));
-  }, [user, open]);
 
   const computed = useMemo(() => {
     const inT = new Date(`${form.date}T${form.clock_in}:00`);
@@ -131,8 +123,8 @@ export const ManualTimeEntryDialog = ({ onSubmitted, trigger, initial }: Props) 
       toast.error("Clock out must be after clock in");
       return;
     }
-    if (!form.task_note.trim() && form.task_id === "none") {
-      toast.error("Select or describe the task for this time entry");
+    if (!form.task_note.trim()) {
+      toast.error("Add a description for this time entry");
       return;
     }
     setSaving(true);
@@ -154,9 +146,10 @@ export const ManualTimeEntryDialog = ({ onSubmitted, trigger, initial }: Props) 
         due_hours: computed.dueHours,
         total_hours: computed.total,
         overtime_hours: computed.ot,
-        task_id: form.task_id === "none" ? null : form.task_id,
+        task_id: null,
         task_note: form.task_note.trim() || null,
         reason: form.reason.trim() || null,
+        supersedes_log_id: supersedesLogId || null,
       };
 
       const { data: inserted, error } = await supabase
@@ -228,31 +221,19 @@ export const ManualTimeEntryDialog = ({ onSubmitted, trigger, initial }: Props) 
             <div><Label>Clock In</Label><Input type="time" value={form.clock_in} onChange={(e) => setForm((f) => ({ ...f, clock_in: e.target.value }))} /></div>
             <div><Label>Clock Out</Label><Input type="time" value={form.clock_out} onChange={(e) => setForm((f) => ({ ...f, clock_out: e.target.value }))} /></div>
           </div>
-          <div className="grid grid-cols-2 gap-4">
-            <div><Label>Due Time (hours)</Label><Input type="number" step="0.5" min="0" value={form.due_hours} onChange={(e) => setForm((f) => ({ ...f, due_hours: e.target.value }))} /></div>
-            <div><Label>Break Time (minutes)</Label><Input type="number" step="5" min="0" value={form.break_minutes} onChange={(e) => setForm((f) => ({ ...f, break_minutes: e.target.value }))} /></div>
+          <div>
+            <Label>Break Time (minutes)</Label>
+            <Input type="number" step="5" min="0" value={form.break_minutes} onChange={(e) => setForm((f) => ({ ...f, break_minutes: e.target.value }))} />
           </div>
           <div>
-            <Label>Task</Label>
-            <Select value={form.task_id} onValueChange={(v) => setForm((f) => ({ ...f, task_id: v }))}>
-              <SelectTrigger><SelectValue placeholder="Select a task" /></SelectTrigger>
-              <SelectContent>
-                <SelectItem value="none">No linked task</SelectItem>
-                {tasks.map((t) => <SelectItem key={t.id} value={t.id}>{t.title}</SelectItem>)}
-              </SelectContent>
-            </Select>
+            <Label>Description</Label>
             <Input
-              className="mt-2"
-              placeholder="Task description (required if no task selected)"
+              placeholder="What was this time for?"
               value={form.task_note}
               onChange={(e) => setForm((f) => ({ ...f, task_note: e.target.value }))}
             />
-          </div>
-          <div>
-            <Label>Overtime Hours</Label>
-            <Input type="number" step="0.5" value={form.overtime_hours} onChange={(e) => setForm((f) => ({ ...f, overtime_hours: e.target.value }))} placeholder="Blank = auto-calculate" />
             <p className="text-xs text-muted-foreground mt-1">
-              Worked: {computed.total}h (break: {computed.breakMins}m) · Auto overtime: {computed.autoOt}h
+              Worked: {computed.total}h (break: {computed.breakMins}m) · Overtime: {computed.autoOt}h
             </p>
           </div>
           <div>
