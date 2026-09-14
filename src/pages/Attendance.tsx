@@ -22,7 +22,6 @@ const STANDARD_SECONDS = STANDARD_HOURS * 3600;
 const Attendance = () => {
   const { user } = useAuth();
   const [logs, setLogs] = useState<AttendanceSession[]>([]);
-  const [approvedOT, setApprovedOT] = useState<any[]>([]);
   const [expanded, setExpanded] = useState<Record<string, boolean>>({});
   const [officeProfile, setOfficeProfile] = useState<OfficeTime | null>(null);
   const [holidays, setHolidays] = useState<Map<string, string>>(new Map());
@@ -32,13 +31,11 @@ const Attendance = () => {
     if (!user) return;
     Promise.all([
       supabase.from("attendance_logs").select("*").eq("user_id", user.id).order("date", { ascending: false }),
-      supabase.from("overtime_requests").select("*").eq("user_id", user.id).in("status", ["approved", "modified"]).order("date", { ascending: false }),
       supabase.from("profiles").select("office_start_time, office_end_time, late_grace_minutes, company_wing").eq("id", user.id).maybeSingle(),
       supabase.from("holidays").select("holiday_date, name, wing"),
       supabase.from("settings").select("weekend_days").limit(1).maybeSingle(),
-    ]).then(([{ data: logsData }, { data: otData }, { data: prof }, { data: holidayRows }, { data: cfg }]) => {
+    ]).then(([{ data: logsData }, { data: prof }, { data: holidayRows }, { data: cfg }]) => {
       setLogs((logsData || []) as AttendanceSession[]);
-      setApprovedOT(otData || []);
       setOfficeProfile((prof as OfficeTime) || null);
       // A holiday with no wing applies to everyone; otherwise only to its wing.
       const wing = (prof as { company_wing?: string } | null)?.company_wing;
@@ -61,7 +58,6 @@ const Attendance = () => {
   useEffect(() => { fetchData(); }, [user]);
 
   useRealtimeSubscription("attendance_logs", fetchData, "attendance-page-logs");
-  useRealtimeSubscription("overtime_requests", fetchData, "attendance-page-ot");
 
   const days = mergeDailySessions(logs).sort((a, b) => b.date.localeCompare(a.date));
 
@@ -117,21 +113,10 @@ const Attendance = () => {
                   : storedArrival;
                 const requiredSeconds = dayKind.nonWorking ? 0 : STANDARD_SECONDS + arrival.penaltyMinutes * 60;
                 const dueSeconds = closed && worked < requiredSeconds ? requiredSeconds - worked : 0;
-                // Overtime an approver has already signed off on (a manual
-                // entry's reviewed overtime_hours) is credited as approved
-                // rather than counted again as unreviewed "regular" OT.
-                const manualApprovedOTSeconds = day.sessions
-                  .filter((s) => s.device_source === "manual")
-                  .reduce((sum, s) => sum + (Number(s.overtime_hours) || 0) * 3600, 0);
                 const autoWorkedSeconds = day.sessions
                   .filter((s) => s.device_source !== "manual")
                   .reduce((sum, s) => sum + sessionWorkedSeconds(s), 0);
                 const otRegular = closed && autoWorkedSeconds > requiredSeconds ? autoWorkedSeconds - requiredSeconds : 0;
-                const rawApproved = approvedOT
-                  .filter((ot) => ot.date === day.date)
-                  .reduce((sum: number, ot: any) => sum + (ot.requested_hours || 0), 0) * 3600
-                  + manualApprovedOTSeconds;
-                const approvedAdjusted = Math.max(0, rawApproved - dueSeconds);
                 const isOpen = !!expanded[day.key];
                 const ips = Array.from(new Set(day.sessions.map((s) => s.ip_address).filter(Boolean)));
                 return (
@@ -198,11 +183,7 @@ const Attendance = () => {
                           : <span className="text-muted-foreground font-mono text-xs">00:00:00</span>}
                       </TableCell>
                       <TableCell>
-                        {approvedAdjusted > 0
-                          ? <Badge className="bg-lime-500 text-white border-lime-500 font-mono">{fmtHMS(approvedAdjusted)}</Badge>
-                          : rawApproved > 0
-                            ? <span className="text-xs text-muted-foreground font-mono" title={`${fmtHMS(rawApproved)} requested, offset by due time`}>00:00:00</span>
-                            : <span className="text-muted-foreground font-mono text-xs">00:00:00</span>}
+                        <span className="text-muted-foreground font-mono text-xs">00:00:00</span>
                       </TableCell>
                       <TableCell className="text-xs text-muted-foreground">{ips.length ? ips.join(", ") : "—"}</TableCell>
                     </TableRow>
