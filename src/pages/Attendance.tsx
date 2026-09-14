@@ -89,15 +89,14 @@ const Attendance = () => {
                 <TableHead>Work Time</TableHead>
                 <TableHead>Break Time</TableHead>
                 <TableHead>Due Time</TableHead>
-                <TableHead>Overtime</TableHead>
+                <TableHead>OVERTIME (OT)</TableHead>
                 <TableHead>Approved OT</TableHead>
                 <TableHead>IP Address</TableHead>
-                <TableHead>Actions</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
               {days.length === 0 ? (
-                <TableRow><TableCell colSpan={14} className="text-center text-muted-foreground">No attendance records</TableCell></TableRow>
+                <TableRow><TableCell colSpan={13} className="text-center text-muted-foreground">No attendance records</TableCell></TableRow>
               ) : days.map((day) => {
                 const worked = day.workedSeconds;
                 const closed = !day.open && !!day.lastOut;
@@ -203,36 +202,14 @@ const Attendance = () => {
                           ? <Badge className="bg-lime-500 text-white border-lime-500 font-mono">{fmtHMS(approvedAdjusted)}</Badge>
                           : rawApproved > 0
                             ? <span className="text-xs text-muted-foreground font-mono" title={`${fmtHMS(rawApproved)} requested, offset by due time`}>00:00:00</span>
-                            : "—"}
+                            : <span className="text-muted-foreground font-mono text-xs">00:00:00</span>}
                       </TableCell>
                       <TableCell className="text-xs text-muted-foreground">{ips.length ? ips.join(", ") : "—"}</TableCell>
-                      <TableCell>
-                        <ManualTimeEntryDialog
-                          onSubmitted={fetchData}
-                          // Only a single-session day maps cleanly onto one
-                          // row to replace; a multi-session day adds a
-                          // correction alongside the existing sessions instead.
-                          supersedesLogId={day.sessions.length === 1 ? day.sessions[0].id : undefined}
-                          initial={{
-                            date: day.date,
-                            clock_in: day.firstIn ? format(new Date(day.firstIn), "HH:mm") : "09:00",
-                            clock_out: day.lastOut ? format(new Date(day.lastOut), "HH:mm") : "17:00",
-                            break_minutes: String(Math.round(day.breakSeconds / 60)),
-                            task_note: `Correction to attendance record for ${day.date}`,
-                            reason: "Correction to attendance record",
-                          }}
-                          trigger={
-                            <Button variant="ghost" size="icon" className="h-7 w-7" aria-label="Edit this day">
-                              <Pencil className="h-3.5 w-3.5" />
-                            </Button>
-                          }
-                        />
-                      </TableCell>
                     </TableRow>
                     {isOpen && (
                       <TableRow className="bg-muted/40 hover:bg-muted/40">
                         <TableCell />
-                        <TableCell colSpan={13} className="p-0">
+                        <TableCell colSpan={12} className="p-0">
                           <div className="p-3">
                             <p className="text-xs font-medium text-muted-foreground mb-2">Individual sessions</p>
                             <Table>

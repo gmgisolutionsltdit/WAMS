@@ -123,10 +123,6 @@ export const ManualTimeEntryDialog = ({ onSubmitted, trigger, initial, supersede
       toast.error("Clock out must be after clock in");
       return;
     }
-    if (!form.task_note.trim()) {
-      toast.error("Add a description for this time entry");
-      return;
-    }
     setSaving(true);
     try {
       let targetUser = user.id;
@@ -232,9 +228,6 @@ export const ManualTimeEntryDialog = ({ onSubmitted, trigger, initial, supersede
               value={form.task_note}
               onChange={(e) => setForm((f) => ({ ...f, task_note: e.target.value }))}
             />
-            <p className="text-xs text-muted-foreground mt-1">
-              Worked: {computed.total}h (break: {computed.breakMins}m) · Overtime: {computed.autoOt}h
-            </p>
           </div>
           <div>
             <Label>Reason</Label>
