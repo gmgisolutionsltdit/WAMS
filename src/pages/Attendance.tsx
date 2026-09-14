@@ -13,7 +13,8 @@ import { mergeDailySessions, sessionWorkedSeconds, type AttendanceSession } from
 import { evaluateArrival, humanMinutes, officeStart, type OfficeTime } from "@/lib/officeTime";
 import { ManualTimeEntryDialog } from "@/components/ManualTimeEntryDialog";
 import { classifyDay, DEFAULT_WEEKEND_DAYS } from "@/lib/workSchedule";
-import { Pencil } from "lucide-react";
+import { Pencil, Trash2 } from "lucide-react";
+import { toast } from "sonner";
 
 const STANDARD_HOURS = 7;
 const STANDARD_SECONDS = STANDARD_HOURS * 3600;
@@ -50,6 +51,13 @@ const Attendance = () => {
     });
   };
 
+  const deleteSession = async (id: string) => {
+    if (!window.confirm("Delete this session? This cannot be undone.")) return;
+    const { error } = await supabase.from("attendance_logs").delete().eq("id", id);
+    if (error) toast.error(error.message);
+    else { toast.success("Session deleted"); fetchData(); }
+  };
+
   useEffect(() => { fetchData(); }, [user]);
 
   useRealtimeSubscription("attendance_logs", fetchData, "attendance-page-logs");
@@ -78,19 +86,18 @@ const Attendance = () => {
                 <TableHead>Approved Time</TableHead>
                 <TableHead>Last Out</TableHead>
                 <TableHead>Sessions</TableHead>
+                <TableHead>Work Time</TableHead>
                 <TableHead>Break Time</TableHead>
-                <TableHead>Total Hours</TableHead>
                 <TableHead>Due Time</TableHead>
-                <TableHead>OT Regular</TableHead>
+                <TableHead>Overtime</TableHead>
                 <TableHead>Approved OT</TableHead>
-                <TableHead>Total Overtime</TableHead>
                 <TableHead>IP Address</TableHead>
                 <TableHead>Actions</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
               {days.length === 0 ? (
-                <TableRow><TableCell colSpan={15} className="text-center text-muted-foreground">No attendance records</TableCell></TableRow>
+                <TableRow><TableCell colSpan={14} className="text-center text-muted-foreground">No attendance records</TableCell></TableRow>
               ) : days.map((day) => {
                 const worked = day.workedSeconds;
                 const closed = !day.open && !!day.lastOut;
@@ -126,7 +133,6 @@ const Attendance = () => {
                   .reduce((sum: number, ot: any) => sum + (ot.requested_hours || 0), 0) * 3600
                   + manualApprovedOTSeconds;
                 const approvedAdjusted = Math.max(0, rawApproved - dueSeconds);
-                const totalOT = approvedAdjusted + otRegular;
                 const isOpen = !!expanded[day.key];
                 const ips = Array.from(new Set(day.sessions.map((s) => s.ip_address).filter(Boolean)));
                 return (
@@ -175,8 +181,8 @@ const Attendance = () => {
                       </TableCell>
                       <TableCell className="font-mono text-xs">{day.open ? <Badge variant="secondary">In progress</Badge> : fmtClock(day.lastOut)}</TableCell>
                       <TableCell><Badge variant="outline">{day.sessions.length}</Badge></TableCell>
-                      <TableCell className="font-mono text-xs">{day.breakSeconds > 0 ? fmtHMS(day.breakSeconds) : "—"}</TableCell>
                       <TableCell className="font-mono text-xs">{fmtHMS(worked)}</TableCell>
+                      <TableCell className="font-mono text-xs">{day.breakSeconds > 0 ? fmtHMS(day.breakSeconds) : "—"}</TableCell>
                       <TableCell>
                         {dueSeconds > 0
                           ? (
@@ -199,20 +205,20 @@ const Attendance = () => {
                             ? <span className="text-xs text-muted-foreground font-mono" title={`${fmtHMS(rawApproved)} requested, offset by due time`}>00:00:00</span>
                             : "—"}
                       </TableCell>
-                      <TableCell>
-                        {totalOT > 0
-                          ? <Badge className="bg-primary text-primary-foreground font-mono">{fmtHMS(totalOT)}</Badge>
-                          : <span className="text-muted-foreground font-mono text-xs">00:00:00</span>}
-                      </TableCell>
                       <TableCell className="text-xs text-muted-foreground">{ips.length ? ips.join(", ") : "—"}</TableCell>
                       <TableCell>
                         <ManualTimeEntryDialog
                           onSubmitted={fetchData}
+                          // Only a single-session day maps cleanly onto one
+                          // row to replace; a multi-session day adds a
+                          // correction alongside the existing sessions instead.
+                          supersedesLogId={day.sessions.length === 1 ? day.sessions[0].id : undefined}
                           initial={{
                             date: day.date,
                             clock_in: day.firstIn ? format(new Date(day.firstIn), "HH:mm") : "09:00",
                             clock_out: day.lastOut ? format(new Date(day.lastOut), "HH:mm") : "17:00",
                             break_minutes: String(Math.round(day.breakSeconds / 60)),
+                            task_note: `Correction to attendance record for ${day.date}`,
                             reason: "Correction to attendance record",
                           }}
                           trigger={
@@ -226,7 +232,7 @@ const Attendance = () => {
                     {isOpen && (
                       <TableRow className="bg-muted/40 hover:bg-muted/40">
                         <TableCell />
-                        <TableCell colSpan={14} className="p-0">
+                        <TableCell colSpan={13} className="p-0">
                           <div className="p-3">
                             <p className="text-xs font-medium text-muted-foreground mb-2">Individual sessions</p>
                             <Table>
@@ -238,6 +244,7 @@ const Attendance = () => {
                                   <TableHead>Break</TableHead>
                                   <TableHead>Duration</TableHead>
                                   <TableHead>Source</TableHead>
+                                  <TableHead>Actions</TableHead>
                                 </TableRow>
                               </TableHeader>
                               <TableBody>
@@ -255,6 +262,36 @@ const Attendance = () => {
                                         : s.clock_in ? spanToHMS(s.clock_in, new Date()) : "—"}
                                     </TableCell>
                                     <TableCell className="text-xs text-muted-foreground">{s.device_source || "web"}</TableCell>
+                                    <TableCell>
+                                      <div className="flex items-center gap-1">
+                                        <ManualTimeEntryDialog
+                                          onSubmitted={fetchData}
+                                          supersedesLogId={s.id}
+                                          initial={{
+                                            date: s.date,
+                                            clock_in: s.clock_in ? format(new Date(s.clock_in), "HH:mm") : "09:00",
+                                            clock_out: s.clock_out ? format(new Date(s.clock_out), "HH:mm") : "17:00",
+                                            break_minutes: String(Number(s.break_minutes) || 0),
+                                            task_note: `Correction to session on ${s.date}`,
+                                            reason: "Correction to this session",
+                                          }}
+                                          trigger={
+                                            <Button variant="ghost" size="icon" className="h-7 w-7" aria-label="Edit this session">
+                                              <Pencil className="h-3.5 w-3.5" />
+                                            </Button>
+                                          }
+                                        />
+                                        <Button
+                                          variant="ghost"
+                                          size="icon"
+                                          className="h-7 w-7 text-destructive hover:text-destructive"
+                                          aria-label="Delete this session"
+                                          onClick={() => deleteSession(s.id)}
+                                        >
+                                          <Trash2 className="h-3.5 w-3.5" />
+                                        </Button>
+                                      </div>
+                                    </TableCell>
                                   </TableRow>
                                 ))}
                               </TableBody>
