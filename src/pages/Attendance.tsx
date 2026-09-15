@@ -113,10 +113,10 @@ const Attendance = () => {
                   : storedArrival;
                 const requiredSeconds = dayKind.nonWorking ? 0 : STANDARD_SECONDS + arrival.penaltyMinutes * 60;
                 const dueSeconds = closed && worked < requiredSeconds ? requiredSeconds - worked : 0;
-                const autoWorkedSeconds = day.sessions
-                  .filter((s) => s.device_source !== "manual")
-                  .reduce((sum, s) => sum + sessionWorkedSeconds(s), 0);
-                const otRegular = closed && autoWorkedSeconds > requiredSeconds ? autoWorkedSeconds - requiredSeconds : 0;
+                // Counts time worked regardless of source - a manual entry
+                // represents real hours worked just as much as a punch-card
+                // session, so both push a day into overtime the same way.
+                const otRegular = closed && worked > requiredSeconds ? worked - requiredSeconds : 0;
                 const isOpen = !!expanded[day.key];
                 const ips = Array.from(new Set(day.sessions.map((s) => s.ip_address).filter(Boolean)));
                 return (
