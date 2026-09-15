@@ -32,6 +32,7 @@ const Attendance = () => {
   const [weekendDays, setWeekendDays] = useState<number[]>(DEFAULT_WEEKEND_DAYS);
   const [starting, setStarting] = useState(false);
   const [currentTime, setCurrentTime] = useState(new Date());
+  const [breakAllowance, setBreakAllowance] = useState(60);
 
   const fetchData = () => {
     if (!user) return;
@@ -39,7 +40,7 @@ const Attendance = () => {
       supabase.from("attendance_logs").select("*").eq("user_id", user.id).order("date", { ascending: false }),
       supabase.from("profiles").select("office_start_time, office_end_time, late_grace_minutes, company_wing").eq("id", user.id).maybeSingle(),
       supabase.from("holidays").select("holiday_date, name, wing"),
-      supabase.from("settings").select("weekend_days").limit(1).maybeSingle(),
+      supabase.from("settings").select("weekend_days, break_allowance_minutes").limit(1).maybeSingle(),
     ]).then(([{ data: logsData }, { data: prof }, { data: holidayRows }, { data: cfg }]) => {
       setLogs((logsData || []) as AttendanceSession[]);
       setOfficeProfile((prof as OfficeTime) || null);
@@ -51,6 +52,7 @@ const Attendance = () => {
         .forEach((h: { holiday_date: string; name: string }) => map.set(h.holiday_date, h.name));
       setHolidays(map);
       if (cfg?.weekend_days) setWeekendDays(cfg.weekend_days as number[]);
+      if (cfg?.break_allowance_minutes != null) setBreakAllowance(Number(cfg.break_allowance_minutes) || 60);
     });
   };
 
@@ -186,27 +188,49 @@ const Attendance = () => {
             Multiple punches on the same day are merged into one record — expand a row to see each session.
           </p>
         </div>
-        <div className="flex items-center justify-between gap-4 flex-wrap">
-          <div className="flex items-center gap-3">
-            {openSession && (
-              <>
-                {isOnBreak ? (
-                  <Badge variant="secondary"><Pause className="mr-1 h-3 w-3" /> On Break</Badge>
-                ) : (
-                  <Badge className="bg-success text-success-foreground hover:bg-success/90"><Timer className="mr-1 h-3 w-3" /> Working</Badge>
-                )}
-                <span className="text-lg font-mono font-semibold tabular-nums">{getRunningDuration()}</span>
-                {isOnBreak ? (
-                  <Button size="sm" variant="outline" onClick={handleBreakEnd}>
-                    <Play className="mr-1 h-4 w-4" /> Resume
-                  </Button>
-                ) : (
-                  <Button size="sm" variant="outline" onClick={handleBreakStart}>
-                    <Pause className="mr-1 h-4 w-4" /> Break
-                  </Button>
-                )}
-              </>
-            )}
+        <div className="flex items-start justify-between gap-4 flex-wrap">
+          <div className="flex flex-col gap-2">
+            <div className="flex items-center gap-3">
+              {openSession && (
+                <>
+                  {isOnBreak ? (
+                    <Badge variant="secondary"><Pause className="mr-1 h-3 w-3" /> On Break</Badge>
+                  ) : (
+                    <Badge className="bg-success text-success-foreground hover:bg-success/90"><Timer className="mr-1 h-3 w-3" /> Working</Badge>
+                  )}
+                  <span className="text-lg font-mono font-semibold tabular-nums">{getRunningDuration()}</span>
+                  {isOnBreak ? (
+                    <Button size="sm" variant="outline" onClick={handleBreakEnd}>
+                      <Play className="mr-1 h-4 w-4" /> Resume
+                    </Button>
+                  ) : (
+                    <Button size="sm" variant="outline" onClick={handleBreakStart}>
+                      <Pause className="mr-1 h-4 w-4" /> Break
+                    </Button>
+                  )}
+                </>
+              )}
+            </div>
+            {isOnBreak && openSession?.break_start && (() => {
+              // This break only — restarts at 00:00:00 each time a break
+              // begins, while earlier breaks stay in the cumulative total.
+              const currentSec = Math.max(0, (currentTime.getTime() - new Date(openSession.break_start).getTime()) / 1000);
+              const earlierSec = (Number(openSession.break_minutes) || 0) * 60;
+              const remaining = breakAllowance * 60 - (earlierSec + currentSec);
+              const over = remaining < 0;
+              return (
+                <div className="rounded-lg border bg-muted/40 p-3 text-center w-fit">
+                  <p className="text-xs text-muted-foreground">Current break</p>
+                  <p className="text-2xl font-mono font-bold">{fmtHMS(currentSec)}</p>
+                  <p className={`text-[11px] mt-1 ${over ? "text-destructive" : "text-muted-foreground"}`}>
+                    {over ? "Overrun " : "Remaining "}{fmtHMS(Math.abs(remaining))} of {breakAllowance} min
+                  </p>
+                  {earlierSec > 0 && (
+                    <p className="text-[11px] text-muted-foreground">Earlier breaks {fmtHMS(earlierSec)}</p>
+                  )}
+                </div>
+              );
+            })()}
           </div>
           <div className="flex gap-2">
             {openSession ? (
