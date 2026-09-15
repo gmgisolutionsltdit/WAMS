@@ -87,12 +87,11 @@ const Attendance = () => {
                 <TableHead>Due Time</TableHead>
                 <TableHead>OVERTIME (OT)</TableHead>
                 <TableHead>Approved OT</TableHead>
-                <TableHead>IP Address</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
               {days.length === 0 ? (
-                <TableRow><TableCell colSpan={13} className="text-center text-muted-foreground">No attendance records</TableCell></TableRow>
+                <TableRow><TableCell colSpan={12} className="text-center text-muted-foreground">No attendance records</TableCell></TableRow>
               ) : days.map((day) => {
                 const worked = day.workedSeconds;
                 const closed = !day.open && !!day.lastOut;
@@ -118,7 +117,6 @@ const Attendance = () => {
                 // session, so both push a day into overtime the same way.
                 const otRegular = closed && worked > requiredSeconds ? worked - requiredSeconds : 0;
                 const isOpen = !!expanded[day.key];
-                const ips = Array.from(new Set(day.sessions.map((s) => s.ip_address).filter(Boolean)));
                 return (
                   <Fragment key={day.key}>
                     <TableRow>
@@ -185,12 +183,11 @@ const Attendance = () => {
                       <TableCell>
                         <span className="text-muted-foreground font-mono text-xs">00:00:00</span>
                       </TableCell>
-                      <TableCell className="text-xs text-muted-foreground">{ips.length ? ips.join(", ") : "—"}</TableCell>
                     </TableRow>
                     {isOpen && (
                       <TableRow className="bg-muted/40 hover:bg-muted/40">
                         <TableCell />
-                        <TableCell colSpan={12} className="p-0">
+                        <TableCell colSpan={11} className="p-0">
                           <div className="p-3">
                             <p className="text-xs font-medium text-muted-foreground mb-2">Individual sessions</p>
                             <Table>
