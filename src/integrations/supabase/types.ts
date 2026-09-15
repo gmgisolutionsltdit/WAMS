@@ -709,13 +709,6 @@ export type Database = {
             referencedRelation: "tasks"
             referencedColumns: ["id"]
           },
-          {
-            foreignKeyName: "manual_time_requests_supersedes_log_id_fkey"
-            columns: ["supersedes_log_id"]
-            isOneToOne: false
-            referencedRelation: "attendance_logs"
-            referencedColumns: ["id"]
-          },
         ]
       }
       notices: {
