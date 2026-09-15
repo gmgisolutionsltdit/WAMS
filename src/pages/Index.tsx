@@ -473,9 +473,10 @@ const Dashboard = () => {
                   </Button>
                 </div>
               </>
-            ) : todayLog?.clock_out ? (
-              <Badge className="bg-success text-success-foreground hover:bg-success/90 text-sm">Day Complete ✓</Badge>
             ) : (
+              // Always offer Start here, even after a completed session -
+              // multiple clock-in/out cycles in one day are supported and
+              // already merged into a single history row.
               <Button size="lg" onClick={handleClockIn} disabled={loading} className="w-full bg-gradient-hero hover:opacity-90">
                 <LogIn className="mr-2 h-5 w-5" /> Start
               </Button>
