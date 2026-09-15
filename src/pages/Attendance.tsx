@@ -2,6 +2,7 @@ import { Fragment, useEffect, useState } from "react";
 import { useAuth } from "@/contexts/AuthContext";
 import { supabase } from "@/integrations/supabase/client";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { LogIn } from "lucide-react";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -15,6 +16,7 @@ import { ManualTimeEntryDialog } from "@/components/ManualTimeEntryDialog";
 import { classifyDay, DEFAULT_WEEKEND_DAYS } from "@/lib/workSchedule";
 import { Pencil, Trash2 } from "lucide-react";
 import { toast } from "sonner";
+import { notifyManagersAndAdmins } from "@/lib/notifications";
 
 const STANDARD_HOURS = 7;
 const STANDARD_SECONDS = STANDARD_HOURS * 3600;
@@ -26,6 +28,7 @@ const Attendance = () => {
   const [officeProfile, setOfficeProfile] = useState<OfficeTime | null>(null);
   const [holidays, setHolidays] = useState<Map<string, string>>(new Map());
   const [weekendDays, setWeekendDays] = useState<number[]>(DEFAULT_WEEKEND_DAYS);
+  const [starting, setStarting] = useState(false);
 
   const fetchData = () => {
     if (!user) return;
@@ -55,6 +58,51 @@ const Attendance = () => {
     else { toast.success("Session deleted"); fetchData(); }
   };
 
+  /** Same clock-in path as the dashboard's Start button — holiday/weekend
+   * aware, records a late penalty when it applies. */
+  const handleStart = async () => {
+    if (!user) return;
+    const today = format(new Date(), "yyyy-MM-dd");
+    const hasOpenSession = logs.some((l) => l.date === today && l.clock_in && !l.clock_out);
+    if (hasOpenSession) {
+      toast.error("You already have an open session today — close it before starting a new one.");
+      return;
+    }
+    setStarting(true);
+    const now = new Date();
+    const dayKind = classifyDay(today, holidays, weekendDays);
+    const arrival = dayKind.nonWorking
+      ? { late: false, lateMinutes: 0, penaltyMinutes: 0 }
+      : evaluateArrival(now, officeProfile);
+    const { error } = await supabase.from("attendance_logs").insert({
+      user_id: user.id,
+      date: today,
+      clock_in: now.toISOString(),
+      device_source: "web",
+      late_minutes: arrival.lateMinutes,
+      penalty_minutes: arrival.penaltyMinutes,
+      approved_start_time: now.toISOString(),
+      penalty_reviewed: true,
+    });
+    if (error) toast.error(error.message);
+    else if (arrival.late) {
+      toast.warning(
+        `Clocked in ${humanMinutes(arrival.lateMinutes)} late — an extra ${humanMinutes(arrival.penaltyMinutes)} of work has been added to today's requirement.`,
+      );
+      await notifyManagersAndAdmins(
+        "Late Arrival Penalty Applied",
+        `${user.email} clocked in ${humanMinutes(arrival.lateMinutes)} late today. A ${humanMinutes(arrival.penaltyMinutes)} penalty was added automatically.`,
+        undefined,
+        { route: "/attendance", type: "late_arrival", requesterId: user.id },
+      );
+      fetchData();
+    } else {
+      toast.success("Clocked in!");
+      fetchData();
+    }
+    setStarting(false);
+  };
+
   useEffect(() => { fetchData(); }, [user]);
 
   useRealtimeSubscription("attendance_logs", fetchData, "attendance-page-logs");
@@ -64,11 +112,19 @@ const Attendance = () => {
 
   return (
     <Card>
-      <CardHeader>
-        <CardTitle>My Attendance History</CardTitle>
-        <p className="text-xs text-muted-foreground">
-          Multiple punches on the same day are merged into one record — expand a row to see each session.
-        </p>
+      <CardHeader className="flex flex-row items-start justify-between gap-4 flex-wrap">
+        <div>
+          <CardTitle>My Attendance History</CardTitle>
+          <p className="text-xs text-muted-foreground">
+            Multiple punches on the same day are merged into one record — expand a row to see each session.
+          </p>
+        </div>
+        <div className="flex gap-2">
+          <Button size="sm" onClick={handleStart} disabled={starting}>
+            <LogIn className="mr-1 h-4 w-4" /> Start
+          </Button>
+          <ManualTimeEntryDialog onSubmitted={fetchData} />
+        </div>
       </CardHeader>
       <CardContent>
         <div className="overflow-x-auto">
