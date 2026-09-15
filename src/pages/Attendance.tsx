@@ -2,7 +2,7 @@ import { Fragment, useEffect, useState } from "react";
 import { useAuth } from "@/contexts/AuthContext";
 import { supabase } from "@/integrations/supabase/client";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { LogIn } from "lucide-react";
+import { LogIn, LogOut, Pause, Play, Timer } from "lucide-react";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -13,13 +13,15 @@ import { fmtHMS, fmtClock, spanToHMS } from "@/lib/time";
 import { mergeDailySessions, sessionWorkedSeconds, type AttendanceSession } from "@/lib/attendance";
 import { evaluateArrival, humanMinutes, officeStart, type OfficeTime } from "@/lib/officeTime";
 import { ManualTimeEntryDialog } from "@/components/ManualTimeEntryDialog";
-import { classifyDay, DEFAULT_WEEKEND_DAYS } from "@/lib/workSchedule";
+import { classifyDay, computeDailyTotals, DEFAULT_WEEKEND_DAYS } from "@/lib/workSchedule";
 import { Pencil, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 import { notifyManagersAndAdmins } from "@/lib/notifications";
 
 const STANDARD_HOURS = 7;
 const STANDARD_SECONDS = STANDARD_HOURS * 3600;
+
+const localToday = () => format(new Date(), "yyyy-MM-dd");
 
 const Attendance = () => {
   const { user } = useAuth();
@@ -29,6 +31,7 @@ const Attendance = () => {
   const [holidays, setHolidays] = useState<Map<string, string>>(new Map());
   const [weekendDays, setWeekendDays] = useState<number[]>(DEFAULT_WEEKEND_DAYS);
   const [starting, setStarting] = useState(false);
+  const [currentTime, setCurrentTime] = useState(new Date());
 
   const fetchData = () => {
     if (!user) return;
@@ -62,7 +65,7 @@ const Attendance = () => {
    * aware, records a late penalty when it applies. */
   const handleStart = async () => {
     if (!user) return;
-    const today = format(new Date(), "yyyy-MM-dd");
+    const today = localToday();
     const hasOpenSession = logs.some((l) => l.date === today && l.clock_in && !l.clock_out);
     if (hasOpenSession) {
       toast.error("You already have an open session today — close it before starting a new one.");
@@ -103,7 +106,71 @@ const Attendance = () => {
     setStarting(false);
   };
 
+  const openSession = logs.find((l) => l.date === localToday() && l.clock_in && !l.clock_out);
+  const isOnBreak = !!(openSession && openSession.break_start && !openSession.break_end);
+
+  const handleClose = async () => {
+    if (!user || !openSession) return;
+    setStarting(true);
+    const now = new Date();
+    const totals = computeDailyTotals({
+      clockIn: openSession.clock_in,
+      clockOut: now,
+      breakMinutes: Number(openSession.break_minutes) || 0,
+    });
+    const { error } = await supabase.from("attendance_logs").update({
+      clock_out: now.toISOString(),
+      total_hours: totals.totalHours,
+      overtime_hours: totals.overtimeHours,
+      break_start: null,
+      break_end: null,
+    }).eq("id", openSession.id);
+    if (error) toast.error(error.message);
+    else { toast.success(`Clocked out! Total: ${totals.totalHours}h`); fetchData(); }
+    setStarting(false);
+  };
+
+  const handleBreakStart = async () => {
+    if (!user || !openSession) return;
+    const { error } = await supabase.from("attendance_logs").update({
+      break_start: new Date().toISOString(),
+      break_end: null,
+    }).eq("id", openSession.id);
+    if (error) toast.error(error.message);
+    else { toast.success("Break started"); fetchData(); }
+  };
+
+  const handleBreakEnd = async () => {
+    if (!user || !openSession || !openSession.break_start) return;
+    const now = new Date();
+    const breakSecs = Math.max(0, Math.round((now.getTime() - new Date(openSession.break_start).getTime()) / 1000));
+    const totalBreak = Math.round(((Number(openSession.break_minutes) || 0) + breakSecs / 60) * 10000) / 10000;
+    const { error } = await supabase.from("attendance_logs").update({
+      break_end: now.toISOString(),
+      break_start: null,
+      break_minutes: totalBreak,
+    }).eq("id", openSession.id);
+    if (error) toast.error(error.message);
+    else { toast.success(`Break ended (${fmtHMS(breakSecs)})`); fetchData(); }
+  };
+
+  /** Continuously ticks so the Working duration in the header updates live. */
+  const getRunningDuration = () => {
+    if (!openSession) return "00:00:00";
+    let elapsed = (currentTime.getTime() - new Date(openSession.clock_in).getTime()) / 1000;
+    elapsed -= (Number(openSession.break_minutes) || 0) * 60;
+    if (isOnBreak && openSession.break_start) {
+      elapsed -= (currentTime.getTime() - new Date(openSession.break_start).getTime()) / 1000;
+    }
+    return fmtHMS(Math.max(0, elapsed));
+  };
+
   useEffect(() => { fetchData(); }, [user]);
+
+  useEffect(() => {
+    const timer = setInterval(() => setCurrentTime(new Date()), 1000);
+    return () => clearInterval(timer);
+  }, []);
 
   useRealtimeSubscription("attendance_logs", fetchData, "attendance-page-logs");
 
@@ -112,18 +179,47 @@ const Attendance = () => {
 
   return (
     <Card>
-      <CardHeader className="flex flex-row items-start justify-between gap-4 flex-wrap">
+      <CardHeader className="flex flex-col gap-3">
         <div>
           <CardTitle>My Attendance History</CardTitle>
           <p className="text-xs text-muted-foreground">
             Multiple punches on the same day are merged into one record — expand a row to see each session.
           </p>
         </div>
-        <div className="flex gap-2">
-          <Button size="sm" onClick={handleStart} disabled={starting}>
-            <LogIn className="mr-1 h-4 w-4" /> Start
-          </Button>
-          <ManualTimeEntryDialog onSubmitted={fetchData} />
+        <div className="flex items-center justify-between gap-4 flex-wrap">
+          <div className="flex items-center gap-3">
+            {openSession && (
+              <>
+                {isOnBreak ? (
+                  <Badge variant="secondary"><Pause className="mr-1 h-3 w-3" /> On Break</Badge>
+                ) : (
+                  <Badge className="bg-success text-success-foreground hover:bg-success/90"><Timer className="mr-1 h-3 w-3" /> Working</Badge>
+                )}
+                <span className="text-lg font-mono font-semibold tabular-nums">{getRunningDuration()}</span>
+                {isOnBreak ? (
+                  <Button size="sm" variant="outline" onClick={handleBreakEnd}>
+                    <Play className="mr-1 h-4 w-4" /> Resume
+                  </Button>
+                ) : (
+                  <Button size="sm" variant="outline" onClick={handleBreakStart}>
+                    <Pause className="mr-1 h-4 w-4" /> Break
+                  </Button>
+                )}
+              </>
+            )}
+          </div>
+          <div className="flex gap-2">
+            {openSession ? (
+              <Button size="sm" variant="destructive" onClick={handleClose} disabled={starting || isOnBreak}>
+                <LogOut className="mr-1 h-4 w-4" /> Close
+              </Button>
+            ) : (
+              <Button size="sm" onClick={handleStart} disabled={starting}>
+                <LogIn className="mr-1 h-4 w-4" /> Start
+              </Button>
+            )}
+            <ManualTimeEntryDialog onSubmitted={fetchData} />
+          </div>
         </div>
       </CardHeader>
       <CardContent>
