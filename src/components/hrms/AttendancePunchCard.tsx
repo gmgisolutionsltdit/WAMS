@@ -139,7 +139,7 @@ export function AttendancePunchCard() {
   };
 
   const isOpen = !!(todayLog?.clock_in && !todayLog?.clock_out);
-  const buttonLabel = busy ? "Saving…" : scanning ? "Verifying…" : isOpen ? "Clock Out" : "Clock In";
+  const buttonLabel = busy ? "Saving…" : scanning ? "Verifying…" : isOpen ? "Close" : "Start";
 
   return (
     <Card className="shadow-card border-slate-200 overflow-hidden">

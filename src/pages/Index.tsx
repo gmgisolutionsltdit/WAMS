@@ -469,7 +469,7 @@ const Dashboard = () => {
                     </Button>
                   )}
                   <Button size="sm" variant="destructive" onClick={handleClockOut} disabled={loading || isOnBreak} className="flex-1">
-                    <LogOut className="mr-1 h-4 w-4" /> Clock Out
+                    <LogOut className="mr-1 h-4 w-4" /> Close
                   </Button>
                 </div>
               </>
@@ -477,7 +477,7 @@ const Dashboard = () => {
               <Badge className="bg-success text-success-foreground hover:bg-success/90 text-sm">Day Complete ✓</Badge>
             ) : (
               <Button size="lg" onClick={handleClockIn} disabled={loading} className="w-full bg-gradient-hero hover:opacity-90">
-                <LogIn className="mr-2 h-5 w-5" /> Clock In
+                <LogIn className="mr-2 h-5 w-5" /> Start
               </Button>
             )}
           </CardContent>
