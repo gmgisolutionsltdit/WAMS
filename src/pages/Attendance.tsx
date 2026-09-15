@@ -78,9 +78,9 @@ const Attendance = () => {
                 <TableHead className="w-8" />
                 <TableHead>Date</TableHead>
                 <TableHead>Status</TableHead>
-                <TableHead>First In</TableHead>
+                <TableHead>Start</TableHead>
                 <TableHead>Approved Time</TableHead>
-                <TableHead>Last Out</TableHead>
+                <TableHead>Close</TableHead>
                 <TableHead>Sessions</TableHead>
                 <TableHead>Work Time</TableHead>
                 <TableHead>Break Time</TableHead>

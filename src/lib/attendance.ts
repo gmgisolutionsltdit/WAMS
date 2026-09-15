@@ -55,9 +55,13 @@ export type MergedDay<T extends AttendanceSession = AttendanceSession> = {
   profiles?: unknown;
 };
 
-/** Worked seconds for a single session (falls back to clock in/out span). */
+/**
+ * Worked seconds for a single session, computed from the raw clock in/out
+ * span minus the break rather than from the stored total_hours - that
+ * column is rounded to 2 decimal hours (36-second granularity), which
+ * silently dropped real seconds from the displayed duration.
+ */
 export const sessionWorkedSeconds = (s: AttendanceSession, now = new Date()): number => {
-  if (s.total_hours != null && s.clock_out) return Math.max(0, Number(s.total_hours) * 3600);
   if (!s.clock_in) return 0;
   const end = s.clock_out ? new Date(s.clock_out).getTime() : now.getTime();
   const raw = (end - new Date(s.clock_in).getTime()) / 1000;
