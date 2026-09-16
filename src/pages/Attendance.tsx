@@ -255,7 +255,7 @@ const Attendance = () => {
                 <TableHead>Date</TableHead>
                 <TableHead>Status</TableHead>
                 <TableHead>Start</TableHead>
-                <TableHead>Approved Time</TableHead>
+                <TableHead>Approved Start Time</TableHead>
                 <TableHead>Close</TableHead>
                 <TableHead>Sessions</TableHead>
                 <TableHead>Work Time</TableHead>

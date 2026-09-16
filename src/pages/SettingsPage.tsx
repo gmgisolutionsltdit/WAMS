@@ -6,6 +6,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Switch } from "@/components/ui/switch";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { toast } from "sonner";
 import { Settings as SettingsIcon, CalendarHeart } from "lucide-react";
 import { useRealtimeSubscription } from "@/hooks/useRealtimeSubscription";
@@ -64,6 +65,7 @@ const SettingsPage = () => {
       office_end_time: settings.office_end_time,
       weekend_days: settings.weekend_days,
       break_allowance_minutes: Number(settings.break_allowance_minutes) || 0,
+      start_time_approver_role: settings.start_time_approver_role || "admin",
     }).eq("id", settings.id);
     if (error) toast.error(error.message);
     else toast.success("Settings saved");
@@ -133,6 +135,23 @@ const SettingsPage = () => {
                   </label>
                 ))}
               </div>
+            </div>
+
+            <div className="space-y-2">
+              <Label>Who can approve Start Time</Label>
+              <Select
+                value={settings.start_time_approver_role || "admin"}
+                onValueChange={(v) => setSettings({ ...settings, start_time_approver_role: v })}
+              >
+                <SelectTrigger><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="admin">Admin only</SelectItem>
+                  <SelectItem value="manager_or_admin">Reporting manager or Admin</SelectItem>
+                </SelectContent>
+              </Select>
+              <p className="text-xs text-muted-foreground">
+                Controls who can approve a waived late-arrival penalty (Approve Start Time).
+              </p>
             </div>
           </CardContent>
         </Card>

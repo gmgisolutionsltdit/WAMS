@@ -33,6 +33,7 @@ const Approvals = () => {
   const [names, setNames] = useState<Record<string, string>>({});
   const [notes, setNotes] = useState<Record<string, string>>({});
   const [manualOT, setManualOT] = useState<Record<string, string>>({});
+  const [startTimeApproverRole, setStartTimeApproverRole] = useState("admin");
 
   const [editOpen, setEditOpen] = useState(false);
   const [editReq, setEditReq] = useState<any>(null);
@@ -59,6 +60,9 @@ const Approvals = () => {
     setHistory(resolved || []);
     setManualPending(manualReqs || []);
     setLatePending(lateReqs || []);
+
+    const { data: cfg } = await supabase.from("settings").select("start_time_approver_role").limit(1).maybeSingle();
+    setStartTimeApproverRole((cfg as { start_time_approver_role?: string } | null)?.start_time_approver_role || "admin");
 
     const ids = Array.from(new Set([...(manualReqs || []), ...(lateReqs || [])].map((r: any) => r.user_id)));
     if (ids.length) {
@@ -369,12 +373,18 @@ const Approvals = () => {
                     />
                   </TableCell>
                   <TableCell className="space-x-1 whitespace-nowrap">
-                    <Button size="sm" className="bg-lime-500 hover:bg-lime-600 text-white" onClick={() => decideLate(req, "approved")}>
-                      <Check className="h-4 w-4 mr-1" /> Approve
-                    </Button>
-                    <Button size="sm" className="bg-[#FF6347] hover:bg-[#E5533D] text-white" onClick={() => decideLate(req, "rejected")}>
-                      <X className="h-4 w-4 mr-1" /> Reject
-                    </Button>
+                    {req.request_type === "late_adjustment" && role !== "admin" && startTimeApproverRole === "admin" ? (
+                      <span className="text-xs text-muted-foreground">Admin approval required</span>
+                    ) : (
+                      <>
+                        <Button size="sm" className="bg-lime-500 hover:bg-lime-600 text-white" onClick={() => decideLate(req, "approved")}>
+                          <Check className="h-4 w-4 mr-1" /> Approve
+                        </Button>
+                        <Button size="sm" className="bg-[#FF6347] hover:bg-[#E5533D] text-white" onClick={() => decideLate(req, "rejected")}>
+                          <X className="h-4 w-4 mr-1" /> Reject
+                        </Button>
+                      </>
+                    )}
                   </TableCell>
                 </TableRow>
               ))}
