@@ -1181,6 +1181,7 @@ export type Database = {
           office_end_time: string
           office_start_time: string
           standard_shift_hours: number
+          start_time_approver_role: string
           tax_enabled: boolean | null
           tax_slabs: Json | null
           updated_at: string
@@ -1197,6 +1198,7 @@ export type Database = {
           office_end_time?: string
           office_start_time?: string
           standard_shift_hours?: number
+          start_time_approver_role?: string
           tax_enabled?: boolean | null
           tax_slabs?: Json | null
           updated_at?: string
@@ -1213,6 +1215,7 @@ export type Database = {
           office_end_time?: string
           office_start_time?: string
           standard_shift_hours?: number
+          start_time_approver_role?: string
           tax_enabled?: boolean | null
           tax_slabs?: Json | null
           updated_at?: string
