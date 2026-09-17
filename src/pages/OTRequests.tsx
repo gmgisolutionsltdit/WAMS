@@ -17,6 +17,7 @@ import { notifyManagersAndAdmins, notifyEmployee } from "@/lib/notifications";
 import { applyOTFulfillment } from "@/lib/otFulfillment";
 import DailyWorkLogDialog from "@/components/DailyWorkLogDialog";
 import TimeWithMeridiem from "@/components/TimeWithMeridiem";
+import LateTimeRequestDialog from "@/components/LateTimeRequestDialog";
 import { min48hDateISO, max2DaysAheadISO, isWithin48h, canBypass48h, RETRO_LOCK_MESSAGE } from "@/lib/dateRules";
 
 /** Color helper for OT status badges */
@@ -41,6 +42,8 @@ const OTRequests = () => {
   const [manualHours, setManualHours] = useState("");
   const [reason, setReason] = useState("");
   const [loading, setLoading] = useState(false);
+
+  const [officeTimes, setOfficeTimes] = useState<{ start: string | null; end: string | null }>({ start: null, end: null });
 
   const [editOpen, setEditOpen] = useState(false);
   const [editReq, setEditReq] = useState<any>(null);
@@ -89,6 +92,14 @@ const OTRequests = () => {
     fetchRequests();
     fetchPendingRequests();
   }, [fetchRequests, fetchPendingRequests]);
+
+  useEffect(() => {
+    if (!user) return;
+    supabase.from("profiles").select("office_start_time, office_end_time").eq("id", user.id).maybeSingle()
+      .then(({ data }) => {
+        if (data) setOfficeTimes({ start: data.office_start_time, end: data.office_end_time });
+      });
+  }, [user]);
 
   useRealtimeSubscription("overtime_requests", () => {
     fetchRequests();
@@ -210,7 +221,8 @@ const OTRequests = () => {
 
   return (
     <div className="space-y-6">
-      <div className="flex justify-end">
+      <div className="flex justify-end gap-2">
+        <LateTimeRequestDialog officeStartTime={officeTimes.start} officeEndTime={officeTimes.end} onSubmitted={fetchRequests} />
         <DailyWorkLogDialog />
       </div>
 

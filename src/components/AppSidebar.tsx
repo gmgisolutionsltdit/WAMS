@@ -19,7 +19,7 @@ import { Button } from "@/components/ui/button";
 const employeeItems = [
   { title: "Dashboard", url: "/", icon: LayoutDashboard },
   { title: "My Attendance", url: "/attendance", icon: CalendarDays },
-  { title: "OT Requests", url: "/ot-requests", icon: FileText },
+  { title: "Requests", url: "/ot-requests", icon: FileText },
   { title: "Leave", url: "/leave", icon: Plane },
   { title: "Expenses", url: "/expenses", icon: Receipt },
   { title: "Notice Board", url: "/notices", icon: Megaphone },
