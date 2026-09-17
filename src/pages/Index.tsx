@@ -62,9 +62,11 @@ const Dashboard = () => {
     start: DEFAULT_OFFICE_START, end: DEFAULT_OFFICE_END, grace: 11,
   });
   const [workSchedule, setWorkSchedule] = useState<WorkSchedule | null>(null);
-  // Org-wide default from Settings > Office Hours - only used when this
-  // employee has no profile-specific office_start_time of their own (i.e.
-  // no approved office-time-change request has overridden it yet).
+  // Lateness (and the Approved Start Time default on Attendance History) is
+  // judged against this org-wide Settings office start time. A per-day
+  // approval (late_adjustment or office_time_change) instead sets that
+  // specific day's attendance_logs.approved_start_time, so it never leaks
+  // into every other day's default.
   const [settingsOfficeStart, setSettingsOfficeStart] = useState<string>(DEFAULT_OFFICE_START);
 
 
@@ -78,9 +80,7 @@ const Dashboard = () => {
     })();
   }, []);
 
-  // A profile-specific office_start_time (set by an approved office-time-change
-  // request) always wins over the org-wide Settings default.
-  const effectiveOfficeStart = workSchedule?.office_start_time || settingsOfficeStart;
+  const effectiveOfficeStart = settingsOfficeStart;
 
 
   useEffect(() => {
