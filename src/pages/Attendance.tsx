@@ -61,12 +61,12 @@ const Attendance = () => {
     });
   };
 
-  // A profile-specific office_start_time (set by an approved office-time-change
-  // request) always wins over the org-wide Settings default.
-  const effectiveOfficeProfile: OfficeTime = {
-    ...officeProfile,
-    office_start_time: officeProfile?.office_start_time || settingsOfficeStart,
-  };
+  // Lateness (and Approved Start Time's default, when no day-specific
+  // approval overrides it) is judged against the org-wide Settings office
+  // start time. A per-day approval (late_adjustment or office_time_change)
+  // instead sets that specific day's attendance_logs.approved_start_time,
+  // so it never leaks into every other day's default.
+  const effectiveOfficeProfile: OfficeTime = { ...officeProfile, office_start_time: settingsOfficeStart };
 
   const deleteSession = async (id: string) => {
     if (!window.confirm("Delete this session? This cannot be undone.")) return;
