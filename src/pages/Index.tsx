@@ -62,6 +62,10 @@ const Dashboard = () => {
     start: DEFAULT_OFFICE_START, end: DEFAULT_OFFICE_END, grace: 11,
   });
   const [workSchedule, setWorkSchedule] = useState<WorkSchedule | null>(null);
+  // Org-wide default from Settings > Office Hours - only used when this
+  // employee has no profile-specific office_start_time of their own (i.e.
+  // no approved office-time-change request has overridden it yet).
+  const [settingsOfficeStart, setSettingsOfficeStart] = useState<string>(DEFAULT_OFFICE_START);
 
 
   useEffect(() => {
@@ -69,14 +73,14 @@ const Dashboard = () => {
       const { data } = await supabase.from("settings").select("break_allowance_minutes, standard_shift_hours, office_start_time").limit(1).maybeSingle();
       if (data) {
         setBreakAllowance(Number(data.break_allowance_minutes) || 60);
-        // Lateness is judged against the org-wide Settings office start
-        // time, not the per-employee profile value.
-        const start = (data.office_start_time as string | null)?.slice(0, 5) || DEFAULT_OFFICE_START;
-        setOfficeTimes((prev) => ({ ...prev, start }));
-        setWorkSchedule((prev) => ({ ...prev, office_start_time: start }));
+        setSettingsOfficeStart((data.office_start_time as string | null)?.slice(0, 5) || DEFAULT_OFFICE_START);
       }
     })();
   }, []);
+
+  // A profile-specific office_start_time (set by an approved office-time-change
+  // request) always wins over the org-wide Settings default.
+  const effectiveOfficeStart = workSchedule?.office_start_time || settingsOfficeStart;
 
 
   useEffect(() => {
@@ -153,7 +157,7 @@ const Dashboard = () => {
     // rewrites what was actually owed for this specific day.
     const arrival = nonWorkingDay
       ? { late: false, lateMinutes: 0, penaltyMinutes: 0 }
-      : evaluateArrival(now, workSchedule);
+      : evaluateArrival(now, { ...workSchedule, office_start_time: effectiveOfficeStart });
     const { error } = await supabase.from("attendance_logs").insert({
       user_id: user.id,
       date: today,
@@ -531,7 +535,7 @@ const Dashboard = () => {
         <CardContent className="flex flex-wrap gap-2">
           <ManualTimeEntryDialog onSubmitted={() => { fetchEmployeeData(); fetchAdminData(); }} />
           <LateTimeRequestDialog
-            officeStartTime={officeTimes.start}
+            officeStartTime={effectiveOfficeStart}
             officeEndTime={officeTimes.end}
           />
         </CardContent>

@@ -61,9 +61,12 @@ const Attendance = () => {
     });
   };
 
-  // Lateness is judged against the org-wide Settings office start time, not
-  // the per-employee profile value.
-  const effectiveOfficeProfile: OfficeTime = { ...officeProfile, office_start_time: settingsOfficeStart };
+  // A profile-specific office_start_time (set by an approved office-time-change
+  // request) always wins over the org-wide Settings default.
+  const effectiveOfficeProfile: OfficeTime = {
+    ...officeProfile,
+    office_start_time: officeProfile?.office_start_time || settingsOfficeStart,
+  };
 
   const deleteSession = async (id: string) => {
     if (!window.confirm("Delete this session? This cannot be undone.")) return;
@@ -355,8 +358,10 @@ const Attendance = () => {
                           </Badge>
                         ) : (
                           // No waiver on this day - Approved Start Time defaults to
-                          // the org's official Office Start Time from Settings.
-                          fmtClock(`${day.date}T${settingsOfficeStart}:00`)
+                          // this employee's office start time (their profile
+                          // override if an office-time-change was approved for
+                          // them, else the org's Settings default).
+                          fmtClock(`${day.date}T${officeStart(effectiveOfficeProfile).slice(0, 5)}:00`)
                         )}
                       </TableCell>
                       <TableCell className="font-mono text-xs">{day.open ? <Badge variant="secondary">In progress</Badge> : fmtClock(day.lastOut)}</TableCell>
