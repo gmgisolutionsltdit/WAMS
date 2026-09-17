@@ -248,7 +248,7 @@ const Attendance = () => {
       </CardHeader>
       <CardContent>
         <div className="overflow-x-auto">
-          <Table>
+          <Table className="min-w-[1400px]">
             <TableHeader>
               <TableRow>
                 <TableHead className="w-8" />
@@ -263,11 +263,13 @@ const Attendance = () => {
                 <TableHead>Due Time</TableHead>
                 <TableHead>OVERTIME (OT)</TableHead>
                 <TableHead>Approved OT</TableHead>
+                <TableHead>GMGI Time</TableHead>
+                <TableHead>GM Time</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
               {days.length === 0 ? (
-                <TableRow><TableCell colSpan={12} className="text-center text-muted-foreground">No attendance records</TableCell></TableRow>
+                <TableRow><TableCell colSpan={14} className="text-center text-muted-foreground">No attendance records</TableCell></TableRow>
               ) : days.map((day) => {
                 const worked = day.workedSeconds;
                 const closed = !day.open && !!day.lastOut;
@@ -275,8 +277,14 @@ const Attendance = () => {
                 // adjusted by an approval) carries its own authoritative
                 // penalty; older rows fall back to a live recomputation.
                 const liveArrival = evaluateArrival(day.firstIn, officeProfile);
+                // penalty_minutes is the authoritative, approval-adjusted
+                // figure once reviewed - late_minutes is cleared alongside it
+                // by the approval trigger when the penalty is fully waived,
+                // so "late" is driven by the penalty rather than a stale
+                // late_minutes that could otherwise keep the Late badge (and
+                // Due Time) showing after Approve Start Time was granted.
                 const storedArrival = day.penaltyReviewed
-                  ? { late: day.penaltyMinutes > 0 || day.lateMinutes > 0, lateMinutes: day.lateMinutes, penaltyMinutes: day.penaltyMinutes }
+                  ? { late: day.penaltyMinutes > 0, lateMinutes: day.lateMinutes, penaltyMinutes: day.penaltyMinutes }
                   : liveArrival;
                 // On a holiday or weekend there is no shift to be late for and
                 // no standard hours to meet, so every hour worked is overtime.
@@ -286,7 +294,12 @@ const Attendance = () => {
                 const arrival = dayKind.nonWorking
                   ? { late: false, lateMinutes: 0, penaltyMinutes: 0 }
                   : storedArrival;
-                const requiredSeconds = dayKind.nonWorking ? 0 : STANDARD_SECONDS + arrival.penaltyMinutes * 60;
+                // Due Time = the late arrival itself (time already lost) plus
+                // the 2h40m late penalty, on top of the standard shift -
+                // both drop to 0 once Approve Start Time waives the penalty.
+                const requiredSeconds = dayKind.nonWorking
+                  ? 0
+                  : STANDARD_SECONDS + (arrival.lateMinutes + arrival.penaltyMinutes) * 60;
                 const dueSeconds = closed && worked < requiredSeconds ? requiredSeconds - worked : 0;
                 // Counts time worked regardless of source - a manual entry
                 // represents real hours worked just as much as a punch-card
@@ -359,11 +372,13 @@ const Attendance = () => {
                       <TableCell>
                         <span className="text-muted-foreground font-mono text-xs">00:00:00</span>
                       </TableCell>
+                      <TableCell className="font-mono text-xs">{day.gmgiTime > 0 ? `${day.gmgiTime}h` : "—"}</TableCell>
+                      <TableCell className="font-mono text-xs">{day.gmTime > 0 ? `${day.gmTime}h` : "—"}</TableCell>
                     </TableRow>
                     {isOpen && (
                       <TableRow className="bg-muted/40 hover:bg-muted/40">
                         <TableCell />
-                        <TableCell colSpan={11} className="p-0">
+                        <TableCell colSpan={13} className="p-0">
                           <div className="p-3">
                             <p className="text-xs font-medium text-muted-foreground mb-2">Individual sessions</p>
                             <Table>

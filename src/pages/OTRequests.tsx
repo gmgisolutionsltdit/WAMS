@@ -17,7 +17,7 @@ import { notifyManagersAndAdmins, notifyEmployee } from "@/lib/notifications";
 import { applyOTFulfillment } from "@/lib/otFulfillment";
 import DailyWorkLogDialog from "@/components/DailyWorkLogDialog";
 import TimeWithMeridiem from "@/components/TimeWithMeridiem";
-import { min48hDateISO, isWithin48h, canBypass48h, RETRO_LOCK_MESSAGE } from "@/lib/dateRules";
+import { min48hDateISO, max2DaysAheadISO, isWithin48h, canBypass48h, RETRO_LOCK_MESSAGE } from "@/lib/dateRules";
 
 /** Color helper for OT status badges */
 const otStatusStyle = (status: string) => {
@@ -37,6 +37,8 @@ const OTRequests = () => {
   const [date, setDate] = useState(format(new Date(), "yyyy-MM-dd"));
   const [startTime, setStartTime] = useState("");
   const [endTime, setEndTime] = useState("");
+  const [useCurrentTime, setUseCurrentTime] = useState(false);
+  const [manualHours, setManualHours] = useState("");
   const [reason, setReason] = useState("");
   const [loading, setLoading] = useState(false);
 
@@ -45,15 +47,19 @@ const OTRequests = () => {
   const [editHours, setEditHours] = useState("");
 
   const calculatedHours = useMemo(() => {
+    if (useCurrentTime) {
+      const h = parseFloat(manualHours);
+      return h > 0 ? Math.round(h * 100) / 100 : "";
+    }
     if (!startTime || !endTime) return "";
     const [sh, sm] = startTime.split(":").map(Number);
     const [eh, em] = endTime.split(":").map(Number);
-    let startMin = sh * 60 + sm;
+    const startMin = sh * 60 + sm;
     let endMin = eh * 60 + em;
     if (endMin <= startMin) endMin += 24 * 60;
     const diff = (endMin - startMin) / 60;
     return Math.round(diff * 100) / 100;
-  }, [startTime, endTime]);
+  }, [useCurrentTime, manualHours, startTime, endTime]);
 
   const fetchRequests = useCallback(async () => {
     if (!user) return;
@@ -92,7 +98,10 @@ const OTRequests = () => {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!user) return;
-    if (!calculatedHours || calculatedHours <= 0) { toast.error("Please enter valid start and end times"); return; }
+    if (!calculatedHours || calculatedHours <= 0) {
+      toast.error(useCurrentTime ? "Please enter valid hours" : "Please enter valid start and end times");
+      return;
+    }
     if (!canBypass48h(role) && !isWithin48h(date)) { toast.error(RETRO_LOCK_MESSAGE); return; }
     setLoading(true);
     const { data, error } = await supabase
@@ -111,6 +120,7 @@ const OTRequests = () => {
       );
       setStartTime("");
       setEndTime("");
+      setManualHours("");
       setReason("");
       fetchRequests();
     }
@@ -216,11 +226,12 @@ const OTRequests = () => {
                   type="date"
                   value={date}
                   min={canBypass48h(role) ? undefined : min48hDateISO()}
+                  max={max2DaysAheadISO()}
                   onChange={(e) => setDate(e.target.value)}
                   required
                 />
                 {!canBypass48h(role) && (
-                  <p className="text-xs text-muted-foreground">Limited to the last 48 hours.</p>
+                  <p className="text-xs text-muted-foreground">Limited to the last 48 hours, up to 2 days ahead.</p>
                 )}
               </div>
               <div className="space-y-2">
@@ -233,11 +244,34 @@ const OTRequests = () => {
                 />
               </div>
             </div>
-            <div className="grid gap-4 md:grid-cols-2">
-              <TimeWithMeridiem label="Start Time" value={startTime} onChange={setStartTime} required />
-              <TimeWithMeridiem label="End Time" value={endTime} onChange={setEndTime} required />
-            </div>
-            {startTime && endTime && calculatedHours && (
+            <label className="flex items-center gap-2 text-sm">
+              <input
+                type="checkbox"
+                checked={useCurrentTime}
+                onChange={(e) => setUseCurrentTime(e.target.checked)}
+                className="h-4 w-4"
+              />
+              Send with current time only (skip start/end time, enter hours directly)
+            </label>
+            {useCurrentTime ? (
+              <div className="space-y-2">
+                <Label>Hours</Label>
+                <Input
+                  type="number" step="0.5" min="0.5"
+                  value={manualHours}
+                  onChange={(e) => setManualHours(e.target.value)}
+                  placeholder="e.g. 2"
+                  required
+                />
+                <p className="text-xs text-muted-foreground">Request timestamped at the current time — no start/end time required.</p>
+              </div>
+            ) : (
+              <div className="grid gap-4 md:grid-cols-2">
+                <TimeWithMeridiem label="Start Time" value={startTime} onChange={setStartTime} required />
+                <TimeWithMeridiem label="End Time" value={endTime} onChange={setEndTime} required />
+              </div>
+            )}
+            {!useCurrentTime && startTime && endTime && calculatedHours && (
               <p className="text-sm text-muted-foreground">
                 {startTime} → {endTime}
                 {(() => {

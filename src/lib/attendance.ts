@@ -24,6 +24,10 @@ export type AttendanceSession = {
   penalty_reviewed?: boolean | null;
   /** Start time that officially counts once approved (may waive a late arrival). */
   approved_start_time?: string | null;
+  gmgi_task?: string | null;
+  gm_task?: string | null;
+  gmgi_time?: number | null;
+  gm_time?: number | null;
   [key: string]: unknown;
 };
 
@@ -48,6 +52,10 @@ export type MergedDay<T extends AttendanceSession = AttendanceSession> = {
   penaltyReviewed: boolean;
   /** Start time that officially counts once approved; equals firstIn until a waiver changes it. */
   approvedStartTime: string | null;
+  /** Sum of GMGI task time across sessions, in hours. */
+  gmgiTime: number;
+  /** Sum of GM task time across sessions, in hours. */
+  gmTime: number;
   /** True when at least one session has no clock-out yet. */
   open: boolean;
   sessions: T[];
@@ -93,6 +101,8 @@ export const mergeDailySessions = <T extends AttendanceSession>(
         penaltyMinutes: 0,
         penaltyReviewed: false,
         approvedStartTime: null,
+        gmgiTime: 0,
+        gmTime: 0,
         open: false,
         sessions: [],
         profiles: (row as AttendanceSession).profiles,
@@ -103,6 +113,8 @@ export const mergeDailySessions = <T extends AttendanceSession>(
     day.workedSeconds += sessionWorkedSeconds(row, now);
     day.breakSeconds += (Number(row.break_minutes) || 0) * 60;
     day.overtimeHours += Number(row.overtime_hours) || 0;
+    day.gmgiTime += Number(row.gmgi_time) || 0;
+    day.gmTime += Number(row.gm_time) || 0;
     // The penalty is a fact about the day's actual arrival, recorded on
     // whichever session was the first clock-in — carry it along as that
     // session is discovered rather than summing it across every punch.

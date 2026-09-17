@@ -26,6 +26,10 @@ export type Database = {
           date: string
           device_source: string | null
           face_verified: boolean | null
+          gm_task: string | null
+          gm_time: number
+          gmgi_task: string | null
+          gmgi_time: number
           id: string
           ip_address: string | null
           late_minutes: number
@@ -47,6 +51,10 @@ export type Database = {
           date?: string
           device_source?: string | null
           face_verified?: boolean | null
+          gm_task?: string | null
+          gm_time?: number
+          gmgi_task?: string | null
+          gmgi_time?: number
           id?: string
           ip_address?: string | null
           late_minutes?: number
@@ -68,6 +76,10 @@ export type Database = {
           date?: string
           device_source?: string | null
           face_verified?: boolean | null
+          gm_task?: string | null
+          gm_time?: number
+          gmgi_task?: string | null
+          gmgi_time?: number
           id?: string
           ip_address?: string | null
           late_minutes?: number
@@ -646,6 +658,10 @@ export type Database = {
           created_at: string
           date: string
           due_hours: number
+          gm_task: string | null
+          gm_time: number
+          gmgi_task: string | null
+          gmgi_time: number
           id: string
           overtime_hours: number
           reason: string | null
@@ -668,6 +684,10 @@ export type Database = {
           created_at?: string
           date: string
           due_hours?: number
+          gm_task?: string | null
+          gm_time?: number
+          gmgi_task?: string | null
+          gmgi_time?: number
           id?: string
           overtime_hours?: number
           reason?: string | null
@@ -690,6 +710,10 @@ export type Database = {
           created_at?: string
           date?: string
           due_hours?: number
+          gm_task?: string | null
+          gm_time?: number
+          gmgi_task?: string | null
+          gmgi_time?: number
           id?: string
           overtime_hours?: number
           reason?: string | null
