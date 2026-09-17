@@ -10,7 +10,7 @@ import { Badge } from "@/components/ui/badge";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { toast } from "sonner";
 import { format } from "date-fns";
-import { Check, X, Clock, Users, Timer, Pencil } from "lucide-react";
+import { Check, X, Clock, Users, Timer, Pencil, Trash2 } from "lucide-react";
 import { useRealtimeSubscription } from "@/hooks/useRealtimeSubscription";
 import { notifyEmployee } from "@/lib/notifications";
 import { applyOTFulfillment } from "@/lib/otFulfillment";
@@ -170,6 +170,14 @@ const Approvals = () => {
     }
   };
 
+  const deleteOT = async (req: any) => {
+    if (!window.confirm("Delete this OT request? This cannot be undone.")) return;
+    const { error } = await supabase.from("overtime_requests").delete().eq("id", req.id);
+    if (error) { toast.error(error.message); return; }
+    toast.success("OT request deleted");
+    fetchData();
+  };
+
   const openEdit = (req: any) => {
     setEditReq(req);
     setEditHours(String(req.requested_hours));
@@ -258,6 +266,9 @@ const Approvals = () => {
                     </Button>
                     <Button size="sm" variant="outline" onClick={() => openEdit(req)}>
                       <Pencil className="h-4 w-4 mr-1" /> Modify
+                    </Button>
+                    <Button size="sm" variant="ghost" className="text-destructive hover:text-destructive" onClick={() => deleteOT(req)}>
+                      <Trash2 className="h-4 w-4 mr-1" /> Delete
                     </Button>
                   </TableCell>
                 </TableRow>
@@ -458,11 +469,12 @@ const Approvals = () => {
                 <TableHead>Date</TableHead>
                 <TableHead>Hours</TableHead>
                 <TableHead>Status</TableHead>
+                <TableHead>Actions</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
               {history.length === 0 ? (
-                <TableRow><TableCell colSpan={4} className="text-center text-muted-foreground">No history yet</TableCell></TableRow>
+                <TableRow><TableCell colSpan={5} className="text-center text-muted-foreground">No history yet</TableCell></TableRow>
               ) : history.map((req) => (
                 <TableRow key={req.id}>
                   <TableCell>{(req.profiles as any)?.full_name || (req.profiles as any)?.email || "Unknown"}</TableCell>
@@ -472,6 +484,11 @@ const Approvals = () => {
                     <Badge className={otStatusStyle(req.status)}>
                       {req.status}
                     </Badge>
+                  </TableCell>
+                  <TableCell>
+                    <Button size="sm" variant="ghost" className="text-destructive hover:text-destructive" onClick={() => deleteOT(req)}>
+                      <Trash2 className="h-4 w-4 mr-1" /> Delete
+                    </Button>
                   </TableCell>
                 </TableRow>
               ))}
