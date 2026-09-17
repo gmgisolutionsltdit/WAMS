@@ -19,7 +19,7 @@ describe("late-arrival penalty recorded at clock-in", () => {
     expect(day.lateMinutes).toBe(30);
     expect(day.penaltyMinutes).toBe(160);
     expect(day.penaltyReviewed).toBe(true);
-    expect(day.approvedStartTime).toBe("2026-09-10T09:30:00Z");
+    expect(day.approvedStartTime).toBeNull();
   });
 
   it("reflects an approved waiver via approved_start_time", () => {
@@ -37,9 +37,9 @@ describe("late-arrival penalty recorded at clock-in", () => {
     expect(day.approvedStartTime).not.toBe(day.firstIn);
   });
 
-  it("falls back to the raw clock-in as the approved time when nothing has been set", () => {
+  it("leaves approvedStartTime null when nothing has been approved yet", () => {
     const [day] = mergeDailySessions([session({ clock_in: "2026-09-10T09:00:00Z" })]);
-    expect(day.approvedStartTime).toBe("2026-09-10T09:00:00Z");
+    expect(day.approvedStartTime).toBeNull();
     expect(day.penaltyReviewed).toBe(false);
   });
 

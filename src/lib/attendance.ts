@@ -50,7 +50,7 @@ export type MergedDay<T extends AttendanceSession = AttendanceSession> = {
   penaltyMinutes: number;
   /** True when lateMinutes/penaltyMinutes are authoritative rather than a pre-feature default. */
   penaltyReviewed: boolean;
-  /** Start time that officially counts once approved; equals firstIn until a waiver changes it. */
+  /** Set only once a late-arrival waiver is approved; null otherwise (the page falls back to the org's official office start time for display). */
   approvedStartTime: string | null;
   /** Sum of GMGI task time across sessions, in hours. */
   gmgiTime: number;
@@ -123,7 +123,7 @@ export const mergeDailySessions = <T extends AttendanceSession>(
       day.lateMinutes = Number(row.late_minutes) || 0;
       day.penaltyMinutes = Number(row.penalty_minutes) || 0;
       day.penaltyReviewed = !!row.penalty_reviewed;
-      day.approvedStartTime = row.approved_start_time ?? row.clock_in;
+      day.approvedStartTime = row.approved_start_time ?? null;
     }
     if (row.clock_out) {
       if (!day.lastOut || row.clock_out > day.lastOut) day.lastOut = row.clock_out;

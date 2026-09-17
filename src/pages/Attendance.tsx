@@ -11,7 +11,7 @@ import { ChevronDown, ChevronRight } from "lucide-react";
 import { useRealtimeSubscription } from "@/hooks/useRealtimeSubscription";
 import { fmtHMS, fmtClock, spanToHMS } from "@/lib/time";
 import { mergeDailySessions, sessionWorkedSeconds, type AttendanceSession } from "@/lib/attendance";
-import { evaluateArrival, humanMinutes, officeStart, type OfficeTime } from "@/lib/officeTime";
+import { DEFAULT_OFFICE_START, evaluateArrival, humanMinutes, officeStart, type OfficeTime } from "@/lib/officeTime";
 import { ManualTimeEntryDialog } from "@/components/ManualTimeEntryDialog";
 import { classifyDay, computeDailyTotals, DEFAULT_WEEKEND_DAYS } from "@/lib/workSchedule";
 import { Pencil, Trash2 } from "lucide-react";
@@ -33,6 +33,10 @@ const Attendance = () => {
   const [starting, setStarting] = useState(false);
   const [currentTime, setCurrentTime] = useState(new Date());
   const [breakAllowance, setBreakAllowance] = useState(60);
+  // The org-wide Office Start Time from Settings - the default "officially
+  // scheduled" start shown in Approved Start Time and used to judge
+  // lateness, until a specific day's late arrival is approved/waived.
+  const [settingsOfficeStart, setSettingsOfficeStart] = useState<string>(DEFAULT_OFFICE_START);
 
   const fetchData = () => {
     if (!user) return;
@@ -40,7 +44,7 @@ const Attendance = () => {
       supabase.from("attendance_logs").select("*").eq("user_id", user.id).order("date", { ascending: false }),
       supabase.from("profiles").select("office_start_time, office_end_time, late_grace_minutes, company_wing").eq("id", user.id).maybeSingle(),
       supabase.from("holidays").select("holiday_date, name, wing"),
-      supabase.from("settings").select("weekend_days, break_allowance_minutes").limit(1).maybeSingle(),
+      supabase.from("settings").select("weekend_days, break_allowance_minutes, office_start_time").limit(1).maybeSingle(),
     ]).then(([{ data: logsData }, { data: prof }, { data: holidayRows }, { data: cfg }]) => {
       setLogs((logsData || []) as AttendanceSession[]);
       setOfficeProfile((prof as OfficeTime) || null);
@@ -53,8 +57,13 @@ const Attendance = () => {
       setHolidays(map);
       if (cfg?.weekend_days) setWeekendDays(cfg.weekend_days as number[]);
       if (cfg?.break_allowance_minutes != null) setBreakAllowance(Number(cfg.break_allowance_minutes) || 60);
+      setSettingsOfficeStart(cfg?.office_start_time?.slice(0, 5) || DEFAULT_OFFICE_START);
     });
   };
+
+  // Lateness is judged against the org-wide Settings office start time, not
+  // the per-employee profile value.
+  const effectiveOfficeProfile: OfficeTime = { ...officeProfile, office_start_time: settingsOfficeStart };
 
   const deleteSession = async (id: string) => {
     if (!window.confirm("Delete this session? This cannot be undone.")) return;
@@ -78,7 +87,7 @@ const Attendance = () => {
     const dayKind = classifyDay(today, holidays, weekendDays);
     const arrival = dayKind.nonWorking
       ? { late: false, lateMinutes: 0, penaltyMinutes: 0 }
-      : evaluateArrival(now, officeProfile);
+      : evaluateArrival(now, effectiveOfficeProfile);
     const { error } = await supabase.from("attendance_logs").insert({
       user_id: user.id,
       date: today,
@@ -86,7 +95,6 @@ const Attendance = () => {
       device_source: "web",
       late_minutes: arrival.lateMinutes,
       penalty_minutes: arrival.penaltyMinutes,
-      approved_start_time: now.toISOString(),
       penalty_reviewed: true,
     });
     if (error) toast.error(error.message);
@@ -276,7 +284,7 @@ const Attendance = () => {
                 // A row recorded by the current clock-in flow (or since
                 // adjusted by an approval) carries its own authoritative
                 // penalty; older rows fall back to a live recomputation.
-                const liveArrival = evaluateArrival(day.firstIn, officeProfile);
+                const liveArrival = evaluateArrival(day.firstIn, effectiveOfficeProfile);
                 // penalty_minutes is the authoritative, approval-adjusted
                 // figure once reviewed - late_minutes is cleared alongside it
                 // by the approval trigger when the penalty is fully waived,
@@ -331,7 +339,7 @@ const Attendance = () => {
                         ) : arrival.late ? (
                           <Badge
                             variant="destructive"
-                            title={`Arrived ${humanMinutes(arrival.lateMinutes)} after ${officeStart(officeProfile).slice(0, 5)} — extra ${humanMinutes(arrival.penaltyMinutes)} of work required`}
+                            title={`Arrived ${humanMinutes(arrival.lateMinutes)} after ${officeStart(effectiveOfficeProfile).slice(0, 5)} — extra ${humanMinutes(arrival.penaltyMinutes)} of work required`}
                           >
                             Late {humanMinutes(arrival.lateMinutes)}
                           </Badge>
@@ -341,12 +349,14 @@ const Attendance = () => {
                       </TableCell>
                       <TableCell className="font-mono text-xs">{fmtClock(day.firstIn)}</TableCell>
                       <TableCell className="font-mono text-xs">
-                        {day.approvedStartTime && day.approvedStartTime !== day.firstIn ? (
+                        {day.approvedStartTime ? (
                           <Badge className="bg-lime-500 text-white border-lime-500 font-mono" title="Late penalty waived by an approved late-time request">
                             {fmtClock(day.approvedStartTime)}
                           </Badge>
                         ) : (
-                          fmtClock(day.approvedStartTime ?? day.firstIn)
+                          // No waiver on this day - Approved Start Time defaults to
+                          // the org's official Office Start Time from Settings.
+                          fmtClock(`${day.date}T${settingsOfficeStart}:00`)
                         )}
                       </TableCell>
                       <TableCell className="font-mono text-xs">{day.open ? <Badge variant="secondary">In progress</Badge> : fmtClock(day.lastOut)}</TableCell>
