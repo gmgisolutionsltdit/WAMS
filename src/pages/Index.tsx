@@ -66,10 +66,14 @@ const Dashboard = () => {
 
   useEffect(() => {
     (async () => {
-      const { data } = await supabase.from("settings").select("break_allowance_minutes, standard_shift_hours").limit(1).maybeSingle();
+      const { data } = await supabase.from("settings").select("break_allowance_minutes, standard_shift_hours, office_start_time").limit(1).maybeSingle();
       if (data) {
         setBreakAllowance(Number(data.break_allowance_minutes) || 60);
-
+        // Lateness is judged against the org-wide Settings office start
+        // time, not the per-employee profile value.
+        const start = (data.office_start_time as string | null)?.slice(0, 5) || DEFAULT_OFFICE_START;
+        setOfficeTimes((prev) => ({ ...prev, start }));
+        setWorkSchedule((prev) => ({ ...prev, office_start_time: start }));
       }
     })();
   }, []);
@@ -159,7 +163,6 @@ const Dashboard = () => {
       face_verified: !!faceDescriptor,
       late_minutes: arrival.lateMinutes,
       penalty_minutes: arrival.penaltyMinutes,
-      approved_start_time: now.toISOString(),
       penalty_reviewed: true,
     });
     if (error) toast.error(error.message);
