@@ -24,7 +24,6 @@ import { fmtHMS } from "@/lib/time";
 import { AttendancePunchCard } from "@/components/hrms/AttendancePunchCard";
 import { BiometricLogFeed } from "@/components/hrms/BiometricLogFeed";
 import ManualTimeEntryDialog from "@/components/ManualTimeEntryDialog";
-import LateTimeRequestDialog from "@/components/LateTimeRequestDialog";
 import { DEFAULT_OFFICE_END, DEFAULT_OFFICE_START, evaluateArrival, humanMinutes } from "@/lib/officeTime";
 import { computeDailyTotals, DEFAULT_WEEKEND_DAYS, type WorkSchedule } from "@/lib/workSchedule";
 import { notifyManagersAndAdmins } from "@/lib/notifications";
@@ -528,16 +527,12 @@ const Dashboard = () => {
         <CardHeader className="pb-3">
           <CardTitle className="text-base">Time Requests</CardTitle>
           <CardDescription>
-            Add time you forgot to log, or raise a late-time / office-time request. Approval goes to your reporting
-            manager (or an admin).
+            Add time you forgot to log. Approval goes to your reporting manager (or an admin). Late-time and office-time
+            requests have moved to the Requests tab.
           </CardDescription>
         </CardHeader>
         <CardContent className="flex flex-wrap gap-2">
           <ManualTimeEntryDialog onSubmitted={() => { fetchEmployeeData(); fetchAdminData(); }} />
-          <LateTimeRequestDialog
-            officeStartTime={effectiveOfficeStart}
-            officeEndTime={officeTimes.end}
-          />
         </CardContent>
       </Card>
 
