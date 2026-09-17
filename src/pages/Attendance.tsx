@@ -294,12 +294,11 @@ const Attendance = () => {
                 const arrival = dayKind.nonWorking
                   ? { late: false, lateMinutes: 0, penaltyMinutes: 0 }
                   : storedArrival;
-                // Due Time = the late arrival itself (time already lost) plus
-                // the 2h40m late penalty, on top of the standard shift -
-                // both drop to 0 once Approve Start Time waives the penalty.
+                // Due Time = the standard shift plus the late penalty minutes -
+                // drops to 0 once Approve Start Time waives the penalty.
                 const requiredSeconds = dayKind.nonWorking
                   ? 0
-                  : STANDARD_SECONDS + (arrival.lateMinutes + arrival.penaltyMinutes) * 60;
+                  : STANDARD_SECONDS + arrival.penaltyMinutes * 60;
                 const dueSeconds = closed && worked < requiredSeconds ? requiredSeconds - worked : 0;
                 // Counts time worked regardless of source - a manual entry
                 // represents real hours worked just as much as a punch-card
