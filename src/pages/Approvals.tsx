@@ -31,6 +31,8 @@ const Approvals = () => {
   const [manualPending, setManualPending] = useState<any[]>([]);
   const [latePending, setLatePending] = useState<any[]>([]);
   const [lateHistory, setLateHistory] = useState<any[]>([]);
+  const [leavePending, setLeavePending] = useState<any[]>([]);
+  const [leaveTypeNames, setLeaveTypeNames] = useState<Record<string, string>>({});
   const [names, setNames] = useState<Record<string, string>>({});
   const [notes, setNotes] = useState<Record<string, string>>({});
   const [manualOT, setManualOT] = useState<Record<string, string>>({});
@@ -42,7 +44,7 @@ const Approvals = () => {
 
   const fetchData = useCallback(async () => {
     if (!user) return;
-    const [{ data: requests }, { data: resolved }, { data: manualReqs }, { data: lateReqs }, { data: lateHist }] = await Promise.all([
+    const [{ data: requests }, { data: resolved }, { data: manualReqs }, { data: lateReqs }, { data: lateHist }, { data: leaveReqs }, { data: leaveTypes }] = await Promise.all([
       supabase
         .from("overtime_requests")
         .select("*, profiles!overtime_requests_user_id_fkey(full_name, email)")
@@ -57,18 +59,24 @@ const Approvals = () => {
       supabase.from("manual_time_requests").select("*").eq("status", "pending").order("created_at", { ascending: false }),
       supabase.from("late_time_requests").select("*").eq("status", "pending").order("created_at", { ascending: false }),
       supabase.from("late_time_requests").select("*").neq("status", "pending").order("updated_at", { ascending: false }).limit(20),
+      supabase.from("leave_requests").select("*").eq("status", "pending").order("created_at", { ascending: false }),
+      supabase.from("leave_types").select("id, name"),
     ]);
     setPending(requests || []);
     setHistory(resolved || []);
     setManualPending(manualReqs || []);
     setLatePending(lateReqs || []);
     setLateHistory(lateHist || []);
+    setLeavePending(leaveReqs || []);
+    const ltNames: Record<string, string> = {};
+    (leaveTypes || []).forEach((lt: { id: string; name: string }) => { ltNames[lt.id] = lt.name; });
+    setLeaveTypeNames(ltNames);
 
     const { data: cfg } = await supabase.from("settings").select("start_time_approver_role").limit(1).maybeSingle();
     setStartTimeApproverRole((cfg as { start_time_approver_role?: string } | null)?.start_time_approver_role || "admin");
 
     const ids = Array.from(new Set(
-      [...(manualReqs || []), ...(lateReqs || []), ...(lateHist || [])]
+      [...(manualReqs || []), ...(lateReqs || []), ...(lateHist || []), ...(leaveReqs || [])]
         .flatMap((r: any) => [r.user_id, r.approved_by])
         .filter(Boolean)
     ));
@@ -92,6 +100,7 @@ const Approvals = () => {
   useRealtimeSubscription("overtime_requests", fetchData, "approvals-page");
   useRealtimeSubscription("manual_time_requests", fetchData, "approvals-manual");
   useRealtimeSubscription("late_time_requests", fetchData, "approvals-late");
+  useRealtimeSubscription("leave_requests", fetchData, "approvals-leave");
 
   const decideManual = async (req: any, status: "approved" | "rejected") => {
     if (!user) return;
@@ -141,6 +150,45 @@ const Approvals = () => {
       `Your ${req.request_type === "office_time_change" ? "office time change" : "late adjustment"} request for ${format(new Date(req.effective_date), "MMM d")} was ${status}.`,
       req.id,
       { route: "/", type: "late_time_update" }
+    );
+    fetchData();
+  };
+
+  /** Debit the employee's leave balance for the year, creating the row if needed. */
+  const applyLeaveBalance = async (req: any) => {
+    const { data: bal } = await supabase
+      .from("leave_balances")
+      .select("*")
+      .eq("user_id", req.user_id)
+      .eq("leave_type_id", req.leave_type_id)
+      .eq("year", new Date(req.start_date).getFullYear())
+      .maybeSingle();
+    if (bal) {
+      await supabase.from("leave_balances").update({ used: (bal.used || 0) + Number(req.total_days) }).eq("id", bal.id);
+    } else {
+      const { data: lt } = await supabase.from("leave_types").select("annual_quota").eq("id", req.leave_type_id).maybeSingle();
+      await supabase.from("leave_balances").insert({
+        user_id: req.user_id, leave_type_id: req.leave_type_id, year: new Date(req.start_date).getFullYear(),
+        allocated: lt?.annual_quota || 0, used: Number(req.total_days), carried_forward: 0,
+      });
+    }
+  };
+
+  const decideLeave = async (req: any, status: "approved" | "rejected") => {
+    if (!user) return;
+    const { error } = await supabase
+      .from("leave_requests")
+      .update({ status, approver_id: user.id, approver_note: notes[req.id] || null, approved_at: new Date().toISOString() })
+      .eq("id", req.id);
+    if (error) { toast.error(error.message); return; }
+    if (status === "approved") await applyLeaveBalance(req);
+    toast.success(`Leave request ${status}`);
+    await notifyEmployee(
+      req.user_id,
+      `Leave Request ${status.charAt(0).toUpperCase() + status.slice(1)}`,
+      `Your ${leaveTypeNames[req.leave_type_id] || "leave"} request (${req.start_date} → ${req.end_date}) was ${status}.`,
+      req.id,
+      { route: "/leave", type: "leave_update" }
     );
     fetchData();
   };
@@ -403,6 +451,60 @@ const Approvals = () => {
                         </Button>
                       </>
                     )}
+                  </TableCell>
+                </TableRow>
+              ))}
+            </TableBody>
+          </Table>
+        </CardContent>
+      </Card>
+
+      {/* Leave Requests */}
+      <Card>
+        <CardHeader>
+          <CardTitle>Pending Leave Requests</CardTitle>
+          <CardDescription>Approving debits the employee's leave balance for the year.</CardDescription>
+        </CardHeader>
+        <CardContent>
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead>Employee</TableHead>
+                <TableHead>Type</TableHead>
+                <TableHead>Dates</TableHead>
+                <TableHead>Days</TableHead>
+                <TableHead>Reason</TableHead>
+                <TableHead>Note</TableHead>
+                <TableHead>Actions</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {leavePending.length === 0 ? (
+                <TableRow><TableCell colSpan={7} className="text-center text-muted-foreground">No pending leave requests</TableCell></TableRow>
+              ) : leavePending.map((req) => (
+                <TableRow key={req.id}>
+                  <TableCell className="font-medium">{names[req.user_id] || "Unknown"}</TableCell>
+                  <TableCell><Badge variant="outline">{leaveTypeNames[req.leave_type_id] || "—"}</Badge></TableCell>
+                  <TableCell className="whitespace-nowrap text-xs">
+                    {format(new Date(req.start_date), "MMM d")} – {format(new Date(req.end_date), "MMM d, yyyy")}
+                  </TableCell>
+                  <TableCell><Badge>{req.total_days}d</Badge></TableCell>
+                  <TableCell className="max-w-48 truncate">{req.reason || "—"}</TableCell>
+                  <TableCell>
+                    <Input
+                      placeholder="Optional note"
+                      value={notes[req.id] || ""}
+                      onChange={(e) => setNotes((n) => ({ ...n, [req.id]: e.target.value }))}
+                      className="h-8 w-40"
+                    />
+                  </TableCell>
+                  <TableCell className="space-x-1 whitespace-nowrap">
+                    <Button size="sm" className="bg-lime-500 hover:bg-lime-600 text-white" onClick={() => decideLeave(req, "approved")}>
+                      <Check className="h-4 w-4 mr-1" /> Approve
+                    </Button>
+                    <Button size="sm" className="bg-[#FF6347] hover:bg-[#E5533D] text-white" onClick={() => decideLeave(req, "rejected")}>
+                      <X className="h-4 w-4 mr-1" /> Reject
+                    </Button>
                   </TableCell>
                 </TableRow>
               ))}
