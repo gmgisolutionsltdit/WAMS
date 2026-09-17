@@ -30,6 +30,7 @@ const Approvals = () => {
   const [stats, setStats] = useState({ totalOT: 0, pendingCount: 0, activeEmployees: 0 });
   const [manualPending, setManualPending] = useState<any[]>([]);
   const [latePending, setLatePending] = useState<any[]>([]);
+  const [lateHistory, setLateHistory] = useState<any[]>([]);
   const [names, setNames] = useState<Record<string, string>>({});
   const [notes, setNotes] = useState<Record<string, string>>({});
   const [manualOT, setManualOT] = useState<Record<string, string>>({});
@@ -41,7 +42,7 @@ const Approvals = () => {
 
   const fetchData = useCallback(async () => {
     if (!user) return;
-    const [{ data: requests }, { data: resolved }, { data: manualReqs }, { data: lateReqs }] = await Promise.all([
+    const [{ data: requests }, { data: resolved }, { data: manualReqs }, { data: lateReqs }, { data: lateHist }] = await Promise.all([
       supabase
         .from("overtime_requests")
         .select("*, profiles!overtime_requests_user_id_fkey(full_name, email)")
@@ -55,16 +56,22 @@ const Approvals = () => {
         .limit(20),
       supabase.from("manual_time_requests").select("*").eq("status", "pending").order("created_at", { ascending: false }),
       supabase.from("late_time_requests").select("*").eq("status", "pending").order("created_at", { ascending: false }),
+      supabase.from("late_time_requests").select("*").neq("status", "pending").order("updated_at", { ascending: false }).limit(20),
     ]);
     setPending(requests || []);
     setHistory(resolved || []);
     setManualPending(manualReqs || []);
     setLatePending(lateReqs || []);
+    setLateHistory(lateHist || []);
 
     const { data: cfg } = await supabase.from("settings").select("start_time_approver_role").limit(1).maybeSingle();
     setStartTimeApproverRole((cfg as { start_time_approver_role?: string } | null)?.start_time_approver_role || "admin");
 
-    const ids = Array.from(new Set([...(manualReqs || []), ...(lateReqs || [])].map((r: any) => r.user_id)));
+    const ids = Array.from(new Set(
+      [...(manualReqs || []), ...(lateReqs || []), ...(lateHist || [])]
+        .flatMap((r: any) => [r.user_id, r.approved_by])
+        .filter(Boolean)
+    ));
     if (ids.length) {
       const { data: profs } = await supabase.from("profiles").select("id, full_name, email").in("id", ids);
       const map: Record<string, string> = {};
@@ -393,6 +400,51 @@ const Approvals = () => {
         </CardContent>
       </Card>
 
+      {/* Late Time Request Log */}
+      <Card>
+        <CardHeader>
+          <CardTitle>Late Time Request Log</CardTitle>
+          <CardDescription>Track every late-time request and how it was decided.</CardDescription>
+        </CardHeader>
+        <CardContent>
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead>Employee</TableHead>
+                <TableHead>Type</TableHead>
+                <TableHead>Effective</TableHead>
+                <TableHead>Details</TableHead>
+                <TableHead>Status</TableHead>
+                <TableHead>Decided By</TableHead>
+                <TableHead>Note</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {lateHistory.length === 0 ? (
+                <TableRow><TableCell colSpan={7} className="text-center text-muted-foreground">No late time request history yet</TableCell></TableRow>
+              ) : lateHistory.map((req) => (
+                <TableRow key={req.id}>
+                  <TableCell className="font-medium">{names[req.user_id] || "Unknown"}</TableCell>
+                  <TableCell>
+                    <Badge variant="outline">{req.request_type === "office_time_change" ? "Office time change" : "Late adjustment"}</Badge>
+                  </TableCell>
+                  <TableCell className="whitespace-nowrap">{format(new Date(req.effective_date), "MMM d, yyyy")}</TableCell>
+                  <TableCell className="text-xs whitespace-nowrap">
+                    {req.request_type === "office_time_change"
+                      ? `${String(req.requested_start_time).slice(0, 5)} – ${String(req.requested_end_time).slice(0, 5)}`
+                      : `Late ${humanMinutes(Number(req.late_minutes) || 0)} · waive ${humanMinutes(Number(req.adjustment_minutes) || 0)}`}
+                  </TableCell>
+                  <TableCell>
+                    <Badge className={otStatusStyle(req.status)}>{req.status}</Badge>
+                  </TableCell>
+                  <TableCell className="text-xs text-muted-foreground">{req.approved_by ? names[req.approved_by] || "—" : "—"}</TableCell>
+                  <TableCell className="max-w-48 truncate text-xs text-muted-foreground">{req.approver_note || "—"}</TableCell>
+                </TableRow>
+              ))}
+            </TableBody>
+          </Table>
+        </CardContent>
+      </Card>
 
 
       {/* Approval History */}
