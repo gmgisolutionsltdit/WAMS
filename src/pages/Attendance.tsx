@@ -37,6 +37,8 @@ const Attendance = () => {
   // scheduled" start shown in Approved Start Time and used to judge
   // lateness, until a specific day's late arrival is approved/waived.
   const [settingsOfficeStart, setSettingsOfficeStart] = useState<string>(DEFAULT_OFFICE_START);
+  // Approved/modified OT request hours, summed per date, for the Approved OT column.
+  const [approvedOTByDate, setApprovedOTByDate] = useState<Record<string, number>>({});
 
   const fetchData = () => {
     if (!user) return;
@@ -45,7 +47,8 @@ const Attendance = () => {
       supabase.from("profiles").select("office_start_time, office_end_time, late_grace_minutes, company_wing").eq("id", user.id).maybeSingle(),
       supabase.from("holidays").select("holiday_date, name, wing"),
       supabase.from("settings").select("weekend_days, break_allowance_minutes, office_start_time").limit(1).maybeSingle(),
-    ]).then(([{ data: logsData }, { data: prof }, { data: holidayRows }, { data: cfg }]) => {
+      supabase.from("overtime_requests").select("date, requested_hours").eq("user_id", user.id).in("status", ["approved", "modified"]),
+    ]).then(([{ data: logsData }, { data: prof }, { data: holidayRows }, { data: cfg }, { data: otRows }]) => {
       setLogs((logsData || []) as AttendanceSession[]);
       setOfficeProfile((prof as OfficeTime) || null);
       // A holiday with no wing applies to everyone; otherwise only to its wing.
@@ -58,6 +61,11 @@ const Attendance = () => {
       if (cfg?.weekend_days) setWeekendDays(cfg.weekend_days as number[]);
       if (cfg?.break_allowance_minutes != null) setBreakAllowance(Number(cfg.break_allowance_minutes) || 60);
       setSettingsOfficeStart(cfg?.office_start_time?.slice(0, 5) || DEFAULT_OFFICE_START);
+      const otMap: Record<string, number> = {};
+      (otRows || []).forEach((r: { date: string; requested_hours: number | null }) => {
+        otMap[r.date] = (otMap[r.date] || 0) + (Number(r.requested_hours) || 0);
+      });
+      setApprovedOTByDate(otMap);
     });
   };
 
@@ -186,6 +194,7 @@ const Attendance = () => {
   }, []);
 
   useRealtimeSubscription("attendance_logs", fetchData, "attendance-page-logs");
+  useRealtimeSubscription("overtime_requests", fetchData, "attendance-page-ot");
 
   const days = mergeDailySessions(logs).sort((a, b) => b.date.localeCompare(a.date));
 
@@ -384,7 +393,9 @@ const Attendance = () => {
                           : <span className="text-muted-foreground font-mono text-xs">00:00:00</span>}
                       </TableCell>
                       <TableCell>
-                        <span className="text-muted-foreground font-mono text-xs">00:00:00</span>
+                        {(approvedOTByDate[day.date] || 0) > 0
+                          ? <Badge className="bg-lime-500 text-white border-lime-500 font-mono">{fmtHMS(approvedOTByDate[day.date] * 3600)}</Badge>
+                          : <span className="text-muted-foreground font-mono text-xs">00:00:00</span>}
                       </TableCell>
                       <TableCell className="font-mono text-xs">{day.gmgiTime > 0 ? `${day.gmgiTime}h` : "—"}</TableCell>
                       <TableCell className="font-mono text-xs">{day.gmTime > 0 ? `${day.gmTime}h` : "—"}</TableCell>
