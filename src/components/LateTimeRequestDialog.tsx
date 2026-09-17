@@ -13,7 +13,7 @@ import { format } from "date-fns";
 import { notifyManagersAndAdmins } from "@/lib/notifications";
 import {
   DEFAULT_OFFICE_END, DEFAULT_OFFICE_START, LATE_PENALTY_MINUTES,
-  humanMinutes, minOfficeChangeDateISO, maxOfficeChangeDateISO,
+  humanMinutes,
 } from "@/lib/officeTime";
 
 interface Props {
@@ -62,10 +62,6 @@ export const LateTimeRequestDialog = ({ officeStartTime, officeEndTime, onSubmit
   const submit = async () => {
     if (!user) return;
     if (!form.reason.trim()) { toast.error("Please add a reason"); return; }
-    if (isOfficeChange && (form.effective_date < minOfficeChangeDateISO() || form.effective_date > maxOfficeChangeDateISO())) {
-      toast.error("Office time changes must take effect within the next 2 days");
-      return;
-    }
     setSaving(true);
     try {
       const { data, error } = await supabase.from("late_time_requests").insert({
@@ -124,13 +120,8 @@ export const LateTimeRequestDialog = ({ officeStartTime, officeEndTime, onSubmit
             <Input
               type="date"
               value={form.effective_date}
-              min={isOfficeChange ? minOfficeChangeDateISO() : undefined}
-              max={isOfficeChange ? maxOfficeChangeDateISO() : undefined}
               onChange={(e) => setForm((f) => ({ ...f, effective_date: e.target.value }))}
             />
-            {isOfficeChange && (
-              <p className="text-xs text-muted-foreground mt-1">Must take effect within the next 2 days.</p>
-            )}
           </div>
           {isOfficeChange ? (
             <div className="grid grid-cols-2 gap-4">
