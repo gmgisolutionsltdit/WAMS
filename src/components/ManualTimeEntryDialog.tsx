@@ -26,6 +26,10 @@ type FormState = {
   overtime_hours: string;
   task_id: string;
   task_note: string;
+  gmgi_task: string;
+  gm_task: string;
+  gmgi_time: string;
+  gm_time: string;
   reason: string;
 };
 
@@ -39,6 +43,10 @@ const defaultForm: FormState = {
   overtime_hours: "",
   task_id: "none",
   task_note: "",
+  gmgi_task: "",
+  gm_task: "",
+  gmgi_time: "",
+  gm_time: "",
   reason: "",
 };
 
@@ -113,6 +121,11 @@ export const ManualTimeEntryDialog = ({ onSubmitted, trigger, initial, supersede
     };
   }, [form]);
 
+  const gmgiTime = Math.max(0, parseFloat(form.gmgi_time) || 0);
+  const gmTime = Math.max(0, parseFloat(form.gm_time) || 0);
+  const taskTimeTotal = Math.round((gmgiTime + gmTime) * 100) / 100;
+  const taskTimeExceedsDuration = taskTimeTotal > computed.total;
+
   const submit = async () => {
     if (!user) return;
     if (!isAdmin && !isWithin48h(form.date)) {
@@ -121,6 +134,10 @@ export const ManualTimeEntryDialog = ({ onSubmitted, trigger, initial, supersede
     }
     if (computed.outT <= computed.inT) {
       toast.error("Clock out must be after clock in");
+      return;
+    }
+    if (taskTimeExceedsDuration) {
+      toast.error("GMGI Time + GM Time cannot exceed the entry's duration");
       return;
     }
     setSaving(true);
@@ -144,6 +161,10 @@ export const ManualTimeEntryDialog = ({ onSubmitted, trigger, initial, supersede
         overtime_hours: computed.ot,
         task_id: null,
         task_note: form.task_note.trim() || null,
+        gmgi_task: form.gmgi_task.trim() || null,
+        gm_task: form.gm_task.trim() || null,
+        gmgi_time: gmgiTime,
+        gm_time: gmTime,
         reason: form.reason.trim() || null,
         supersedes_log_id: supersedesLogId || null,
       };
@@ -221,14 +242,47 @@ export const ManualTimeEntryDialog = ({ onSubmitted, trigger, initial, supersede
             <Label>Break Time (minutes)</Label>
             <Input type="number" step="5" min="0" value={form.break_minutes} onChange={(e) => setForm((f) => ({ ...f, break_minutes: e.target.value }))} />
           </div>
-          <div>
-            <Label>Description</Label>
-            <Input
-              placeholder="What was this time for?"
-              value={form.task_note}
-              onChange={(e) => setForm((f) => ({ ...f, task_note: e.target.value }))}
-            />
+          <div className="grid grid-cols-2 gap-4">
+            <div className="space-y-3">
+              <div>
+                <Label>GMGI Task</Label>
+                <Input
+                  placeholder="What GMGI work was done?"
+                  value={form.gmgi_task}
+                  onChange={(e) => setForm((f) => ({ ...f, gmgi_task: e.target.value }))}
+                />
+              </div>
+              <div>
+                <Label>GM Task</Label>
+                <Input
+                  placeholder="What GM work was done?"
+                  value={form.gm_task}
+                  onChange={(e) => setForm((f) => ({ ...f, gm_task: e.target.value }))}
+                />
+              </div>
+            </div>
+            <div className="space-y-3">
+              <div>
+                <Label>GMGI Time (hours)</Label>
+                <Input
+                  type="number" step="0.25" min="0"
+                  value={form.gmgi_time}
+                  onChange={(e) => setForm((f) => ({ ...f, gmgi_time: e.target.value }))}
+                />
+              </div>
+              <div>
+                <Label>GM Time (hours)</Label>
+                <Input
+                  type="number" step="0.25" min="0"
+                  value={form.gm_time}
+                  onChange={(e) => setForm((f) => ({ ...f, gm_time: e.target.value }))}
+                />
+              </div>
+            </div>
           </div>
+          <p className={`text-xs -mt-2 ${taskTimeExceedsDuration ? "text-destructive" : "text-muted-foreground"}`}>
+            Total time: {taskTimeTotal}h (GMGI + GM) — must be ≤ duration ({computed.total}h)
+          </p>
           <div>
             <Label>Reason</Label>
             <Textarea rows={2} value={form.reason} onChange={(e) => setForm((f) => ({ ...f, reason: e.target.value }))} placeholder="Why is this entry being added manually?" />

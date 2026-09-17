@@ -32,6 +32,13 @@ export function isWithin48h(dateISO: string, now: Date = new Date()): boolean {
   return dateISO >= min48hDateISO(now);
 }
 
+/** Latest ISO date (yyyy-MM-dd) still within 2 days ahead of today. */
+export function max2DaysAheadISO(now: Date = new Date()): string {
+  const d = new Date(now);
+  d.setDate(d.getDate() + 2);
+  return d.toISOString().slice(0, 10);
+}
+
 /** Roles that bypass the 48h retro lock. */
 export function canBypass48h(role: string): boolean {
   return role === "admin" || role === "hr";

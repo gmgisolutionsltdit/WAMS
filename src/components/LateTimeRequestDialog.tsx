@@ -13,7 +13,7 @@ import { format } from "date-fns";
 import { notifyManagersAndAdmins } from "@/lib/notifications";
 import {
   DEFAULT_OFFICE_END, DEFAULT_OFFICE_START, LATE_PENALTY_MINUTES,
-  humanMinutes, minOfficeChangeDateISO,
+  humanMinutes, minOfficeChangeDateISO, maxOfficeChangeDateISO,
 } from "@/lib/officeTime";
 
 interface Props {
@@ -55,15 +55,15 @@ export const LateTimeRequestDialog = ({ officeStartTime, officeEndTime, onSubmit
     setForm((f) => ({
       ...f,
       request_type: type,
-      effective_date: type === "office_time_change" ? minOfficeChangeDateISO() : format(new Date(), "yyyy-MM-dd"),
+      effective_date: format(new Date(), "yyyy-MM-dd"),
     }));
   };
 
   const submit = async () => {
     if (!user) return;
     if (!form.reason.trim()) { toast.error("Please add a reason"); return; }
-    if (isOfficeChange && form.effective_date <= format(new Date(), "yyyy-MM-dd")) {
-      toast.error("Office time changes must be requested at least 1 day in advance");
+    if (isOfficeChange && (form.effective_date < minOfficeChangeDateISO() || form.effective_date > maxOfficeChangeDateISO())) {
+      toast.error("Office time changes must take effect within the next 2 days");
       return;
     }
     setSaving(true);
@@ -125,10 +125,11 @@ export const LateTimeRequestDialog = ({ officeStartTime, officeEndTime, onSubmit
               type="date"
               value={form.effective_date}
               min={isOfficeChange ? minOfficeChangeDateISO() : undefined}
+              max={isOfficeChange ? maxOfficeChangeDateISO() : undefined}
               onChange={(e) => setForm((f) => ({ ...f, effective_date: e.target.value }))}
             />
             {isOfficeChange && (
-              <p className="text-xs text-muted-foreground mt-1">Must be at least 1 day in advance.</p>
+              <p className="text-xs text-muted-foreground mt-1">Must take effect within the next 2 days.</p>
             )}
           </div>
           {isOfficeChange ? (

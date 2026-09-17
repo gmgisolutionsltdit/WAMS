@@ -68,9 +68,12 @@ export const evaluateArrival = (
   };
 };
 
-/** Earliest date an office-time change may take effect (tomorrow). */
-export const minOfficeChangeDateISO = (): string => {
+/** Earliest date an office-time change may take effect (today). */
+export const minOfficeChangeDateISO = (): string => new Date().toISOString().slice(0, 10);
+
+/** Latest date an office-time change may take effect (2 days from today). */
+export const maxOfficeChangeDateISO = (): string => {
   const d = new Date();
-  d.setDate(d.getDate() + 1);
+  d.setDate(d.getDate() + 2);
   return d.toISOString().slice(0, 10);
 };
