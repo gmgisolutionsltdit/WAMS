@@ -39,6 +39,10 @@ const Attendance = () => {
   const [settingsOfficeStart, setSettingsOfficeStart] = useState<string>(DEFAULT_OFFICE_START);
   // Approved/modified OT request hours, summed per date, for the Approved OT column.
   const [approvedOTByDate, setApprovedOTByDate] = useState<Record<string, number>>({});
+  // Dates covered by an approved leave request - on leave, Status shows
+  // "Leave" instead of on-time/late, and (like a holiday/weekend) there is
+  // no standard-hours requirement, so any time worked counts as overtime.
+  const [leaveDates, setLeaveDates] = useState<Map<string, string>>(new Map());
 
   const fetchData = () => {
     if (!user) return;
@@ -48,7 +52,8 @@ const Attendance = () => {
       supabase.from("holidays").select("holiday_date, name, wing"),
       supabase.from("settings").select("weekend_days, break_allowance_minutes, office_start_time").limit(1).maybeSingle(),
       supabase.from("overtime_requests").select("date, requested_hours").eq("user_id", user.id).in("status", ["approved", "modified"]),
-    ]).then(([{ data: logsData }, { data: prof }, { data: holidayRows }, { data: cfg }, { data: otRows }]) => {
+      supabase.from("leave_requests").select("start_date, end_date, leave_types(name)").eq("user_id", user.id).eq("status", "approved"),
+    ]).then(([{ data: logsData }, { data: prof }, { data: holidayRows }, { data: cfg }, { data: otRows }, { data: leaveRows }]) => {
       setLogs((logsData || []) as AttendanceSession[]);
       setOfficeProfile((prof as OfficeTime) || null);
       // A holiday with no wing applies to everyone; otherwise only to its wing.
@@ -66,6 +71,14 @@ const Attendance = () => {
         otMap[r.date] = (otMap[r.date] || 0) + (Number(r.requested_hours) || 0);
       });
       setApprovedOTByDate(otMap);
+      const leaveMap = new Map<string, string>();
+      (leaveRows || []).forEach((r: { start_date: string; end_date: string; leave_types?: { name: string } | null }) => {
+        const name = r.leave_types?.name || "Leave";
+        for (let d = new Date(`${r.start_date}T00:00:00`); d <= new Date(`${r.end_date}T00:00:00`); d.setDate(d.getDate() + 1)) {
+          leaveMap.set(format(d, "yyyy-MM-dd"), name);
+        }
+      });
+      setLeaveDates(leaveMap);
     });
   };
 
@@ -195,6 +208,7 @@ const Attendance = () => {
 
   useRealtimeSubscription("attendance_logs", fetchData, "attendance-page-logs");
   useRealtimeSubscription("overtime_requests", fetchData, "attendance-page-ot");
+  useRealtimeSubscription("leave_requests", fetchData, "attendance-page-leave");
 
   const days = mergeDailySessions(logs).sort((a, b) => b.date.localeCompare(a.date));
 
@@ -311,12 +325,16 @@ const Attendance = () => {
                 // This matches the rule applyOTFulfillment already enforces
                 // when approving OT requests.
                 const dayKind = classifyDay(day.date, holidays, weekendDays);
-                const arrival = dayKind.nonWorking
+                const leaveName = leaveDates.get(day.date);
+                // An approved leave day has no shift to be late for either -
+                // treat it the same as a holiday/weekend for OT purposes.
+                const nonWorking = dayKind.nonWorking || !!leaveName;
+                const arrival = nonWorking
                   ? { late: false, lateMinutes: 0, penaltyMinutes: 0 }
                   : storedArrival;
                 // Due Time = the standard shift plus the late penalty minutes -
                 // drops to 0 once Approve Start Time waives the penalty.
-                const requiredSeconds = dayKind.nonWorking
+                const requiredSeconds = nonWorking
                   ? 0
                   : STANDARD_SECONDS + arrival.penaltyMinutes * 60;
                 const dueSeconds = closed && worked < requiredSeconds ? requiredSeconds - worked : 0;
@@ -341,7 +359,14 @@ const Attendance = () => {
                       </TableCell>
                       <TableCell className="whitespace-nowrap">{format(new Date(day.date), "MMM d, yyyy")}</TableCell>
                       <TableCell className="whitespace-nowrap">
-                        {dayKind.nonWorking ? (
+                        {leaveName ? (
+                          <Badge
+                            className="bg-primary/15 text-primary border-primary/30"
+                            title={`${leaveName} — no standard hours required, all time worked counts as overtime`}
+                          >
+                            Leave
+                          </Badge>
+                        ) : dayKind.nonWorking ? (
                           <Badge
                             className="bg-warning/20 text-warning border-warning/40"
                             title={`${dayKind.reason === "holiday" ? dayKind.holidayName ?? "Holiday" : "Weekend"} — no standard hours required, all time worked counts as overtime`}
