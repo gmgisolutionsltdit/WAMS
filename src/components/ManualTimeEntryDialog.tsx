@@ -13,6 +13,7 @@ import type { ReactNode } from "react";
 import { min48hDateISO, isWithin48h, RETRO_LOCK_MESSAGE } from "@/lib/dateRules";
 import { notifyManagersAndAdmins } from "@/lib/notifications";
 import { computeDailyTotals } from "@/lib/workSchedule";
+import { DEFAULT_OFFICE_END, DEFAULT_OFFICE_START, humanMinutes, timeToMinutes } from "@/lib/officeTime";
 
 const localToday = () => format(new Date(), "yyyy-MM-dd");
 
@@ -76,14 +77,19 @@ export const ManualTimeEntryDialog = ({ onSubmitted, trigger, initial, supersede
   const [open, setOpen] = useState(false);
   const [saving, setSaving] = useState(false);
   const [form, setForm] = useState<FormState>({ ...defaultForm, ...initial });
+  const [officeWindow, setOfficeWindow] = useState({ start: DEFAULT_OFFICE_START, end: DEFAULT_OFFICE_END });
 
   useEffect(() => {
-    // An edit prefill already carries the real figures for that day; the
-    // org-wide defaults would otherwise clobber them on mount.
-    if (isEdit) return;
     (async () => {
-      const { data } = await supabase.from("settings").select("standard_shift_hours, break_allowance_minutes").limit(1).maybeSingle();
+      const { data } = await supabase.from("settings").select("standard_shift_hours, break_allowance_minutes, office_start_time, office_end_time").limit(1).maybeSingle();
       if (data) {
+        setOfficeWindow({
+          start: data.office_start_time?.slice(0, 5) || DEFAULT_OFFICE_START,
+          end: data.office_end_time?.slice(0, 5) || DEFAULT_OFFICE_END,
+        });
+        // An edit prefill already carries the real figures for that day; the
+        // org-wide defaults would otherwise clobber them on mount.
+        if (isEdit) return;
         setForm((f) => ({
           ...f,
           due_hours: String(Number(data.standard_shift_hours) || 8),
@@ -92,6 +98,19 @@ export const ManualTimeEntryDialog = ({ onSubmitted, trigger, initial, supersede
       }
     })();
   }, []);
+
+  // Remaining office time is settled directly from this entry's clock-in and
+  // clock-out — the portion of the org's office window (Settings > Office
+  // Hours) this manual entry does not cover.
+  const remainingOfficeMinutes = useMemo(() => {
+    const windowMinutes = Math.max(0, timeToMinutes(officeWindow.end) - timeToMinutes(officeWindow.start));
+    const [ih, im] = form.clock_in.split(":").map(Number);
+    const [oh, om] = form.clock_out.split(":").map(Number);
+    if ([ih, im, oh, om].some((n) => Number.isNaN(n))) return windowMinutes;
+    let usedMinutes = (oh * 60 + om) - (ih * 60 + im);
+    if (usedMinutes < 0) usedMinutes += 24 * 60;
+    return Math.max(0, windowMinutes - usedMinutes);
+  }, [form.clock_in, form.clock_out, officeWindow]);
 
   const computed = useMemo(() => {
     const inT = new Date(`${form.date}T${form.clock_in}:00`);
@@ -238,6 +257,10 @@ export const ManualTimeEntryDialog = ({ onSubmitted, trigger, initial, supersede
             <div><Label>Clock In</Label><Input type="time" value={form.clock_in} onChange={(e) => setForm((f) => ({ ...f, clock_in: e.target.value }))} /></div>
             <div><Label>Clock Out</Label><Input type="time" value={form.clock_out} onChange={(e) => setForm((f) => ({ ...f, clock_out: e.target.value }))} /></div>
           </div>
+          <p className="text-xs text-muted-foreground -mt-2">
+            Remaining Office Time: <span className="font-mono">{humanMinutes(remainingOfficeMinutes)}</span>{" "}
+            of the {officeWindow.start}–{officeWindow.end} office window, settled from this entry's clock in/out.
+          </p>
           <div>
             <Label>Break Time (minutes)</Label>
             <Input type="number" step="5" min="0" value={form.break_minutes} onChange={(e) => setForm((f) => ({ ...f, break_minutes: e.target.value }))} />
