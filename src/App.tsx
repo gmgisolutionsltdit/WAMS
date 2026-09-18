@@ -69,7 +69,7 @@ const AppRoutes = () => (
     <Route path="/" element={<ProtectedRoute><Index /></ProtectedRoute>} />
     <Route path="/attendance" element={<ProtectedRoute><Attendance /></ProtectedRoute>} />
     <Route path="/ot-requests" element={<ProtectedRoute><OTRequests /></ProtectedRoute>} />
-    <Route path="/approvals" element={<ProtectedRoute><RoleGate allow={["admin", "manager", "supervisor"]}><Approvals /></RoleGate></ProtectedRoute>} />
+    <Route path="/approvals" element={<ProtectedRoute><RoleGate allow={["admin", "manager", "supervisor", "hr", "executive"]}><Approvals /></RoleGate></ProtectedRoute>} />
     <Route path="/reports" element={<ProtectedRoute><RoleGate allow={["admin", "manager", "supervisor"]}><Reports /></RoleGate></ProtectedRoute>} />
     <Route path="/settings" element={<ProtectedRoute><RoleGate allow={["admin"]}><SettingsPage /></RoleGate></ProtectedRoute>} />
     <Route path="/employees" element={<ProtectedRoute><RoleGate allow={["admin"]}><EmployeeManagement /></RoleGate></ProtectedRoute>} />

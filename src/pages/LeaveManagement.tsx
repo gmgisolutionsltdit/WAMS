@@ -116,7 +116,7 @@ const LeaveManagement = () => {
         }),
     [requests, user]
   );
-  const canApproveLeave = role === "manager" || role === "admin" || role === "hr" || role === "supervisor";
+  const canApproveLeave = ["manager", "admin", "hr", "supervisor", "executive"].includes(role);
   const pendingTeamCount = useMemo(
     () => teamRequests.filter((r) => r.status === "pending").length,
     [teamRequests]

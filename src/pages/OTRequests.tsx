@@ -31,7 +31,7 @@ const otStatusStyle = (status: string) => {
 
 const OTRequests = () => {
   const { user, role } = useAuth();
-  const isManagerOrAdmin = role === "manager" || role === "admin";
+  const isManagerOrAdmin = ["manager", "admin", "supervisor", "hr", "executive"].includes(role);
 
   const [requests, setRequests] = useState<any[]>([]);
   const [pendingRequests, setPendingRequests] = useState<any[]>([]);
