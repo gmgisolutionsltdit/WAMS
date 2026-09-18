@@ -16,7 +16,6 @@ import { format } from "date-fns";
 import { useRealtimeSubscription } from "@/hooks/useRealtimeSubscription";
 import { notifyManagersAndAdmins, notifyEmployee } from "@/lib/notifications";
 import { applyOTFulfillment } from "@/lib/otFulfillment";
-import DailyWorkLogDialog from "@/components/DailyWorkLogDialog";
 import TimeWithMeridiem from "@/components/TimeWithMeridiem";
 import LateTimeRequestDialog from "@/components/LateTimeRequestDialog";
 import LeaveManagement from "@/pages/LeaveManagement";
@@ -232,10 +231,6 @@ const OTRequests = () => {
 
   return (
     <div className="space-y-6">
-      <div className="flex justify-end gap-2">
-        <DailyWorkLogDialog />
-      </div>
-
       <Tabs defaultValue="overtime">
         <TabsList>
           <TabsTrigger value="overtime">Overtime</TabsTrigger>
