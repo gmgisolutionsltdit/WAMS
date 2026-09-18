@@ -7,12 +7,16 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Badge } from "@/components/ui/badge";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Download, ChevronDown, ChevronRight } from "lucide-react";
+import { Download, ChevronDown, ChevronRight, Trash2 } from "lucide-react";
 import { format } from "date-fns";
+import { toast } from "sonner";
+import { useAuth } from "@/contexts/AuthContext";
 import { mergeDailySessions, sessionWorkedSeconds, type AttendanceSession } from "@/lib/attendance";
 import { fmtHMS, fmtClock, hoursToHMS } from "@/lib/time";
 
 const Reports = () => {
+  const { role } = useAuth();
+  const isAdmin = role === "admin";
   const [logs, setLogs] = useState<any[]>([]);
   const [dateFrom, setDateFrom] = useState("");
   const [dateTo, setDateTo] = useState("");
@@ -97,6 +101,13 @@ const Reports = () => {
 
   const clearFilters = () => {
     setDateFrom(""); setDateTo(""); setName(""); setDepartment("all"); setMonth("");
+  };
+
+  const deleteSession = async (id: string) => {
+    if (!window.confirm("Delete this attendance session? This cannot be undone.")) return;
+    const { error } = await supabase.from("attendance_logs").delete().eq("id", id);
+    if (error) toast.error(error.message);
+    else { toast.success("Session deleted"); fetchLogs(); }
   };
 
   return (
@@ -205,6 +216,7 @@ const Reports = () => {
                               <TableHead>Close</TableHead>
                               <TableHead>Break</TableHead>
                               <TableHead>Duration</TableHead>
+                              {isAdmin && <TableHead>Actions</TableHead>}
                             </TableRow>
                           </TableHeader>
                           <TableBody>
@@ -215,6 +227,19 @@ const Reports = () => {
                                 <TableCell className="font-mono text-xs">{s.clock_out ? fmtClock(s.clock_out) : <Badge variant="secondary">Open</Badge>}</TableCell>
                                 <TableCell className="font-mono text-xs">{fmtHMS((Number(s.break_minutes) || 0) * 60)}</TableCell>
                                 <TableCell className="font-mono text-xs">{fmtHMS(sessionWorkedSeconds(s))}</TableCell>
+                                {isAdmin && (
+                                  <TableCell>
+                                    <Button
+                                      variant="ghost"
+                                      size="icon"
+                                      className="h-7 w-7 text-destructive hover:text-destructive"
+                                      aria-label="Delete this session"
+                                      onClick={() => deleteSession(s.id)}
+                                    >
+                                      <Trash2 className="h-3.5 w-3.5" />
+                                    </Button>
+                                  </TableCell>
+                                )}
                               </TableRow>
                             ))}
                           </TableBody>
