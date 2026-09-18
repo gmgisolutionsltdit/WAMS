@@ -641,7 +641,6 @@ const EmployeeManagement = () => {
                     <SelectItem value="admin">Admin</SelectItem>
                     <SelectItem value="manager">Manager / Reporting Boss</SelectItem>
                     <SelectItem value="employee">Employee</SelectItem>
-                    <SelectItem value="hr">HR</SelectItem>
                     <SelectItem value="executive">Executive (CEO/CTO)</SelectItem>
                   </SelectContent>
                 </Select>
