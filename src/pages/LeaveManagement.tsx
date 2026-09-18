@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState, useCallback } from "react";
 import { useAuth } from "@/contexts/AuthContext";
 import { supabase } from "@/integrations/supabase/client";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -11,7 +11,7 @@ import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import {
-  Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogFooter, DialogDescription,
+  Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription,
 } from "@/components/ui/dialog";
 import { Calendar } from "@/components/ui/calendar";
 import { toast } from "sonner";
@@ -51,7 +51,6 @@ const LeaveManagement = () => {
   const [profiles, setProfiles] = useState<Record<string, { full_name: string | null; email: string | null }>>({});
   const [holidays, setHolidays] = useState<Holiday[]>([]);
   const [settings, setSettings] = useState<Settings>({ weekend_days: [5, 6] });
-  const [open, setOpen] = useState(false);
   const [form, setForm] = useState<{
     leave_type_id: string; start_date: string; end_date: string;
     day_type: "full" | "first_half" | "second_half"; reason: string;
@@ -148,7 +147,6 @@ const LeaveManagement = () => {
       data?.id,
       { route: "/leave", type: "leave_request", requesterId: user?.id }
     );
-    setOpen(false);
     setForm({ leave_type_id: "", start_date: "", end_date: "", day_type: "full", reason: "" });
   };
 
@@ -307,77 +305,6 @@ const LeaveManagement = () => {
         <h2 className="text-2xl font-semibold flex items-center gap-2">
           <CalendarHeart className="h-6 w-6" /> Leave Management
         </h2>
-        <Dialog open={open} onOpenChange={setOpen}>
-          <DialogTrigger asChild>
-            <Button><Plus className="mr-1 h-4 w-4" /> Apply Leave</Button>
-          </DialogTrigger>
-          <DialogContent>
-            <DialogHeader>
-              <DialogTitle>Apply for Leave</DialogTitle>
-              <DialogDescription>Weekends and holidays are excluded by default. Sandwich-leave types charge adjacent weekends/holidays.</DialogDescription>
-            </DialogHeader>
-            <div className="space-y-3">
-              <div>
-                <Label>Leave Type</Label>
-                <Select value={form.leave_type_id} onValueChange={(v) => setForm((f) => ({ ...f, leave_type_id: v }))}>
-                  <SelectTrigger><SelectValue placeholder="Select type" /></SelectTrigger>
-                  <SelectContent>
-                    {leaveTypes.map((t) => (
-                      <SelectItem key={t.id} value={t.id}>
-                        <span className="inline-block w-2 h-2 rounded-full mr-2" style={{ background: t.color }} />
-                        {t.name}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <Label>Start Date</Label>
-                  <LeaveDatePicker
-                    value={form.start_date}
-                    onChange={(iso) => setForm((f) => ({
-                      ...f,
-                      start_date: iso,
-                      // Keep the range coherent when the new start passes the end.
-                      end_date: f.end_date && f.end_date < iso ? iso : f.end_date,
-                    }))}
-                    min={canBypass48h(role) ? undefined : min48hDateISO()}
-                    holidays={holidaySet}
-                    weekendDays={settings.weekend_days}
-                  />
-                </div>
-                <div>
-                  <Label>End Date</Label>
-                  <LeaveDatePicker
-                    value={form.end_date}
-                    onChange={(iso) => setForm((f) => ({ ...f, end_date: iso }))}
-                    min={form.start_date || (canBypass48h(role) ? undefined : min48hDateISO())}
-                    holidays={holidaySet}
-                    weekendDays={settings.weekend_days}
-                  />
-                </div>
-              </div>
-              <div>
-                <Label>Day Type</Label>
-                <Select value={form.day_type} onValueChange={(v: any) => setForm((f) => ({ ...f, day_type: v }))}>
-                  <SelectTrigger><SelectValue /></SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="full">Full Day</SelectItem>
-                    <SelectItem value="first_half">First Half</SelectItem>
-                    <SelectItem value="second_half">Second Half</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-              <div><Label>Reason</Label><Textarea value={form.reason} onChange={(e) => setForm((f) => ({ ...f, reason: e.target.value }))} /></div>
-              <div className="text-sm text-muted-foreground">
-                Chargeable days: <strong>{previewDays}</strong>
-                {previewLt?.sandwich_leave && <span className="ml-2 text-xs">(sandwich rule applied)</span>}
-              </div>
-            </div>
-            <DialogFooter><Button onClick={submit}>Submit</Button></DialogFooter>
-          </DialogContent>
-        </Dialog>
       </div>
 
       <div className="grid md:grid-cols-2 lg:grid-cols-4 gap-3">
@@ -404,6 +331,73 @@ const LeaveManagement = () => {
           );
         })}
       </div>
+
+      <Card>
+        <CardHeader>
+          <CardTitle>Apply for Leave</CardTitle>
+          <CardDescription>Weekends and holidays are excluded by default. Sandwich-leave types charge adjacent weekends/holidays.</CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-3">
+          <div>
+            <Label>Leave Type</Label>
+            <Select value={form.leave_type_id} onValueChange={(v) => setForm((f) => ({ ...f, leave_type_id: v }))}>
+              <SelectTrigger><SelectValue placeholder="Select type" /></SelectTrigger>
+              <SelectContent>
+                {leaveTypes.map((t) => (
+                  <SelectItem key={t.id} value={t.id}>
+                    <span className="inline-block w-2 h-2 rounded-full mr-2" style={{ background: t.color }} />
+                    {t.name}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <Label>Start Date</Label>
+              <LeaveDatePicker
+                value={form.start_date}
+                onChange={(iso) => setForm((f) => ({
+                  ...f,
+                  start_date: iso,
+                  // Keep the range coherent when the new start passes the end.
+                  end_date: f.end_date && f.end_date < iso ? iso : f.end_date,
+                }))}
+                min={canBypass48h(role) ? undefined : min48hDateISO()}
+                holidays={holidaySet}
+                weekendDays={settings.weekend_days}
+              />
+            </div>
+            <div>
+              <Label>End Date</Label>
+              <LeaveDatePicker
+                value={form.end_date}
+                onChange={(iso) => setForm((f) => ({ ...f, end_date: iso }))}
+                min={form.start_date || (canBypass48h(role) ? undefined : min48hDateISO())}
+                holidays={holidaySet}
+                weekendDays={settings.weekend_days}
+              />
+            </div>
+          </div>
+          <div>
+            <Label>Day Type</Label>
+            <Select value={form.day_type} onValueChange={(v: any) => setForm((f) => ({ ...f, day_type: v }))}>
+              <SelectTrigger><SelectValue /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value="full">Full Day</SelectItem>
+                <SelectItem value="first_half">First Half</SelectItem>
+                <SelectItem value="second_half">Second Half</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+          <div><Label>Reason</Label><Textarea value={form.reason} onChange={(e) => setForm((f) => ({ ...f, reason: e.target.value }))} /></div>
+          <div className="text-sm text-muted-foreground">
+            Chargeable days: <strong>{previewDays}</strong>
+            {previewLt?.sandwich_leave && <span className="ml-2 text-xs">(sandwich rule applied)</span>}
+          </div>
+          <Button onClick={submit} className="w-full"><Plus className="mr-1 h-4 w-4" /> Submit Leave Request</Button>
+        </CardContent>
+      </Card>
 
       <Tabs value={tab} onValueChange={setTab}>
         <TabsList>
