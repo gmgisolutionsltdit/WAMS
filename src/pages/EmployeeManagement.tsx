@@ -24,10 +24,16 @@ import {
 } from "lucide-react";
 import { useRealtimeSubscription } from "@/hooks/useRealtimeSubscription";
 import { useNavigate } from "react-router-dom";
+import { DEFAULT_GRACE_MINUTES, DEFAULT_OFFICE_END, DEFAULT_OFFICE_START } from "@/lib/officeTime";
+import { DEFAULT_WORKING_DAYS } from "@/lib/workSchedule";
 
 const SERVICE_STATUS = ["Permanent", "Contractual", "Intern", "Short-Term", "Consultant"];
 const EMPLOYEE_STATUS = ["Active", "Inactive", "Resigned"];
 const LEGACY_WINGS = ["GMGI", "MORU"];
+const DOW = [
+  { v: 0, label: "Sun" }, { v: 1, label: "Mon" }, { v: 2, label: "Tue" }, { v: 3, label: "Wed" },
+  { v: 4, label: "Thu" }, { v: 5, label: "Fri" }, { v: 6, label: "Sat" },
+];
 
 type WingRow = { id: string; name: string; code: string; active: boolean };
 
@@ -67,6 +73,12 @@ type EmployeeRow = {
   base_salary: number;
   hourly_overtime_rate: number;
   pf_contribution_pct: number;
+  office_start_time: string | null;
+  office_end_time: string | null;
+  standard_daily_hours: number | null;
+  unpaid_break_minutes: number | null;
+  late_grace_minutes: number | null;
+  working_days: number[] | null;
   _role: string;
 };
 
@@ -108,6 +120,10 @@ const EmployeeManagement = () => {
     photo_url: "" as string,
     base_salary: "0", hourly_overtime_rate: "0", pf_contribution_pct: "0",
     project_ids: [] as string[],
+    office_start_time: DEFAULT_OFFICE_START, office_end_time: DEFAULT_OFFICE_END,
+    standard_daily_hours: "8", unpaid_break_minutes: "60",
+    late_grace_minutes: String(DEFAULT_GRACE_MINUTES),
+    working_days: [...DEFAULT_WORKING_DAYS] as number[],
   };
 
   const [form, setForm] = useState(initialForm);
@@ -214,6 +230,12 @@ const EmployeeManagement = () => {
       hourly_overtime_rate: String(emp.hourly_overtime_rate ?? 0),
       pf_contribution_pct: String(emp.pf_contribution_pct ?? 0),
       project_ids: memberProjects[emp.id] ?? [],
+      office_start_time: (emp.office_start_time || DEFAULT_OFFICE_START).slice(0, 5),
+      office_end_time: (emp.office_end_time || DEFAULT_OFFICE_END).slice(0, 5),
+      standard_daily_hours: String(emp.standard_daily_hours ?? 8),
+      unpaid_break_minutes: String(emp.unpaid_break_minutes ?? 60),
+      late_grace_minutes: String(emp.late_grace_minutes ?? DEFAULT_GRACE_MINUTES),
+      working_days: (emp.working_days?.length ? emp.working_days.map(Number) : [...DEFAULT_WORKING_DAYS]),
     });
     setEditingId(emp.id);
     setDialogOpen(true);
@@ -291,6 +313,16 @@ const EmployeeManagement = () => {
     }
   };
 
+  /** Per-employee office hours / work schedule, shared by the create and edit paths. */
+  const schedulePayload = () => ({
+    office_start_time: `${form.office_start_time}:00`,
+    office_end_time: `${form.office_end_time}:00`,
+    standard_daily_hours: parseFloat(form.standard_daily_hours) || 8,
+    unpaid_break_minutes: parseInt(form.unpaid_break_minutes, 10) || 0,
+    late_grace_minutes: parseInt(form.late_grace_minutes, 10) || 0,
+    working_days: form.working_days.length ? [...form.working_days].sort((a, b) => a - b) : [...DEFAULT_WORKING_DAYS],
+  });
+
   const handleSave = async () => {
     if (!form.full_name || !form.email) { toast.error("Name and email are required"); return; }
     setSaving(true);
@@ -315,6 +347,7 @@ const EmployeeManagement = () => {
         daily_ot_cap: parseFloat(form.daily_ot_cap) || 4,
         monthly_ot_cap: parseFloat(form.monthly_ot_cap) || 40,
         photo_url: form.photo_url || null,
+        ...schedulePayload(),
       };
       if (canEditPayroll) {
         profilePayload.base_salary = parseFloat(form.base_salary) || 0;
@@ -362,12 +395,10 @@ const EmployeeManagement = () => {
         }
         const created = data as any;
         // Apply photo / wing selection made before saving
-        const postCreate: any = {};
+        const postCreate: any = { ...schedulePayload() };
         if (form.photo_url) postCreate.photo_url = form.photo_url;
         if (form.wing_id) postCreate.wing_id = form.wing_id;
-        if (Object.keys(postCreate).length) {
-          await supabase.from("profiles").update(postCreate).eq("id", created.userId);
-        }
+        await supabase.from("profiles").update(postCreate).eq("id", created.userId);
         await syncProjectMembers(created.userId);
 
         setTempCredentials({ email: created.email, password: created.tempPassword });
@@ -677,6 +708,65 @@ const EmployeeManagement = () => {
               <div></div>
               <div><Label>Daily OT Cap (hrs)</Label><Input type="number" step="0.5" value={form.daily_ot_cap} onChange={(e) => setForm((f) => ({ ...f, daily_ot_cap: e.target.value }))} /></div>
               <div><Label>Monthly OT Cap (hrs)</Label><Input type="number" step="1" value={form.monthly_ot_cap} onChange={(e) => setForm((f) => ({ ...f, monthly_ot_cap: e.target.value }))} /></div>
+            </div>
+
+            <div className="mt-5 rounded-md border p-3 bg-muted/30">
+              <Label className="text-sm font-semibold">Office Hours &amp; Work Schedule</Label>
+              <p className="text-xs text-muted-foreground mt-1 mb-3">
+                This employee's own schedule. Attendance, late arrival, due time, overtime and leave are all
+                calculated against these values.
+              </p>
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <Label>Office Start</Label>
+                  <Input type="time" value={form.office_start_time}
+                    onChange={(e) => setForm((f) => ({ ...f, office_start_time: e.target.value }))} />
+                </div>
+                <div>
+                  <Label>Office End</Label>
+                  <Input type="time" value={form.office_end_time}
+                    onChange={(e) => setForm((f) => ({ ...f, office_end_time: e.target.value }))} />
+                </div>
+                <div>
+                  <Label>Standard Shift Hours</Label>
+                  <Input type="number" step="0.5" min="0.5" max="24" value={form.standard_daily_hours}
+                    onChange={(e) => setForm((f) => ({ ...f, standard_daily_hours: e.target.value }))} />
+                  <p className="text-[11px] text-muted-foreground mt-1">Office window length, break included.</p>
+                </div>
+                <div>
+                  <Label>Daily Break Allowance (minutes)</Label>
+                  <Input type="number" step="5" min="0" value={form.unpaid_break_minutes}
+                    onChange={(e) => setForm((f) => ({ ...f, unpaid_break_minutes: e.target.value }))} />
+                  <p className="text-[11px] text-muted-foreground mt-1">Unpaid break inside the office window.</p>
+                </div>
+                <div>
+                  <Label>Late Grace (minutes)</Label>
+                  <Input type="number" step="1" min="0" value={form.late_grace_minutes}
+                    onChange={(e) => setForm((f) => ({ ...f, late_grace_minutes: e.target.value }))} />
+                  <p className="text-[11px] text-muted-foreground mt-1">Arriving later than this counts as late.</p>
+                </div>
+                <div className="col-span-2">
+                  <Label>Working Days <span className="text-xs text-muted-foreground">(unchecked days count as weekend)</span></Label>
+                  <div className="flex flex-wrap gap-3 mt-1">
+                    {DOW.map((d) => (
+                      <label key={d.v} className="flex items-center gap-1.5 text-sm">
+                        <Checkbox
+                          checked={form.working_days.includes(d.v)}
+                          onCheckedChange={() =>
+                            setForm((f) => ({
+                              ...f,
+                              working_days: f.working_days.includes(d.v)
+                                ? f.working_days.filter((x) => x !== d.v)
+                                : [...f.working_days, d.v].sort((a, b) => a - b),
+                            }))
+                          }
+                        />
+                        {d.label}
+                      </label>
+                    ))}
+                  </div>
+                </div>
+              </div>
             </div>
 
             {canEditPayroll && (

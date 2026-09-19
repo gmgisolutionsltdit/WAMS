@@ -1006,8 +1006,11 @@ export type Database = {
           reporting_manager_id: string | null
           resign_date: string | null
           service_status: Database["public"]["Enums"]["service_status"]
+          standard_daily_hours: number
+          unpaid_break_minutes: number
           updated_at: string
           wing_id: string | null
+          working_days: number[]
         }
         Insert: {
           base_salary?: number
@@ -1034,8 +1037,11 @@ export type Database = {
           reporting_manager_id?: string | null
           resign_date?: string | null
           service_status?: Database["public"]["Enums"]["service_status"]
+          standard_daily_hours?: number
+          unpaid_break_minutes?: number
           updated_at?: string
           wing_id?: string | null
+          working_days?: number[]
         }
         Update: {
           base_salary?: number
@@ -1062,8 +1068,11 @@ export type Database = {
           reporting_manager_id?: string | null
           resign_date?: string | null
           service_status?: Database["public"]["Enums"]["service_status"]
+          standard_daily_hours?: number
+          unpaid_break_minutes?: number
           updated_at?: string
           wing_id?: string | null
+          working_days?: number[]
         }
         Relationships: [
           {

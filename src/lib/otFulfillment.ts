@@ -1,13 +1,17 @@
 import { supabase } from "@/integrations/supabase/client";
+import { netRequiredHours, weekendDaysFor, type WorkSchedule } from "@/lib/workSchedule";
 
 /**
  * Intelligent OT fulfillment + caps logic.
  *
  * 1. If the employee didn't complete the standard shift, the deficit is
  *    subtracted from the requested OT (floor at 0).
- * 2. If the day is a declared holiday OR weekend, deficit is ignored
- *    (full hours count as OT).
+ * 2. If the day is a declared holiday OR one of the employee's non-working
+ *    days, the deficit is ignored (full hours count as OT).
  * 3. Daily and monthly OT caps from the user's profile are enforced.
+ *
+ * Everything is measured against this employee's own schedule, so staff on
+ * different shifts or week patterns are each judged on their own hours.
  *
  * Returns the final approved OT hours (>= 0).
  */
@@ -16,22 +20,16 @@ export async function applyOTFulfillment(
   date: string,
   requestedOTHours: number
 ): Promise<number> {
-  // Settings: standard hours + weekend definition
-  const { data: settings } = await supabase
-    .from("settings")
-    .select("standard_shift_hours, weekend_days")
-    .limit(1)
-    .single();
-
-  const standardHours = Number(settings?.standard_shift_hours ?? 8);
-  const weekendDays: number[] = (settings?.weekend_days as number[]) || [5, 6];
-
-  // Profile caps + wing
+  // Profile: schedule, caps and wing
   const { data: profile } = await supabase
     .from("profiles")
-    .select("daily_ot_cap, monthly_ot_cap, company_wing")
+    .select("daily_ot_cap, monthly_ot_cap, company_wing, standard_daily_hours, unpaid_break_minutes, working_days")
     .eq("id", userId)
     .maybeSingle();
+
+  const schedule = (profile ?? null) as WorkSchedule | null;
+  const standardHours = netRequiredHours(schedule);
+  const weekendDays = weekendDaysFor(schedule);
 
   const dailyCap = Number(profile?.daily_ot_cap ?? 4);
   const monthlyCap = Number(profile?.monthly_ot_cap ?? 40);

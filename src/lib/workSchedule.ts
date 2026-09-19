@@ -44,6 +44,16 @@ export const workingDays = (s?: WorkSchedule | null): number[] => {
 export const workingDaysPerWeek = (s?: WorkSchedule | null): number => workingDays(s).length;
 
 /**
+ * The employee's non-working weekdays — every day of the week they are not
+ * scheduled to work. Attendance, leave and OT all treat these like a weekend,
+ * so each employee's own schedule decides which days those are.
+ */
+export const weekendDaysFor = (s?: WorkSchedule | null): number[] => {
+  const working = workingDays(s);
+  return [0, 1, 2, 3, 4, 5, 6].filter((d) => !working.includes(d));
+};
+
+/**
  * Net hours an employee must actually work: the office window less the unpaid
  * break. Defaults to 7h — an 08:00-long day holding a 60m break.
  */

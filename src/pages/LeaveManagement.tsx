@@ -22,6 +22,7 @@ import { notifyManagersAndAdmins, notifyEmployee } from "@/lib/notifications";
 import { min48hDateISO, isWithin48h, canBypass48h, RETRO_LOCK_MESSAGE } from "@/lib/dateRules";
 import LeaveDatePicker from "@/components/LeaveDatePicker";
 import { computeWorkingDays } from "@/lib/leaveDays";
+import { weekendDaysFor } from "@/lib/workSchedule";
 
 type LeaveType = {
   id: string; name: string; code: string; color: string; annual_quota: number;
@@ -41,16 +42,14 @@ type LeaveRequest = {
 
 type Balance = { id: string; user_id: string; leave_type_id: string; year: number; allocated: number; used: number; carried_forward: number; };
 type Holiday = { id: string; holiday_date: string; name: string; wing: string | null };
-type Settings = { weekend_days: number[] };
 
 const LeaveManagement = () => {
   const { user, role } = useAuth();
   const [leaveTypes, setLeaveTypes] = useState<LeaveType[]>([]);
   const [requests, setRequests] = useState<LeaveRequest[]>([]);
   const [balances, setBalances] = useState<Balance[]>([]);
-  const [profiles, setProfiles] = useState<Record<string, { full_name: string | null; email: string | null }>>({});
+  const [profiles, setProfiles] = useState<Record<string, { full_name: string | null; email: string | null; working_days: number[] | null }>>({});
   const [holidays, setHolidays] = useState<Holiday[]>([]);
-  const [settings, setSettings] = useState<Settings>({ weekend_days: [5, 6] });
   const [form, setForm] = useState<{
     leave_type_id: string; start_date: string; end_date: string;
     day_type: "full" | "first_half" | "second_half"; reason: string;
@@ -70,14 +69,13 @@ const LeaveManagement = () => {
   });
 
   const fetchAll = useCallback(async () => {
-    const [{ data: types }, { data: reqs }, { data: teamCal }, { data: bals }, { data: pf }, { data: hols }, { data: cfg }] = await Promise.all([
+    const [{ data: types }, { data: reqs }, { data: teamCal }, { data: bals }, { data: pf }, { data: hols }] = await Promise.all([
       supabase.from("leave_types").select("*").eq("active", true).order("name"),
       supabase.from("leave_requests").select("*").order("start_date", { ascending: false }),
       supabase.rpc("get_team_leave_calendar"),
       supabase.from("leave_balances").select("*").eq("year", year),
-      supabase.from("profiles").select("id, full_name, email"),
+      supabase.from("profiles").select("id, full_name, email, working_days"),
       supabase.from("holidays").select("*"),
-      supabase.from("settings").select("weekend_days").limit(1).maybeSingle(),
     ]);
     setLeaveTypes((types || []) as LeaveType[]);
     // Rows readable directly (own / managed) plus reason-free teammate calendar entries
@@ -89,10 +87,11 @@ const LeaveManagement = () => {
     setRequests([...direct, ...teamOnly].sort((a, b) => (a.start_date < b.start_date ? 1 : -1)));
     setBalances((bals || []) as Balance[]);
     const map: Record<string, any> = {};
-    (pf || []).forEach((p: any) => { map[p.id] = { full_name: p.full_name, email: p.email }; });
+    (pf || []).forEach((p: any) => {
+      map[p.id] = { full_name: p.full_name, email: p.email, working_days: p.working_days };
+    });
     setProfiles(map);
     setHolidays((hols || []) as Holiday[]);
-    if (cfg?.weekend_days) setSettings({ weekend_days: cfg.weekend_days as number[] });
   }, [year]);
 
   useEffect(() => { fetchAll(); }, [fetchAll]);
@@ -101,6 +100,14 @@ const LeaveManagement = () => {
   useRealtimeSubscription("leave_types", fetchAll, "leave-types");
 
   const holidaySet = useMemo(() => new Set(holidays.map((h) => h.holiday_date)), [holidays]);
+
+  /**
+   * An employee's non-working weekdays, from their own schedule on the
+   * Employees page — leave is charged against the days that person actually
+   * works, not one org-wide weekend.
+   */
+  const weekendFor = (userId?: string | null): number[] =>
+    weekendDaysFor({ working_days: (userId && profiles[userId]?.working_days) || null });
 
   const myBalances = useMemo(() => balances.filter((b) => b.user_id === user?.id), [balances, user]);
   const myRequests = useMemo(() => requests.filter((r) => r.user_id === user?.id), [requests, user]);
@@ -127,7 +134,7 @@ const LeaveManagement = () => {
     if (!form.leave_type_id || !form.start_date || !form.end_date) { toast.error("Fill leave type and dates"); return; }
     const submitLt = leaveTypes.find((t) => t.id === form.leave_type_id);
     if (!canBypass48h(role) && !isWithin48h(form.start_date)) { toast.error(RETRO_LOCK_MESSAGE); return; }
-    const days = computeWorkingDays(form.start_date, form.end_date, form.day_type, settings.weekend_days, holidaySet, !!submitLt?.sandwich_leave, submitLt?.bridge_holidays !== false);
+    const days = computeWorkingDays(form.start_date, form.end_date, form.day_type, weekendFor(user?.id), holidaySet, !!submitLt?.sandwich_leave, submitLt?.bridge_holidays !== false);
     if (days <= 0) { toast.error("No working days in this range (weekends/holidays excluded)"); return; }
     const { data, error } = await supabase.from("leave_requests").insert({
       user_id: user!.id,
@@ -209,7 +216,7 @@ const LeaveManagement = () => {
     if (!modReq || !user) return;
     if (!modForm.leave_type_id || !modForm.start_date || !modForm.end_date) { toast.error("Fill all fields"); return; }
     const modLt = leaveTypes.find((t) => t.id === modForm.leave_type_id);
-    const days = computeWorkingDays(modForm.start_date, modForm.end_date, modForm.day_type, settings.weekend_days, holidaySet, !!modLt?.sandwich_leave, modLt?.bridge_holidays !== false);
+    const days = computeWorkingDays(modForm.start_date, modForm.end_date, modForm.day_type, weekendFor(modReq.user_id), holidaySet, !!modLt?.sandwich_leave, modLt?.bridge_holidays !== false);
     if (days <= 0) { toast.error("No working days in modified range"); return; }
     const { error } = await supabase.from("leave_requests").update({
       leave_type_id: modForm.leave_type_id,
@@ -271,13 +278,13 @@ const LeaveManagement = () => {
       const e = new Date(r.end_date + "T00:00:00");
       for (let d = new Date(s); d <= e; d.setDate(d.getDate() + 1)) {
         const dow = d.getDay();
-        if (settings.weekend_days.includes(dow)) continue;
+        if (weekendFor(r.user_id).includes(dow)) continue;
         if (holidaySet.has(format(d, "yyyy-MM-dd"))) continue;
         days.push(new Date(d));
       }
     });
     return days;
-  }, [visibleApproved, settings, holidaySet]);
+  }, [visibleApproved, profiles, holidaySet]);
 
   /** Who is on leave on the selected calendar day. */
   const peopleOnSelectedDay = useMemo(() => {
@@ -296,7 +303,7 @@ const LeaveManagement = () => {
 
   const previewLt = leaveTypes.find((t) => t.id === form.leave_type_id);
   const previewDays = form.start_date && form.end_date
-    ? computeWorkingDays(form.start_date, form.end_date, form.day_type, settings.weekend_days, holidaySet, !!previewLt?.sandwich_leave, previewLt?.bridge_holidays !== false)
+    ? computeWorkingDays(form.start_date, form.end_date, form.day_type, weekendFor(user?.id), holidaySet, !!previewLt?.sandwich_leave, previewLt?.bridge_holidays !== false)
     : 0;
 
   return (
@@ -365,7 +372,7 @@ const LeaveManagement = () => {
                 }))}
                 min={canBypass48h(role) ? undefined : min48hDateISO()}
                 holidays={holidaySet}
-                weekendDays={settings.weekend_days}
+                weekendDays={weekendFor(user?.id)}
               />
             </div>
             <div>
@@ -375,7 +382,7 @@ const LeaveManagement = () => {
                 onChange={(iso) => setForm((f) => ({ ...f, end_date: iso }))}
                 min={form.start_date || (canBypass48h(role) ? undefined : min48hDateISO())}
                 holidays={holidaySet}
-                weekendDays={settings.weekend_days}
+                weekendDays={weekendFor(user?.id)}
               />
             </div>
           </div>
@@ -605,7 +612,7 @@ const LeaveManagement = () => {
                       end_date: f.end_date && f.end_date < iso ? iso : f.end_date,
                     }))}
                     holidays={holidaySet}
-                    weekendDays={settings.weekend_days}
+                    weekendDays={weekendFor(user?.id)}
                   />
                 </div>
                 <div>
@@ -615,7 +622,7 @@ const LeaveManagement = () => {
                     onChange={(iso) => setModForm((f) => ({ ...f, end_date: iso }))}
                     min={modForm.start_date || undefined}
                     holidays={holidaySet}
-                    weekendDays={settings.weekend_days}
+                    weekendDays={weekendFor(user?.id)}
                   />
                 </div>
               </div>
@@ -636,7 +643,7 @@ const LeaveManagement = () => {
               </div>
               <div className="text-sm text-muted-foreground">
                 New chargeable days: <strong>
-                  {(() => { const lt = leaveTypes.find((t) => t.id === modForm.leave_type_id); return computeWorkingDays(modForm.start_date, modForm.end_date, modForm.day_type, settings.weekend_days, holidaySet, !!lt?.sandwich_leave, lt?.bridge_holidays !== false); })()}
+                  {(() => { const lt = leaveTypes.find((t) => t.id === modForm.leave_type_id); return computeWorkingDays(modForm.start_date, modForm.end_date, modForm.day_type, weekendFor(modReq?.user_id), holidaySet, !!lt?.sandwich_leave, lt?.bridge_holidays !== false); })()}
                 </strong>
               </div>
             </div>
