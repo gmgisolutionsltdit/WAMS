@@ -24,8 +24,8 @@ import { fmtHMS } from "@/lib/time";
 import { AttendancePunchCard } from "@/components/hrms/AttendancePunchCard";
 import { BiometricLogFeed } from "@/components/hrms/BiometricLogFeed";
 import ManualTimeEntryDialog from "@/components/ManualTimeEntryDialog";
-import { DEFAULT_OFFICE_END, DEFAULT_OFFICE_START, evaluateArrival, humanMinutes } from "@/lib/officeTime";
-import { computeDailyTotals, DEFAULT_WEEKEND_DAYS, type WorkSchedule } from "@/lib/workSchedule";
+import { DEFAULT_GRACE_MINUTES, DEFAULT_OFFICE_END, DEFAULT_OFFICE_START, evaluateArrival, humanMinutes, officeStart } from "@/lib/officeTime";
+import { computeDailyTotals, unpaidBreakMinutes, weekendDaysFor, type WorkSchedule } from "@/lib/workSchedule";
 import { notifyManagersAndAdmins } from "@/lib/notifications";
 
 
@@ -51,7 +51,6 @@ const Dashboard = () => {
 
 
 
-  const [breakAllowance, setBreakAllowance] = useState(60);
   const [workLogOpen, setWorkLogOpen] = useState(false);
   const [pendingClockOut, setPendingClockOut] = useState<{ clockOutTime: string; logId: string; totalHours: number; overtimeHours: number; breakMins: number } | null>(null);
   const [faceRequired, setFaceRequired] = useState(false);
@@ -60,26 +59,12 @@ const Dashboard = () => {
   const [officeTimes, setOfficeTimes] = useState<{ start: string; end: string; grace: number }>({
     start: DEFAULT_OFFICE_START, end: DEFAULT_OFFICE_END, grace: 11,
   });
+  // This employee's own schedule (Employees page) drives lateness, the break
+  // countdown and which days count as their weekend.
   const [workSchedule, setWorkSchedule] = useState<WorkSchedule | null>(null);
-  // Lateness (and the Approved Start Time default on Attendance History) is
-  // judged against this org-wide Settings office start time. A per-day
-  // approval (late_adjustment or office_time_change) instead sets that
-  // specific day's attendance_logs.approved_start_time, so it never leaks
-  // into every other day's default.
-  const [settingsOfficeStart, setSettingsOfficeStart] = useState<string>(DEFAULT_OFFICE_START);
 
-
-  useEffect(() => {
-    (async () => {
-      const { data } = await supabase.from("settings").select("break_allowance_minutes, standard_shift_hours, office_start_time").limit(1).maybeSingle();
-      if (data) {
-        setBreakAllowance(Number(data.break_allowance_minutes) || 60);
-        setSettingsOfficeStart((data.office_start_time as string | null)?.slice(0, 5) || DEFAULT_OFFICE_START);
-      }
-    })();
-  }, []);
-
-  const effectiveOfficeStart = settingsOfficeStart;
+  const effectiveOfficeStart = officeStart(workSchedule).slice(0, 5);
+  const breakAllowance = unpaidBreakMinutes(workSchedule);
 
 
   useEffect(() => {
@@ -146,17 +131,15 @@ const Dashboard = () => {
     const today = localToday();
     // There is no shift to be late for on a holiday or weekend, so no penalty
     // applies — the same rule applyOTFulfillment uses when approving OT.
-    const [{ data: holidayRow }, { data: cfg }] = await Promise.all([
-      supabase.from("holidays").select("id").eq("holiday_date", today).maybeSingle(),
-      supabase.from("settings").select("weekend_days").limit(1).maybeSingle(),
-    ]);
-    const weekendDays = (cfg?.weekend_days as number[] | undefined) ?? DEFAULT_WEEKEND_DAYS;
-    const nonWorkingDay = !!holidayRow || weekendDays.includes(now.getDay());
+    const { data: holidayRow } = await supabase
+      .from("holidays").select("id").eq("holiday_date", today).maybeSingle();
+    // A day this employee isn't scheduled to work is their weekend.
+    const nonWorkingDay = !!holidayRow || weekendDaysFor(workSchedule).includes(now.getDay());
     // Fixed at the moment of arrival so a later office-time change never
     // rewrites what was actually owed for this specific day.
     const arrival = nonWorkingDay
       ? { late: false, lateMinutes: 0, penaltyMinutes: 0 }
-      : evaluateArrival(now, { ...workSchedule, office_start_time: effectiveOfficeStart });
+      : evaluateArrival(now, workSchedule);
     const { error } = await supabase.from("attendance_logs").insert({
       user_id: user.id,
       date: today,
@@ -201,7 +184,7 @@ const Dashboard = () => {
     if (!user) return;
     supabase
       .from("profiles")
-      .select("face_descriptor, office_start_time, office_end_time, late_grace_minutes")
+      .select("face_descriptor, office_start_time, office_end_time, late_grace_minutes, standard_daily_hours, unpaid_break_minutes, working_days")
       .eq("id", user.id)
       .maybeSingle()
       .then(({ data }) => {
@@ -210,41 +193,16 @@ const Dashboard = () => {
         setOfficeTimes({
           start: (data.office_start_time as string | null) || DEFAULT_OFFICE_START,
           end: (data.office_end_time as string | null) || DEFAULT_OFFICE_END,
-          grace: data.late_grace_minutes == null ? 11 : Number(data.late_grace_minutes),
+          grace: data.late_grace_minutes == null ? DEFAULT_GRACE_MINUTES : Number(data.late_grace_minutes),
         });
         setWorkSchedule({
           office_start_time: data.office_start_time as string | null,
           office_end_time: data.office_end_time as string | null,
           late_grace_minutes: data.late_grace_minutes as number | null,
+          standard_daily_hours: data.standard_daily_hours as number | null,
+          unpaid_break_minutes: data.unpaid_break_minutes as number | null,
+          working_days: data.working_days as number[] | null,
         });
-      });
-
-    // Per-employee schedule overrides live behind a later migration, so a
-    // deploy that lands before it must fall back to the defaults rather than
-    // breaking the dashboard.
-    type ScheduleOverrides = Pick<
-      WorkSchedule,
-      "standard_daily_hours" | "unpaid_break_minutes" | "working_days"
-    >;
-    const scheduleQuery = supabase.from("profiles") as unknown as {
-      select(columns: string): {
-        eq(column: string, value: string): {
-          maybeSingle(): PromiseLike<{ data: ScheduleOverrides | null; error: unknown }>;
-        };
-      };
-    };
-    scheduleQuery
-      .select("standard_daily_hours, unpaid_break_minutes, working_days")
-      .eq("id", user.id)
-      .maybeSingle()
-      .then(({ data, error }) => {
-        if (error || !data) return;
-        setWorkSchedule((prev) => ({
-          ...prev,
-          standard_daily_hours: data.standard_daily_hours ?? null,
-          unpaid_break_minutes: data.unpaid_break_minutes ?? null,
-          working_days: data.working_days ?? null,
-        }));
       });
   }, [user]);
 

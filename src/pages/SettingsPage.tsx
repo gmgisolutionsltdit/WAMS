@@ -4,23 +4,10 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/com
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Checkbox } from "@/components/ui/checkbox";
 import { Switch } from "@/components/ui/switch";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { toast } from "sonner";
-import { Settings as SettingsIcon, CalendarHeart } from "lucide-react";
+import { CalendarHeart } from "lucide-react";
 import { useRealtimeSubscription } from "@/hooks/useRealtimeSubscription";
-import { BiometricDevicePanel } from "@/components/hrms/BiometricDevicePanel";
-
-const DOW = [
-  { v: 0, label: "Sun" },
-  { v: 1, label: "Mon" },
-  { v: 2, label: "Tue" },
-  { v: 3, label: "Wed" },
-  { v: 4, label: "Thu" },
-  { v: 5, label: "Fri" },
-  { v: 6, label: "Sat" },
-];
 
 type LeaveType = {
   id: string; name: string; code: string; color: string;
@@ -29,48 +16,16 @@ type LeaveType = {
 };
 
 const SettingsPage = () => {
-  const [settings, setSettings] = useState<any>(null);
   const [leaveTypes, setLeaveTypes] = useState<LeaveType[]>([]);
-  const [loading, setLoading] = useState(false);
   const [savingLeave, setSavingLeave] = useState(false);
-
-  const fetchSettings = useCallback(async () => {
-    const { data } = await supabase.from("settings").select("*").limit(1).single();
-    setSettings(data);
-  }, []);
 
   const fetchLeaveTypes = useCallback(async () => {
     const { data } = await supabase.from("leave_types").select("*").order("name");
     setLeaveTypes((data || []) as LeaveType[]);
   }, []);
 
-  useEffect(() => { fetchSettings(); fetchLeaveTypes(); }, [fetchSettings, fetchLeaveTypes]);
+  useEffect(() => { fetchLeaveTypes(); }, [fetchLeaveTypes]);
   useRealtimeSubscription("leave_types", fetchLeaveTypes, "settings-leave-types");
-
-  const toggleWeekend = (v: number) => {
-    const cur: number[] = settings.weekend_days || [];
-    const next = cur.includes(v) ? cur.filter((x) => x !== v) : [...cur, v].sort();
-    setSettings({ ...settings, weekend_days: next });
-  };
-
-  const handleSave = async () => {
-    if (!settings) return;
-    setLoading(true);
-    const { error } = await supabase.from("settings").update({
-      standard_shift_hours: settings.standard_shift_hours,
-      weekday_ot_multiplier: settings.weekday_ot_multiplier,
-      weekend_ot_multiplier: settings.weekend_ot_multiplier,
-      holiday_ot_multiplier: settings.holiday_ot_multiplier,
-      office_start_time: settings.office_start_time,
-      office_end_time: settings.office_end_time,
-      weekend_days: settings.weekend_days,
-      break_allowance_minutes: Number(settings.break_allowance_minutes) || 0,
-      start_time_approver_role: settings.start_time_approver_role || "admin",
-    }).eq("id", settings.id);
-    if (error) toast.error(error.message);
-    else toast.success("Settings saved");
-    setLoading(false);
-  };
 
   const updateLeaveType = (id: string, patch: Partial<LeaveType>) => {
     setLeaveTypes((prev) => prev.map((lt) => (lt.id === id ? { ...lt, ...patch } : lt)));
@@ -94,97 +49,15 @@ const SettingsPage = () => {
     setSavingLeave(false);
   };
 
-  if (!settings) return <p className="text-muted-foreground">Loading settings...</p>;
-
   return (
     <div className="space-y-6 max-w-6xl">
-      <div className="grid gap-6 md:grid-cols-2">
-        <Card className="shadow-card">
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2"><SettingsIcon className="h-5 w-5" /> Office Hours</CardTitle>
-            <CardDescription>Standard working schedule used for OT calculations</CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            <div className="grid grid-cols-2 gap-3">
-              <div className="space-y-2">
-                <Label>Office Start</Label>
-                <Input type="time" value={settings.office_start_time?.slice(0, 5) || "09:00"} onChange={(e) => setSettings({ ...settings, office_start_time: e.target.value + ":00" })} />
-              </div>
-              <div className="space-y-2">
-                <Label>Office End</Label>
-                <Input type="time" value={settings.office_end_time?.slice(0, 5) || "17:00"} onChange={(e) => setSettings({ ...settings, office_end_time: e.target.value + ":00" })} />
-              </div>
-            </div>
-            <div className="space-y-2">
-              <Label>Standard Shift Hours</Label>
-              <Input type="number" step="0.5" value={settings.standard_shift_hours} onChange={(e) => setSettings({ ...settings, standard_shift_hours: parseFloat(e.target.value) })} />
-            </div>
-            <div className="space-y-2">
-              <Label>Daily Break Allowance (minutes)</Label>
-              <Input type="number" step="5" min="0" value={settings.break_allowance_minutes ?? 60} onChange={(e) => setSettings({ ...settings, break_allowance_minutes: parseFloat(e.target.value) })} />
-              <p className="text-xs text-muted-foreground">Used by the dashboard break countdown timer.</p>
-            </div>
-
-            <div className="space-y-2">
-              <Label>Weekend Days <span className="text-xs text-muted-foreground">(excluded from leave & OT calculations)</span></Label>
-              <div className="flex flex-wrap gap-3">
-                {DOW.map((d) => (
-                  <label key={d.v} className="flex items-center gap-1.5 text-sm">
-                    <Checkbox checked={(settings.weekend_days || []).includes(d.v)} onCheckedChange={() => toggleWeekend(d.v)} />
-                    {d.label}
-                  </label>
-                ))}
-              </div>
-            </div>
-
-            <div className="space-y-2">
-              <Label>Who can approve Start Time</Label>
-              <Select
-                value={settings.start_time_approver_role || "admin"}
-                onValueChange={(v) => setSettings({ ...settings, start_time_approver_role: v })}
-              >
-                <SelectTrigger><SelectValue /></SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="admin">Admin only</SelectItem>
-                  <SelectItem value="manager_or_admin">Reporting manager or Admin</SelectItem>
-                </SelectContent>
-              </Select>
-              <p className="text-xs text-muted-foreground">
-                Controls who can approve a waived late-arrival penalty (Approve Start Time).
-              </p>
-            </div>
-          </CardContent>
-        </Card>
-
-        <Card className="shadow-card">
-          <CardHeader>
-            <CardTitle>OT Multipliers</CardTitle>
-            <CardDescription>Pay-rate multipliers applied to overtime hours</CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            <div className="space-y-2">
-              <Label>Weekday OT Multiplier</Label>
-              <Input type="number" step="0.1" value={settings.weekday_ot_multiplier} onChange={(e) => setSettings({ ...settings, weekday_ot_multiplier: parseFloat(e.target.value) })} />
-            </div>
-            <div className="space-y-2">
-              <Label>Weekend OT Multiplier</Label>
-              <Input type="number" step="0.1" value={settings.weekend_ot_multiplier} onChange={(e) => setSettings({ ...settings, weekend_ot_multiplier: parseFloat(e.target.value) })} />
-            </div>
-            <div className="space-y-2">
-              <Label>Holiday OT Multiplier</Label>
-              <Input type="number" step="0.1" value={settings.holiday_ot_multiplier} onChange={(e) => setSettings({ ...settings, holiday_ot_multiplier: parseFloat(e.target.value) })} />
-            </div>
-            <Button onClick={handleSave} disabled={loading} className="w-full">
-              {loading ? "Saving..." : "Save Office & OT Settings"}
-            </Button>
-          </CardContent>
-        </Card>
-      </div>
-
       <Card className="shadow-card">
         <CardHeader>
           <CardTitle className="flex items-center gap-2"><CalendarHeart className="h-5 w-5" /> Leave Defaults</CardTitle>
-          <CardDescription>Set the default annual quota for each leave type. Weekends and holidays are automatically excluded.</CardDescription>
+          <CardDescription>
+            Set the default annual quota for each leave type. Office hours, shift length, break allowance and
+            working days are configured per employee on the Employees page.
+          </CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
           <div className="grid gap-3">
@@ -232,68 +105,7 @@ const SettingsPage = () => {
           </Button>
         </CardContent>
       </Card>
-
-      <TaxSettingsSection settings={settings} setSettings={setSettings} onSaved={fetchSettings} />
-
-      <BiometricDevicePanel />
     </div>
-  );
-};
-
-/* ============== Tax Slabs Section ============== */
-const DEFAULT_SLABS = [
-  { upto: 300000, rate: 0 },
-  { upto: 400000, rate: 5 },
-  { upto: 700000, rate: 10 },
-  { upto: 1100000, rate: 15 },
-  { upto: 1600000, rate: 20 },
-  { upto: null, rate: 25 },
-];
-
-const TaxSettingsSection = ({ settings, setSettings, onSaved }: any) => {
-  const [slabs, setSlabs] = useState<Array<{ upto: number | null; rate: number }>>(
-    (settings.tax_slabs && settings.tax_slabs.length) ? settings.tax_slabs : DEFAULT_SLABS
-  );
-  const [enabled, setEnabled] = useState<boolean>(!!settings.tax_enabled);
-  const [saving, setSaving] = useState(false);
-
-  const save = async () => {
-    setSaving(true);
-    const { error } = await supabase.from("settings").update({ tax_slabs: slabs as any, tax_enabled: enabled }).eq("id", settings.id);
-    if (error) toast.error(error.message);
-    else { toast.success("Tax settings saved"); onSaved(); }
-    setSaving(false);
-  };
-
-  return (
-    <Card className="shadow-card">
-      <CardHeader>
-        <CardTitle className="flex items-center gap-2"><SettingsIcon className="h-5 w-5" /> Tax Calculation</CardTitle>
-        <CardDescription>Progressive tax slabs applied during payroll</CardDescription>
-      </CardHeader>
-      <CardContent className="space-y-4">
-        <div className="flex items-center gap-3">
-          <Switch checked={enabled} onCheckedChange={setEnabled} />
-          <Label>Enable tax deduction in payroll</Label>
-        </div>
-        <div className="space-y-2">
-          {slabs.map((s, i) => (
-            <div key={i} className="grid grid-cols-12 gap-2 items-center">
-              <span className="col-span-1 text-xs text-muted-foreground">Slab {i + 1}</span>
-              <Input className="col-span-5" type="number" placeholder="Up to (blank = ∞)" value={s.upto ?? ""}
-                onChange={(e) => setSlabs(slabs.map((x, j) => j === i ? { ...x, upto: e.target.value === "" ? null : Number(e.target.value) } : x))} />
-              <div className="col-span-5 flex items-center gap-2">
-                <Input type="number" step="0.5" value={s.rate} onChange={(e) => setSlabs(slabs.map((x, j) => j === i ? { ...x, rate: Number(e.target.value) } : x))} />
-                <span className="text-xs">%</span>
-              </div>
-              <Button size="icon" variant="ghost" className="col-span-1" onClick={() => setSlabs(slabs.filter((_, j) => j !== i))}>×</Button>
-            </div>
-          ))}
-          <Button variant="outline" size="sm" onClick={() => setSlabs([...slabs, { upto: null, rate: 0 }])}>+ Add Slab</Button>
-        </div>
-        <Button onClick={save} disabled={saving}>{saving ? "Saving..." : "Save Tax Settings"}</Button>
-      </CardContent>
-    </Card>
   );
 };
 

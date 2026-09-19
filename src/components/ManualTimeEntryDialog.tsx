@@ -80,28 +80,33 @@ export const ManualTimeEntryDialog = ({ onSubmitted, trigger, initial, supersede
   const [officeWindow, setOfficeWindow] = useState({ start: DEFAULT_OFFICE_START, end: DEFAULT_OFFICE_END });
 
   useEffect(() => {
+    if (!user) return;
     (async () => {
-      const { data } = await supabase.from("settings").select("standard_shift_hours, break_allowance_minutes, office_start_time, office_end_time").limit(1).maybeSingle();
+      const { data } = await supabase
+        .from("profiles")
+        .select("office_start_time, office_end_time, standard_daily_hours, unpaid_break_minutes")
+        .eq("id", user.id)
+        .maybeSingle();
       if (data) {
         setOfficeWindow({
           start: data.office_start_time?.slice(0, 5) || DEFAULT_OFFICE_START,
           end: data.office_end_time?.slice(0, 5) || DEFAULT_OFFICE_END,
         });
         // An edit prefill already carries the real figures for that day; the
-        // org-wide defaults would otherwise clobber them on mount.
+        // schedule defaults would otherwise clobber them on mount.
         if (isEdit) return;
         setForm((f) => ({
           ...f,
-          due_hours: String(Number(data.standard_shift_hours) || 8),
-          break_minutes: String(Number(data.break_allowance_minutes) || 60),
+          due_hours: String(Number(data.standard_daily_hours) || 8),
+          break_minutes: String(Number(data.unpaid_break_minutes) ?? 60),
         }));
       }
     })();
-  }, []);
+  }, [user]);
 
   // Remaining office time is settled directly from this entry's clock-in and
-  // clock-out — the portion of the org's office window (Settings > Office
-  // Hours) this manual entry does not cover.
+  // clock-out — the portion of this employee's own office window (set on the
+  // Employees page) that this manual entry does not cover.
   const remainingOfficeMinutes = useMemo(() => {
     const windowMinutes = Math.max(0, timeToMinutes(officeWindow.end) - timeToMinutes(officeWindow.start));
     const [ih, im] = form.clock_in.split(":").map(Number);

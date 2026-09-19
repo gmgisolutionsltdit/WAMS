@@ -11,16 +11,16 @@ import { ChevronDown, ChevronRight } from "lucide-react";
 import { useRealtimeSubscription } from "@/hooks/useRealtimeSubscription";
 import { fmtHMS, fmtClock, spanToHMS } from "@/lib/time";
 import { mergeDailySessions, sessionWorkedSeconds, type AttendanceSession } from "@/lib/attendance";
-import { DEFAULT_OFFICE_START, evaluateArrival, humanMinutes, officeStart, type OfficeTime } from "@/lib/officeTime";
+import { evaluateArrival, humanMinutes, officeStart } from "@/lib/officeTime";
 import { ManualTimeEntryDialog } from "@/components/ManualTimeEntryDialog";
-import { classifyDay, computeDailyTotals, DEFAULT_WEEKEND_DAYS } from "@/lib/workSchedule";
+import {
+  classifyDay, computeDailyTotals, netRequiredHours, unpaidBreakMinutes, weekendDaysFor,
+  type WorkSchedule,
+} from "@/lib/workSchedule";
 import { Pencil, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 import { notifyManagersAndAdmins } from "@/lib/notifications";
 import { isWithin48h, canBypass48h } from "@/lib/dateRules";
-
-const STANDARD_HOURS = 7;
-const STANDARD_SECONDS = STANDARD_HOURS * 3600;
 
 const localToday = () => format(new Date(), "yyyy-MM-dd");
 
@@ -28,16 +28,13 @@ const Attendance = () => {
   const { user, role } = useAuth();
   const [logs, setLogs] = useState<AttendanceSession[]>([]);
   const [expanded, setExpanded] = useState<Record<string, boolean>>({});
-  const [officeProfile, setOfficeProfile] = useState<OfficeTime | null>(null);
+  // This employee's own office hours / work schedule (Employees page). Every
+  // lateness, due-time, overtime and non-working-day decision below is made
+  // against it, so two people on different shifts are judged separately.
+  const [schedule, setSchedule] = useState<WorkSchedule | null>(null);
   const [holidays, setHolidays] = useState<Map<string, string>>(new Map());
-  const [weekendDays, setWeekendDays] = useState<number[]>(DEFAULT_WEEKEND_DAYS);
   const [starting, setStarting] = useState(false);
   const [currentTime, setCurrentTime] = useState(new Date());
-  const [breakAllowance, setBreakAllowance] = useState(60);
-  // The org-wide Office Start Time from Settings - the default "officially
-  // scheduled" start shown in Approved Start Time and used to judge
-  // lateness, until a specific day's late arrival is approved/waived.
-  const [settingsOfficeStart, setSettingsOfficeStart] = useState<string>(DEFAULT_OFFICE_START);
   // Approved/modified OT request hours, summed per date, for the Approved OT column.
   const [approvedOTByDate, setApprovedOTByDate] = useState<Record<string, number>>({});
   // Dates covered by an approved leave request - on leave, Status shows
@@ -49,14 +46,13 @@ const Attendance = () => {
     if (!user) return;
     Promise.all([
       supabase.from("attendance_logs").select("*").eq("user_id", user.id).order("date", { ascending: false }),
-      supabase.from("profiles").select("office_start_time, office_end_time, late_grace_minutes, company_wing").eq("id", user.id).maybeSingle(),
+      supabase.from("profiles").select("office_start_time, office_end_time, late_grace_minutes, standard_daily_hours, unpaid_break_minutes, working_days, company_wing").eq("id", user.id).maybeSingle(),
       supabase.from("holidays").select("holiday_date, name, wing"),
-      supabase.from("settings").select("weekend_days, break_allowance_minutes, office_start_time").limit(1).maybeSingle(),
       supabase.from("overtime_requests").select("date, requested_hours").eq("user_id", user.id).in("status", ["approved", "modified"]),
       supabase.from("leave_requests").select("start_date, end_date, leave_types(name)").eq("user_id", user.id).eq("status", "approved"),
-    ]).then(([{ data: logsData }, { data: prof }, { data: holidayRows }, { data: cfg }, { data: otRows }, { data: leaveRows }]) => {
+    ]).then(([{ data: logsData }, { data: prof }, { data: holidayRows }, { data: otRows }, { data: leaveRows }]) => {
       setLogs((logsData || []) as AttendanceSession[]);
-      setOfficeProfile((prof as OfficeTime) || null);
+      setSchedule((prof as WorkSchedule) || null);
       // A holiday with no wing applies to everyone; otherwise only to its wing.
       const wing = (prof as { company_wing?: string } | null)?.company_wing;
       const map = new Map<string, string>();
@@ -64,9 +60,6 @@ const Attendance = () => {
         .filter((h: { wing: string | null }) => h.wing === null || h.wing === wing)
         .forEach((h: { holiday_date: string; name: string }) => map.set(h.holiday_date, h.name));
       setHolidays(map);
-      if (cfg?.weekend_days) setWeekendDays(cfg.weekend_days as number[]);
-      if (cfg?.break_allowance_minutes != null) setBreakAllowance(Number(cfg.break_allowance_minutes) || 60);
-      setSettingsOfficeStart(cfg?.office_start_time?.slice(0, 5) || DEFAULT_OFFICE_START);
       const otMap: Record<string, number> = {};
       (otRows || []).forEach((r: { date: string; requested_hours: number | null }) => {
         otMap[r.date] = (otMap[r.date] || 0) + (Number(r.requested_hours) || 0);
@@ -83,12 +76,12 @@ const Attendance = () => {
     });
   };
 
-  // Lateness (and Approved Start Time's default, when no day-specific
-  // approval overrides it) is judged against the org-wide Settings office
-  // start time. A per-day approval (late_adjustment or office_time_change)
-  // instead sets that specific day's attendance_logs.approved_start_time,
-  // so it never leaks into every other day's default.
-  const effectiveOfficeProfile: OfficeTime = { ...officeProfile, office_start_time: settingsOfficeStart };
+  // Derived from this employee's own schedule: the days they don't work count
+  // as weekend, their break allowance drives the break countdown, and their
+  // net required hours set the daily requirement.
+  const weekendDays = weekendDaysFor(schedule);
+  const breakAllowance = unpaidBreakMinutes(schedule);
+  const requiredDaySeconds = netRequiredHours(schedule) * 3600;
 
   const deleteSession = async (id: string) => {
     if (!window.confirm("Delete this session? This cannot be undone.")) return;
@@ -119,7 +112,7 @@ const Attendance = () => {
     const dayKind = classifyDay(today, holidays, weekendDays);
     const arrival = dayKind.nonWorking
       ? { late: false, lateMinutes: 0, penaltyMinutes: 0 }
-      : evaluateArrival(now, effectiveOfficeProfile);
+      : evaluateArrival(now, schedule);
     const { error } = await supabase.from("attendance_logs").insert({
       user_id: user.id,
       date: today,
@@ -159,6 +152,7 @@ const Attendance = () => {
       clockIn: openSession.clock_in,
       clockOut: now,
       breakMinutes: Number(openSession.break_minutes) || 0,
+      schedule,
     });
     const { error } = await supabase.from("attendance_logs").update({
       clock_out: now.toISOString(),
@@ -322,7 +316,7 @@ const Attendance = () => {
                 // A row recorded by the current clock-in flow (or since
                 // adjusted by an approval) carries its own authoritative
                 // penalty; older rows fall back to a live recomputation.
-                const liveArrival = evaluateArrival(day.firstIn, effectiveOfficeProfile);
+                const liveArrival = evaluateArrival(day.firstIn, schedule);
                 // penalty_minutes is the authoritative, approval-adjusted
                 // figure once reviewed - late_minutes is cleared alongside it
                 // by the approval trigger when the penalty is fully waived,
@@ -348,7 +342,7 @@ const Attendance = () => {
                 // drops to 0 once Approve Start Time waives the penalty.
                 const requiredSeconds = nonWorking
                   ? 0
-                  : STANDARD_SECONDS + arrival.penaltyMinutes * 60;
+                  : requiredDaySeconds + arrival.penaltyMinutes * 60;
                 const dueSeconds = closed && worked < requiredSeconds ? requiredSeconds - worked : 0;
                 // Counts time worked regardless of source - a manual entry
                 // represents real hours worked just as much as a punch-card
@@ -388,7 +382,7 @@ const Attendance = () => {
                         ) : arrival.late ? (
                           <Badge
                             variant="destructive"
-                            title={`Arrived ${humanMinutes(arrival.lateMinutes)} after ${officeStart(effectiveOfficeProfile).slice(0, 5)} — extra ${humanMinutes(arrival.penaltyMinutes)} of work required`}
+                            title={`Arrived ${humanMinutes(arrival.lateMinutes)} after ${officeStart(schedule).slice(0, 5)} — extra ${humanMinutes(arrival.penaltyMinutes)} of work required`}
                           >
                             Late {humanMinutes(arrival.lateMinutes)}
                           </Badge>
@@ -407,7 +401,7 @@ const Attendance = () => {
                           // this employee's office start time (their profile
                           // override if an office-time-change was approved for
                           // them, else the org's Settings default).
-                          fmtClock(`${day.date}T${officeStart(effectiveOfficeProfile).slice(0, 5)}:00`)
+                          fmtClock(`${day.date}T${officeStart(schedule).slice(0, 5)}:00`)
                         )}
                       </TableCell>
                       <TableCell className="font-mono text-xs">{day.open ? <Badge variant="secondary">In progress</Badge> : fmtClock(day.lastOut)}</TableCell>
