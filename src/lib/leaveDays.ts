@@ -18,7 +18,7 @@ export const computeWorkingDays = (
   weekendDays: number[],
   holidaySet: Set<string>,
   sandwich = false,
-  bridgeHolidays = true,
+  bridgeHolidays = false,
 ): number => {
   if (dayType !== "full") return 0.5;
   const s = new Date(start + "T00:00:00");
