@@ -17,7 +17,7 @@ import { format } from "date-fns";
 
 const Loans = () => {
   const { user, role } = useAuth();
-  const canManage = role === "admin" || role === "hr";
+  const canManage = role === "admin";
   const [loans, setLoans] = useState<any[]>([]);
   const [employees, setEmployees] = useState<any[]>([]);
   const [open, setOpen] = useState(false);

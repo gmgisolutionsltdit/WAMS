@@ -49,7 +49,7 @@ const emptyForm = () => ({
 
 const SalaryIncrements = () => {
   const { user, role } = useAuth();
-  const canManage = role === "admin" || role === "hr" || role === "executive";
+  const canManage = role === "admin";
 
   const [records, setRecords] = useState<Increment[]>([]);
   const [profiles, setProfiles] = useState<Profile[]>([]);

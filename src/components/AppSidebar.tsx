@@ -46,9 +46,9 @@ export function AppSidebar() {
   const { role, profile, signOut } = useAuth();
 
   const isActive = (path: string) => location.pathname === path;
-  const isManagerOrAdmin = ["manager", "admin", "supervisor", "hr", "executive"].includes(role);
+  const isManagerOrAdmin = ["manager", "admin"].includes(role);
   const isAdmin = role === "admin";
-  const canPayroll = role === "admin" || role === "hr" || role === "executive";
+  const canPayroll = role === "admin";
 
   return (
     <Sidebar collapsible="icon">

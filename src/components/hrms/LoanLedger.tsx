@@ -19,7 +19,7 @@ type Loan = {
 
 export function LoanLedger() {
   const { user, role } = useAuth();
-  const isPrivileged = role === "admin" || role === "hr" || role === "executive";
+  const isPrivileged = role === "admin";
   const [loans, setLoans] = useState<Loan[]>([]);
   const [loading, setLoading] = useState(true);
 

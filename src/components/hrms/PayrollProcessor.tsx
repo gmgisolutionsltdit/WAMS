@@ -24,7 +24,7 @@ const YEAR = now.getFullYear();
 
 export function PayrollProcessor() {
   const { role } = useAuth();
-  const canAccess = role === "admin" || role === "hr" || role === "executive";
+  const canAccess = role === "admin";
   const [rows, setRows] = useState<Row[]>([]);
   const [loading, setLoading] = useState(false);
 

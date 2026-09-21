@@ -33,7 +33,7 @@ const DEFAULT_YEAR = now.getFullYear();
 
 export default function Payroll() {
   const { user, role } = useAuth();
-  const canAccess = role === "admin" || role === "hr" || role === "executive";
+  const canAccess = role === "admin";
 
   const [year, setYear] = useState<number>(DEFAULT_YEAR);
   const [month, setMonth] = useState<number>(DEFAULT_MONTH);

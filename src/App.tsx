@@ -54,7 +54,7 @@ const PublicOnlyRoute = ({ children }: { children: ReactNode }) => {
   return <>{children}</>;
 };
 
-const RoleGate = ({ children, allow }: { children: ReactNode; allow: ("admin" | "manager" | "employee" | "hr" | "executive" | "supervisor")[] }) => {
+const RoleGate = ({ children, allow }: { children: ReactNode; allow: ("admin" | "manager" | "employee")[] }) => {
   const { role } = useAuth();
   if (!allow.includes(role)) return <Navigate to="/" replace />;
   return <>{children}</>;
@@ -70,8 +70,8 @@ const AppRoutes = () => (
     <Route path="/" element={<ProtectedRoute><Index /></ProtectedRoute>} />
     <Route path="/attendance" element={<ProtectedRoute><Attendance /></ProtectedRoute>} />
     <Route path="/ot-requests" element={<ProtectedRoute><OTRequests /></ProtectedRoute>} />
-    <Route path="/approvals" element={<ProtectedRoute><RoleGate allow={["admin", "manager", "supervisor", "hr", "executive"]}><Approvals /></RoleGate></ProtectedRoute>} />
-    <Route path="/reports" element={<ProtectedRoute><RoleGate allow={["admin", "manager", "supervisor"]}><Reports /></RoleGate></ProtectedRoute>} />
+    <Route path="/approvals" element={<ProtectedRoute><RoleGate allow={["admin", "manager"]}><Approvals /></RoleGate></ProtectedRoute>} />
+    <Route path="/reports" element={<ProtectedRoute><RoleGate allow={["admin", "manager"]}><Reports /></RoleGate></ProtectedRoute>} />
     <Route path="/settings" element={<ProtectedRoute><RoleGate allow={["admin"]}><SettingsPage /></RoleGate></ProtectedRoute>} />
     <Route path="/employees" element={<ProtectedRoute><RoleGate allow={["admin"]}><EmployeeManagement /></RoleGate></ProtectedRoute>} />
     <Route path="/employees/:id" element={<ProtectedRoute><EmployeeProfile /></ProtectedRoute>} />
@@ -79,10 +79,10 @@ const AppRoutes = () => (
     <Route path="/leave" element={<ProtectedRoute><LeaveManagement /></ProtectedRoute>} />
     <Route path="/projects" element={<ProtectedRoute><Projects /></ProtectedRoute>} />
     <Route path="/projects/:id" element={<ProtectedRoute><ErrorBoundary fallbackTitle="Couldn't open this project"><ProjectBoard /></ErrorBoundary></ProtectedRoute>} />
-    <Route path="/payroll" element={<ProtectedRoute><RoleGate allow={["admin", "hr", "executive"]}><Payroll /></RoleGate></ProtectedRoute>} />
-    <Route path="/salary-increments" element={<ProtectedRoute><RoleGate allow={["admin", "hr", "executive"]}><SalaryIncrements /></RoleGate></ProtectedRoute>} />
-    <Route path="/loans" element={<ProtectedRoute><RoleGate allow={["admin", "hr", "executive"]}><Loans /></RoleGate></ProtectedRoute>} />
-    <Route path="/roster" element={<ProtectedRoute><RoleGate allow={["admin", "hr"]}><Roster /></RoleGate></ProtectedRoute>} />
+    <Route path="/payroll" element={<ProtectedRoute><RoleGate allow={["admin"]}><Payroll /></RoleGate></ProtectedRoute>} />
+    <Route path="/salary-increments" element={<ProtectedRoute><RoleGate allow={["admin"]}><SalaryIncrements /></RoleGate></ProtectedRoute>} />
+    <Route path="/loans" element={<ProtectedRoute><RoleGate allow={["admin"]}><Loans /></RoleGate></ProtectedRoute>} />
+    <Route path="/roster" element={<ProtectedRoute><RoleGate allow={["admin"]}><Roster /></RoleGate></ProtectedRoute>} />
     <Route path="/expenses" element={<ProtectedRoute><Expenses /></ProtectedRoute>} />
     <Route path="/notices" element={<ProtectedRoute><NoticeBoard /></ProtectedRoute>} />
     <Route path="/sop" element={<ProtectedRoute><SOP /></ProtectedRoute>} />
