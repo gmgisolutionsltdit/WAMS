@@ -3,8 +3,8 @@
  *
  * Used by attendance, OT request, leave request, and work log forms to
  * prevent users from submitting entries for dates more than 48 hours in
- * the past. Admins and HR bypass this rule (enforced both client-side
- * via `canBypass48h` and server-side via DB triggers).
+ * the past. Admins bypass this rule (enforced both client-side via
+ * `canBypass48h` and server-side via DB triggers).
  */
 
 export const RETRO_LOCK_HOURS = 48;
@@ -41,7 +41,7 @@ export function max2DaysAheadISO(now: Date = new Date()): string {
 
 /** Roles that bypass the 48h retro lock. */
 export function canBypass48h(role: string): boolean {
-  return role === "admin" || role === "hr";
+  return role === "admin";
 }
 
 /** Helper for `<Calendar disabled={...}>` — disables dates older than 48h. */

@@ -2,7 +2,7 @@ import { createContext, useContext, useState, useEffect, useCallback, ReactNode 
 import { supabase } from "@/integrations/supabase/client";
 import type { Session, User } from "@supabase/supabase-js";
 
-type AppRole = "admin" | "manager" | "employee" | "hr" | "executive" | "supervisor";
+type AppRole = "admin" | "manager" | "employee";
 type CompanyWing = "GMGI" | "MORU";
 type ServiceStatus = "Permanent" | "Contractual" | "Intern" | "Short-Term" | "Consultant";
 type EmployeeStatus = "Active" | "Inactive" | "Resigned";
@@ -84,12 +84,9 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
       });
     }
 
-    // Pick highest role: admin > supervisor > executive > hr > manager > employee
-    const roles = (rolesData || []).map(r => r.role as AppRole);
+    // Pick highest role: admin > manager > employee
+    const roles = (rolesData || []).map(r => r.role as string);
     if (roles.includes("admin")) setRole("admin");
-    else if (roles.includes("supervisor")) setRole("supervisor");
-    else if (roles.includes("executive")) setRole("executive");
-    else if (roles.includes("hr")) setRole("hr");
     else if (roles.includes("manager")) setRole("manager");
     else setRole("employee");
   }, []);

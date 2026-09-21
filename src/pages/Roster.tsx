@@ -40,7 +40,7 @@ interface Assignment {
 
 const Roster = () => {
   const { user, role } = useAuth();
-  const canManage = role === "admin" || role === "hr";
+  const canManage = role === "admin";
   const [shifts, setShifts] = useState<Shift[]>([]);
   const [assignments, setAssignments] = useState<Assignment[]>([]);
   const [employees, setEmployees] = useState<any[]>([]);

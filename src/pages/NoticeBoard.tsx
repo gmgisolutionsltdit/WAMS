@@ -24,7 +24,7 @@ const PRIORITIES = [
 
 const NoticeBoard = () => {
   const { user, role } = useAuth();
-  const canManage = role === "admin" || role === "hr";
+  const canManage = role === "admin";
   const [notices, setNotices] = useState<any[]>([]);
   const [open, setOpen] = useState(false);
   const [form, setForm] = useState({ title: "", body: "", category: "general", priority: "normal", pinned: false, expires_at: "" });

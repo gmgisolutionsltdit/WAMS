@@ -566,17 +566,17 @@ const EmployeeManagement = () => {
     return matchesSearch && matchesRole && matchesWing && matchesStatus;
   });
 
-  if (role !== "admin" && role !== "manager" && role !== "hr" && role !== "executive") {
+  if (role !== "admin" && role !== "manager") {
     return (
       <Card><CardContent className="p-8 text-center text-muted-foreground">
         <Users className="h-12 w-12 mx-auto mb-4 opacity-50" />
-        <p>Only Admins, HR, Executives, and Reporting Managers can access Employee Management.</p>
+        <p>Only Admins and Reporting Managers can access Employee Management.</p>
       </CardContent></Card>
     );
   }
   const isAdmin = role === "admin";
-  const canEditPayroll = role === "admin" || role === "hr" || role === "executive";
-  const canManageWings = role === "admin" || role === "hr";
+  const canEditPayroll = role === "admin";
+  const canManageWings = role === "admin";
 
   const statusBadge = (s: string) => {
     if (s === "Active") return "bg-green-100 text-green-700 border-green-300";
@@ -722,7 +722,6 @@ const EmployeeManagement = () => {
                     <SelectItem value="admin">Admin</SelectItem>
                     <SelectItem value="manager">Manager / Reporting Boss</SelectItem>
                     <SelectItem value="employee">Employee</SelectItem>
-                    <SelectItem value="executive">Executive (CEO/CTO)</SelectItem>
                   </SelectContent>
                 </Select>
               </div>
@@ -878,7 +877,7 @@ const EmployeeManagement = () => {
               <div className="mt-5 rounded-md border p-3 bg-muted/30">
                 <div className="flex items-center justify-between mb-2">
                   <Label className="text-sm font-semibold">Compensation</Label>
-                  <Badge variant="outline" className="text-[10px]">Admin / HR / Executive only</Badge>
+                  <Badge variant="outline" className="text-[10px]">Admin only</Badge>
                 </div>
                 <p className="text-xs text-muted-foreground mb-3">
                   Update base salary on promotion or revision. Changes take effect on the next payroll generation.

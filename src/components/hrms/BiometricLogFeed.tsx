@@ -19,7 +19,7 @@ type LogRow = {
 
 export function BiometricLogFeed() {
   const { user, role } = useAuth();
-  const isPrivileged = role === "admin" || role === "hr" || role === "manager" || role === "executive" || role === "supervisor";
+  const isPrivileged = role === "admin" || role === "manager";
   const [logs, setLogs] = useState<LogRow[]>([]);
   const [loading, setLoading] = useState(true);
 

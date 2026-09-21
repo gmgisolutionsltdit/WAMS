@@ -20,7 +20,7 @@ const CATEGORIES = ["Travel", "Meals", "Office Supplies", "Software", "Training"
 
 const Expenses = () => {
   const { user, role } = useAuth();
-  const canApprove = role === "admin" || role === "hr" || role === "manager" || role === "supervisor";
+  const canApprove = role === "admin" || role === "manager";
   const [claims, setClaims] = useState<any[]>([]);
   const [open, setOpen] = useState(false);
   const [form, setForm] = useState({ category: "Travel", amount: "", claim_date: format(new Date(), "yyyy-MM-dd"), description: "", receipt_url: "" });
