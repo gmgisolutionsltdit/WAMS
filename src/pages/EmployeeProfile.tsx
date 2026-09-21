@@ -1,10 +1,14 @@
 import { useEffect, useMemo, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { useAuth } from "@/contexts/AuthContext";
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Avatar, AvatarImage, AvatarFallback } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Textarea } from "@/components/ui/textarea";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
   Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
@@ -15,8 +19,10 @@ import {
 import {
   ArrowLeft, Mail, Phone, Calendar, IdCard, Briefcase, UserCheck,
   Users, MapPin, Building2, TrendingUp, DollarSign, FolderKanban, UserCog,
+  ClipboardList,
 } from "lucide-react";
 import { format } from "date-fns";
+import { toast } from "sonner";
 
 type Profile = {
   id: string;
@@ -35,7 +41,56 @@ type Profile = {
   base_salary: number | null;
   hourly_overtime_rate: number | null;
   pf_contribution_pct: number | null;
+  date_of_birth: string | null;
+  national_id: string | null;
+  passport_number: string | null;
+  birth_reg_number: string | null;
+  blood_group: string | null;
+  religion: string | null;
+  father_name: string | null;
+  mother_name: string | null;
+  present_address: string | null;
+  permanent_address: string | null;
+  ongoing_education: string | null;
+  marital_status: string | null;
+  spouse_name: string | null;
+  children_count: number | null;
+  emergency_contact_name: string | null;
+  emergency_contact_phone: string | null;
+  emergency_contact_relationship: string | null;
+  bank_account_name: string | null;
+  bank_account_number: string | null;
+  bank_name: string | null;
+  bank_branch: string | null;
+  bank_swift_code: string | null;
+  bank_routing_number: string | null;
 };
+
+const PERSONAL_INFO_FIELDS: { key: keyof Profile; label: string; type?: "text" | "date" | "number" | "textarea" }[] = [
+  { key: "date_of_birth", label: "Date of Birth", type: "date" },
+  { key: "national_id", label: "National ID Number" },
+  { key: "passport_number", label: "Passport Number" },
+  { key: "birth_reg_number", label: "Birth Registration Number" },
+  { key: "blood_group", label: "Blood Group" },
+  { key: "religion", label: "Religion" },
+  { key: "father_name", label: "Father's Name" },
+  { key: "mother_name", label: "Mother's Name" },
+  { key: "marital_status", label: "Marital Status" },
+  { key: "spouse_name", label: "Spouse's Name" },
+  { key: "children_count", label: "Number of Children", type: "number" },
+  { key: "ongoing_education", label: "Ongoing Education / Studies" },
+  { key: "present_address", label: "Present Address", type: "textarea" },
+  { key: "permanent_address", label: "Permanent Address", type: "textarea" },
+  { key: "emergency_contact_name", label: "Emergency Contact Name" },
+  { key: "emergency_contact_phone", label: "Emergency Contact Mobile" },
+  { key: "emergency_contact_relationship", label: "Emergency Contact Relationship" },
+  { key: "bank_account_name", label: "Bank Account Name" },
+  { key: "bank_account_number", label: "Bank Account Number" },
+  { key: "bank_name", label: "Bank Name" },
+  { key: "bank_branch", label: "Bank Branch" },
+  { key: "bank_swift_code", label: "SWIFT Code" },
+  { key: "bank_routing_number", label: "Routing Number" },
+];
 
 type Increment = {
   id: string;
@@ -99,6 +154,7 @@ const statusVariant = (s: string): "default" | "secondary" | "outline" | "destru
 const EmployeeProfile = () => {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
+  const { user } = useAuth();
   const [profile, setProfile] = useState<Profile | null>(null);
   const [role, setRole] = useState<string>("employee");
   const [manager, setManager] = useState<{ id: string; name: string } | null>(null);
@@ -108,6 +164,9 @@ const EmployeeProfile = () => {
   const [showReports, setShowReports] = useState(false);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [personalForm, setPersonalForm] = useState<Partial<Profile>>({});
+  const [savingPersonal, setSavingPersonal] = useState(false);
+  const isSelf = !!user && user.id === id;
 
   useEffect(() => {
     if (!id) return;
@@ -125,6 +184,7 @@ const EmployeeProfile = () => {
         return;
       }
       setProfile(p as Profile);
+      setPersonalForm(p as Profile);
       setRole((r?.role as string) || "employee");
 
       const [mgrRes, incRes, repRes, taskRes] = await Promise.all([
@@ -151,6 +211,23 @@ const EmployeeProfile = () => {
   }, [id]);
 
   const goBack = () => (window.history.length > 1 ? navigate(-1) : navigate("/employees"));
+
+  const savePersonalInfo = async () => {
+    if (!id || !isSelf) return;
+    setSavingPersonal(true);
+    const payload: Record<string, unknown> = {};
+    PERSONAL_INFO_FIELDS.forEach(({ key, type }) => {
+      const v = personalForm[key];
+      payload[key] = type === "number" ? (v === "" || v == null ? null : Number(v)) : (v || null);
+    });
+    const { error } = await supabase.from("profiles").update(payload as never).eq("id", id);
+    if (error) toast.error(error.message);
+    else {
+      toast.success("Personal information saved");
+      setProfile((p) => (p ? { ...p, ...payload } as Profile : p));
+    }
+    setSavingPersonal(false);
+  };
 
   const salaryBreakdown = useMemo(() => {
     const gross = Number(profile?.base_salary || 0);
@@ -229,8 +306,9 @@ const EmployeeProfile = () => {
       </Card>
 
       <Tabs defaultValue="overview" className="w-full">
-        <TabsList className="grid grid-cols-2 sm:grid-cols-4 w-full sm:w-auto">
+        <TabsList className="grid grid-cols-2 sm:grid-cols-5 w-full sm:w-auto">
           <TabsTrigger value="overview">Overview</TabsTrigger>
+          <TabsTrigger value="personal">Personal Info</TabsTrigger>
           <TabsTrigger value="financial">Financial</TabsTrigger>
           <TabsTrigger value="tasks">Projects & Tasks</TabsTrigger>
           <TabsTrigger value="team">Team</TabsTrigger>
@@ -271,6 +349,55 @@ const EmployeeProfile = () => {
               </CardContent>
             </Card>
           </div>
+        </TabsContent>
+
+        {/* PERSONAL INFO */}
+        <TabsContent value="personal" className="mt-4">
+          <Card>
+            <CardHeader>
+              <CardTitle className="text-base flex items-center gap-2"><ClipboardList className="h-4 w-4" /> Personal Information</CardTitle>
+              <CardDescription>
+                {isSelf
+                  ? "Fill this in yourself — it's used for HR records and only visible to you and management."
+                  : "Filled in by the account holder. Read-only here."}
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              {isSelf ? (
+                <div className="grid gap-4 md:grid-cols-2">
+                  {PERSONAL_INFO_FIELDS.map(({ key, label, type }) => (
+                    <div key={key} className={type === "textarea" ? "md:col-span-2 space-y-1" : "space-y-1"}>
+                      <Label className="text-xs">{label}</Label>
+                      {type === "textarea" ? (
+                        <Textarea
+                          rows={2}
+                          value={(personalForm[key] as string) || ""}
+                          onChange={(e) => setPersonalForm((f) => ({ ...f, [key]: e.target.value }))}
+                        />
+                      ) : (
+                        <Input
+                          type={type === "date" ? "date" : type === "number" ? "number" : "text"}
+                          value={(personalForm[key] as string | number) ?? ""}
+                          onChange={(e) => setPersonalForm((f) => ({ ...f, [key]: e.target.value }))}
+                        />
+                      )}
+                    </div>
+                  ))}
+                  <div className="md:col-span-2">
+                    <Button onClick={savePersonalInfo} disabled={savingPersonal}>
+                      {savingPersonal ? "Saving..." : "Save Personal Information"}
+                    </Button>
+                  </div>
+                </div>
+              ) : (
+                <div className="grid gap-4 md:grid-cols-2">
+                  {PERSONAL_INFO_FIELDS.map(({ key, label }) => (
+                    <Row key={key} icon={ClipboardList} label={label} value={fmt(profile[key] != null ? String(profile[key]) : null)} />
+                  ))}
+                </div>
+              )}
+            </CardContent>
+          </Card>
         </TabsContent>
 
         {/* FINANCIAL */}

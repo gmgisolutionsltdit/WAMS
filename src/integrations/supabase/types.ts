@@ -983,6 +983,29 @@ export type Database = {
       profiles: {
         Row: {
           base_salary: number
+          bank_account_name: string | null
+          bank_account_number: string | null
+          bank_branch: string | null
+          bank_name: string | null
+          bank_routing_number: string | null
+          bank_swift_code: string | null
+          birth_reg_number: string | null
+          blood_group: string | null
+          children_count: number | null
+          date_of_birth: string | null
+          emergency_contact_name: string | null
+          emergency_contact_phone: string | null
+          emergency_contact_relationship: string | null
+          father_name: string | null
+          marital_status: string | null
+          mother_name: string | null
+          national_id: string | null
+          ongoing_education: string | null
+          passport_number: string | null
+          permanent_address: string | null
+          present_address: string | null
+          religion: string | null
+          spouse_name: string | null
           company_wing: Database["public"]["Enums"]["company_wing"]
           created_at: string
           daily_ot_cap: number
@@ -1015,6 +1038,29 @@ export type Database = {
         }
         Insert: {
           base_salary?: number
+          bank_account_name?: string | null
+          bank_account_number?: string | null
+          bank_branch?: string | null
+          bank_name?: string | null
+          bank_routing_number?: string | null
+          bank_swift_code?: string | null
+          birth_reg_number?: string | null
+          blood_group?: string | null
+          children_count?: number | null
+          date_of_birth?: string | null
+          emergency_contact_name?: string | null
+          emergency_contact_phone?: string | null
+          emergency_contact_relationship?: string | null
+          father_name?: string | null
+          marital_status?: string | null
+          mother_name?: string | null
+          national_id?: string | null
+          ongoing_education?: string | null
+          passport_number?: string | null
+          permanent_address?: string | null
+          present_address?: string | null
+          religion?: string | null
+          spouse_name?: string | null
           company_wing?: Database["public"]["Enums"]["company_wing"]
           created_at?: string
           daily_ot_cap?: number
@@ -1047,6 +1093,29 @@ export type Database = {
         }
         Update: {
           base_salary?: number
+          bank_account_name?: string | null
+          bank_account_number?: string | null
+          bank_branch?: string | null
+          bank_name?: string | null
+          bank_routing_number?: string | null
+          bank_swift_code?: string | null
+          birth_reg_number?: string | null
+          blood_group?: string | null
+          children_count?: number | null
+          date_of_birth?: string | null
+          emergency_contact_name?: string | null
+          emergency_contact_phone?: string | null
+          emergency_contact_relationship?: string | null
+          father_name?: string | null
+          marital_status?: string | null
+          mother_name?: string | null
+          national_id?: string | null
+          ongoing_education?: string | null
+          passport_number?: string | null
+          permanent_address?: string | null
+          present_address?: string | null
+          religion?: string | null
+          spouse_name?: string | null
           company_wing?: Database["public"]["Enums"]["company_wing"]
           created_at?: string
           daily_ot_cap?: number
