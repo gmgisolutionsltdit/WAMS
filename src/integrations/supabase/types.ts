@@ -735,6 +735,63 @@ export type Database = {
           },
         ]
       }
+      sop_documents: {
+        Row: {
+          id: string
+          title: string
+          version_label: string
+          file_path: string
+          file_name: string
+          is_current: boolean
+          uploaded_by: string | null
+          created_at: string
+        }
+        Insert: {
+          id?: string
+          title: string
+          version_label: string
+          file_path: string
+          file_name: string
+          is_current?: boolean
+          uploaded_by?: string | null
+          created_at?: string
+        }
+        Update: {
+          id?: string
+          title?: string
+          version_label?: string
+          file_path?: string
+          file_name?: string
+          is_current?: boolean
+          uploaded_by?: string | null
+          created_at?: string
+        }
+        Relationships: []
+      }
+      sop_updates: {
+        Row: {
+          id: string
+          title: string
+          content: string
+          created_by: string | null
+          created_at: string
+        }
+        Insert: {
+          id?: string
+          title: string
+          content: string
+          created_by?: string | null
+          created_at?: string
+        }
+        Update: {
+          id?: string
+          title?: string
+          content?: string
+          created_by?: string | null
+          created_at?: string
+        }
+        Relationships: []
+      }
       notices: {
         Row: {
           author_id: string | null

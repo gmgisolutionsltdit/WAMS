@@ -30,6 +30,7 @@ import Roster from "./pages/Roster";
 import Loans from "./pages/Loans";
 import Expenses from "./pages/Expenses";
 import NoticeBoard from "./pages/NoticeBoard";
+import SOP from "./pages/SOP";
 
 const queryClient = new QueryClient();
 
@@ -84,6 +85,7 @@ const AppRoutes = () => (
     <Route path="/roster" element={<ProtectedRoute><RoleGate allow={["admin", "hr"]}><Roster /></RoleGate></ProtectedRoute>} />
     <Route path="/expenses" element={<ProtectedRoute><Expenses /></ProtectedRoute>} />
     <Route path="/notices" element={<ProtectedRoute><NoticeBoard /></ProtectedRoute>} />
+    <Route path="/sop" element={<ProtectedRoute><SOP /></ProtectedRoute>} />
 
     <Route path="*" element={<NotFound />} />
   </Routes>

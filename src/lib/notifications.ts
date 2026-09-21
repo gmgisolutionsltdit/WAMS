@@ -51,6 +51,25 @@ export async function notifyManagersAndAdmins(
   await supabase.from("notifications").insert(rows);
 }
 
+/** Notify every account holder (employee, manager, admin). */
+export async function notifyAllUsers(
+  title: string,
+  message: string,
+  relatedId?: string,
+  options?: { route?: string; type?: string }
+) {
+  const { data: profiles } = await supabase.from("profiles").select("id");
+  const rows = (profiles || []).map((p) => ({
+    user_id: p.id,
+    type: options?.type || "update",
+    title,
+    message,
+    related_id: relatedId || null,
+    route: options?.route || null,
+  }));
+  if (rows.length) await supabase.from("notifications").insert(rows);
+}
+
 export async function notifyEmployee(
   employeeId: string,
   title: string,
