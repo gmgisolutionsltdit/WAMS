@@ -71,6 +71,7 @@ type EmployeeRow = {
   daily_ot_cap: number;
   monthly_ot_cap: number;
   reporting_manager_id: string | null;
+  reporting_manager_ids: string[] | null;
   base_salary: number;
   hourly_overtime_rate: number;
   pf_contribution_pct: number;
@@ -121,7 +122,7 @@ const EmployeeManagement = () => {
 
   const initialForm = {
     full_name: "", email: "", department: "", designation: "", phone: "",
-    role: "employee" as string, reporting_manager_id: "" as string,
+    role: "employee" as string, reporting_manager_ids: [] as string[],
     company_wing: "GMGI", wing_id: "" as string,
     service_status: "Permanent", employee_status: "Active",
     joining_date: "", promotion_date: "", resign_date: "",
@@ -146,7 +147,7 @@ const EmployeeManagement = () => {
       .select("*")
       .order("created_at", { ascending: false });
     if (role === "manager" && user) {
-      profilesQuery = profilesQuery.eq("reporting_manager_id", user.id);
+      profilesQuery = profilesQuery.contains("reporting_manager_ids", [user.id]);
     }
     const [{ data: profiles, error: pErr }, { data: roles, error: rErr }] = await Promise.all([
       profilesQuery,
@@ -254,7 +255,9 @@ const EmployeeManagement = () => {
       full_name: emp.full_name || "", email: emp.email || "",
       department: emp.department || "", designation: emp.designation || "",
       phone: emp.phone || "", role: emp._role || "employee",
-      reporting_manager_id: emp.reporting_manager_id || "",
+      reporting_manager_ids: emp.reporting_manager_ids?.length
+        ? emp.reporting_manager_ids
+        : (emp.reporting_manager_id ? [emp.reporting_manager_id] : []),
       company_wing: emp.company_wing || "GMGI",
       wing_id: wingIdFor(emp),
 
@@ -374,7 +377,8 @@ const EmployeeManagement = () => {
         full_name: form.full_name,
         department: form.department || null, designation: form.designation || null,
         phone: form.phone || null,
-        reporting_manager_id: form.reporting_manager_id || null,
+        reporting_manager_id: form.reporting_manager_ids[0] || null,
+        reporting_manager_ids: form.reporting_manager_ids,
         company_wing: legacyWing as any,
         wing_id: form.wing_id || null,
 
@@ -421,7 +425,7 @@ const EmployeeManagement = () => {
               service_status: form.service_status,
               employee_status: form.employee_status,
               joining_date: form.joining_date || null,
-              reporting_manager_id: form.reporting_manager_id || null,
+              reporting_manager_id: form.reporting_manager_ids[0] || null,
               daily_ot_cap: parseFloat(form.daily_ot_cap) || 4,
               monthly_ot_cap: parseFloat(form.monthly_ot_cap) || 40,
               role: form.role,
@@ -434,7 +438,7 @@ const EmployeeManagement = () => {
         }
         const created = data as any;
         // Apply photo / wing selection made before saving
-        const postCreate: any = { ...schedulePayload() };
+        const postCreate: any = { ...schedulePayload(), reporting_manager_ids: form.reporting_manager_ids };
         if (form.photo_url) postCreate.photo_url = form.photo_url;
         if (form.wing_id) postCreate.wing_id = form.wing_id;
         await supabase.from("profiles").update(postCreate).eq("id", created.userId);
@@ -545,6 +549,12 @@ const EmployeeManagement = () => {
     return mgr?.full_name || mgr?.email || "—";
   };
 
+  const getManagerNames = (emp: EmployeeRow) => {
+    const ids = emp.reporting_manager_ids?.length ? emp.reporting_manager_ids : (emp.reporting_manager_id ? [emp.reporting_manager_id] : []);
+    if (!ids.length) return "—";
+    return ids.map((id) => getManagerName(id)).join(", ");
+  };
+
   const filtered = employees.filter((emp) => {
     const matchesSearch = !searchQuery ||
       (emp.full_name || "").toLowerCase().includes(searchQuery.toLowerCase()) ||
@@ -576,62 +586,6 @@ const EmployeeManagement = () => {
 
   return (
     <div className="space-y-6">
-      {isAdmin && (
-        <Card className="shadow-card">
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2"><CalendarHeart className="h-5 w-5" /> Leave Defaults</CardTitle>
-            <CardDescription>
-              Set the default annual quota for each leave type. Office hours, shift length, break allowance and
-              working days are configured per employee below.
-            </CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            <div className="grid gap-3">
-              {leaveTypes.map((lt) => (
-                <div key={lt.id} className="grid grid-cols-1 md:grid-cols-12 gap-3 items-center rounded-lg border p-3 bg-card">
-                  <div className="md:col-span-4 flex items-center gap-3">
-                    <input
-                      type="color"
-                      value={lt.color}
-                      onChange={(e) => updateLeaveType(lt.id, { color: e.target.value })}
-                      className="h-8 w-8 rounded border cursor-pointer"
-                    />
-                    <div>
-                      <div className="font-medium text-sm">{lt.name}</div>
-                      <div className="text-xs text-muted-foreground">{lt.code}</div>
-                    </div>
-                  </div>
-                  <div className="md:col-span-3 space-y-1">
-                    <Label className="text-xs">Annual Quota (days)</Label>
-                    <Input
-                      type="number"
-                      min={0}
-                      step="0.5"
-                      value={lt.annual_quota}
-                      onChange={(e) => updateLeaveType(lt.id, { annual_quota: parseFloat(e.target.value) || 0 })}
-                    />
-                  </div>
-                  <div className="md:col-span-2 flex items-center gap-2">
-                    <Switch checked={lt.is_paid} onCheckedChange={(v) => updateLeaveType(lt.id, { is_paid: v })} />
-                    <Label className="text-xs">Paid</Label>
-                  </div>
-                  <div className="md:col-span-2 flex items-center gap-2">
-                    <Switch checked={lt.half_day_allowed} onCheckedChange={(v) => updateLeaveType(lt.id, { half_day_allowed: v })} />
-                    <Label className="text-xs">Half-day</Label>
-                  </div>
-                  <div className="md:col-span-1 flex items-center gap-2" title="Charge weekends/holidays adjacent (either side) to leave days">
-                    <Switch checked={!!lt.sandwich_leave} onCheckedChange={(v) => updateLeaveType(lt.id, { sandwich_leave: v })} />
-                    <Label className="text-xs">Sandwich</Label>
-                  </div>
-                </div>
-              ))}
-            </div>
-            <Button onClick={saveLeaveDefaults} disabled={savingLeave}>
-              {savingLeave ? "Saving..." : "Save Leave Defaults"}
-            </Button>
-          </CardContent>
-        </Card>
-      )}
       <Card>
       <CardHeader className="flex flex-row items-center justify-between flex-wrap gap-2">
         <CardTitle className="flex items-center gap-2">
@@ -773,16 +727,27 @@ const EmployeeManagement = () => {
                 </Select>
               </div>
               <div>
-                <Label>Reporting To</Label>
-                <Select value={form.reporting_manager_id || "none"} onValueChange={(v) => setForm((f) => ({ ...f, reporting_manager_id: v === "none" ? "" : v }))}>
-                  <SelectTrigger><SelectValue placeholder="Select manager" /></SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="none">None</SelectItem>
-                    {managers.filter((m) => m.id !== editingId).map((m) => (
-                      <SelectItem key={m.id} value={m.id}>{m.full_name || m.email}</SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
+                <Label>Reporting To <span className="text-xs text-muted-foreground">(select one or more)</span></Label>
+                <div className="rounded-md border p-2 max-h-36 overflow-y-auto space-y-1">
+                  {managers.filter((m) => m.id !== editingId).length === 0 ? (
+                    <p className="text-xs text-muted-foreground px-1">No managers/admins available</p>
+                  ) : managers.filter((m) => m.id !== editingId).map((m) => (
+                    <label key={m.id} className="flex items-center gap-2 text-sm px-1 py-0.5">
+                      <Checkbox
+                        checked={form.reporting_manager_ids.includes(m.id)}
+                        onCheckedChange={() =>
+                          setForm((f) => ({
+                            ...f,
+                            reporting_manager_ids: f.reporting_manager_ids.includes(m.id)
+                              ? f.reporting_manager_ids.filter((x) => x !== m.id)
+                              : [...f.reporting_manager_ids, m.id],
+                          }))
+                        }
+                      />
+                      {m.full_name || m.email}
+                    </label>
+                  ))}
+                </div>
               </div>
               <div>
                 <Label>Service Status</Label>
@@ -864,6 +829,50 @@ const EmployeeManagement = () => {
                 </div>
               </div>
             </div>
+
+            {isAdmin && (
+              <div className="mt-5 rounded-md border p-3 bg-muted/30">
+                <Label className="text-sm font-semibold flex items-center gap-2"><CalendarHeart className="h-4 w-4" /> Leave Defaults</Label>
+                <p className="text-xs text-muted-foreground mt-1 mb-3">
+                  Applies to every employee for each leave type — not just this one.
+                </p>
+                <div className="grid gap-3">
+                  {leaveTypes.map((lt) => (
+                    <div key={lt.id} className="grid grid-cols-1 md:grid-cols-12 gap-3 items-center rounded-lg border p-3 bg-card">
+                      <div className="md:col-span-5 flex items-center gap-3">
+                        <input
+                          type="color"
+                          value={lt.color}
+                          onChange={(e) => updateLeaveType(lt.id, { color: e.target.value })}
+                          className="h-8 w-8 rounded border cursor-pointer"
+                        />
+                        <div>
+                          <div className="font-medium text-sm">{lt.name}</div>
+                          <div className="text-xs text-muted-foreground">{lt.code}</div>
+                        </div>
+                      </div>
+                      <div className="md:col-span-4 space-y-1">
+                        <Label className="text-xs">Annual Quota (days)</Label>
+                        <Input
+                          type="number"
+                          min={0}
+                          step="0.5"
+                          value={lt.annual_quota}
+                          onChange={(e) => updateLeaveType(lt.id, { annual_quota: parseFloat(e.target.value) || 0 })}
+                        />
+                      </div>
+                      <div className="md:col-span-3 flex items-center gap-2" title="Charge weekends/holidays adjacent (either side) to leave days">
+                        <Switch checked={!!lt.sandwich_leave} onCheckedChange={(v) => updateLeaveType(lt.id, { sandwich_leave: v })} />
+                        <Label className="text-xs">Sandwich</Label>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+                <Button className="mt-3" onClick={saveLeaveDefaults} disabled={savingLeave}>
+                  {savingLeave ? "Saving..." : "Save Leave Defaults"}
+                </Button>
+              </div>
+            )}
 
             {canEditPayroll && (
               <div className="mt-5 rounded-md border p-3 bg-muted/30">
@@ -1012,7 +1021,7 @@ const EmployeeManagement = () => {
                     {emp._role}
                   </Badge>
                 </TableCell>
-                <TableCell className="text-xs">{getManagerName(emp.reporting_manager_id)}</TableCell>
+                <TableCell className="text-xs">{getManagerNames(emp)}</TableCell>
                 <TableCell className="text-xs">{emp.service_status}</TableCell>
                 <TableCell><Badge variant="outline" className={statusBadge(emp.employee_status)}>{emp.employee_status}</Badge></TableCell>
                 <TableCell className="text-xs">{emp.daily_ot_cap}h / {emp.monthly_ot_cap}h</TableCell>

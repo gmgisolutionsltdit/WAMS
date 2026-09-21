@@ -1004,6 +1004,7 @@ export type Database = {
           photo_url: string | null
           promotion_date: string | null
           reporting_manager_id: string | null
+          reporting_manager_ids: string[]
           resign_date: string | null
           service_status: Database["public"]["Enums"]["service_status"]
           standard_daily_hours: number
@@ -1035,6 +1036,7 @@ export type Database = {
           photo_url?: string | null
           promotion_date?: string | null
           reporting_manager_id?: string | null
+          reporting_manager_ids?: string[]
           resign_date?: string | null
           service_status?: Database["public"]["Enums"]["service_status"]
           standard_daily_hours?: number
@@ -1066,6 +1068,7 @@ export type Database = {
           photo_url?: string | null
           promotion_date?: string | null
           reporting_manager_id?: string | null
+          reporting_manager_ids?: string[]
           resign_date?: string | null
           service_status?: Database["public"]["Enums"]["service_status"]
           standard_daily_hours?: number
