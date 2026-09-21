@@ -197,7 +197,20 @@ export default { async fetch(req: Request): Promise<Response> {
         return json({ error: "Cannot delete bootstrap admin" }, 400);
       }
       const { error } = await admin.auth.admin.deleteUser(targetUserId);
-      if (error) return json({ error: error.message }, 400);
+      if (error) {
+        // Orphaned profile: the auth user is already gone (deleted outside
+        // this app, or a leftover row from before FK cascades were fixed)
+        // but the profiles row is still listed. Clean it up directly
+        // instead of failing forever with "User not found".
+        const notFound = /not found|does not exist/i.test(error.message) || (error as any).status === 404;
+        if (notFound) {
+          await admin.from("user_roles").delete().eq("user_id", targetUserId);
+          const { error: profErr } = await admin.from("profiles").delete().eq("id", targetUserId);
+          if (profErr) return json({ error: profErr.message }, 400);
+          return json({ success: true });
+        }
+        return json({ error: error.message }, 400);
+      }
       return json({ success: true });
     }
 
