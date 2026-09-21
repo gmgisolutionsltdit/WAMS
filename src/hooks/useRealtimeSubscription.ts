@@ -20,7 +20,9 @@ type TableName =
   | "tasks"
   | "task_comments"
   | "task_activity"
-  | "task_watchers";
+  | "task_watchers"
+  | "sop_documents"
+  | "sop_updates";
 
 /**
  * Subscribes to postgres_changes for a table.
