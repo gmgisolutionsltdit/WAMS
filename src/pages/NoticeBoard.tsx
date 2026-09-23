@@ -10,9 +10,10 @@ import { Badge } from "@/components/ui/badge";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogFooter } from "@/components/ui/dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
-import { Megaphone, Pin, Plus, Trash2 } from "lucide-react";
+import { Megaphone, Pin, Plus, Trash2, CalendarClock } from "lucide-react";
 import { toast } from "sonner";
 import { format } from "date-fns";
+import { useRealtimeSubscription } from "@/hooks/useRealtimeSubscription";
 
 const CATEGORIES = ["general", "policy", "event", "holiday", "urgent"];
 const PRIORITIES = [
@@ -29,12 +30,67 @@ const NoticeBoard = () => {
   const [open, setOpen] = useState(false);
   const [form, setForm] = useState({ title: "", body: "", category: "general", priority: "normal", pinned: false, expires_at: "" });
 
+  const [activity, setActivity] = useState<any[]>([]);
+  const [namesByUser, setNamesByUser] = useState<Record<string, string>>({});
+  const [leaveTypeNames, setLeaveTypeNames] = useState<Record<string, string>>({});
+
   const fetchNotices = async () => {
     const { data } = await supabase.from("notices").select("*").eq("is_active", true).order("pinned", { ascending: false }).order("published_at", { ascending: false });
     setNotices(data || []);
   };
 
-  useEffect(() => { fetchNotices(); }, []);
+  /**
+   * Leave / late-time request + approval activity, sourced straight from
+   * those tables — visibility is whatever their own RLS already allows
+   * (own requests, plus anything the viewer's role can approve), so an
+   * employee's request only surfaces to their manager/admin, and a
+   * manager's own request only surfaces to admin.
+   */
+  const fetchActivity = async () => {
+    const [{ data: leaveReqs }, { data: lateReqs }, { data: leaveTypes }] = await Promise.all([
+      supabase.from("leave_requests").select("*").order("updated_at", { ascending: false }).limit(20),
+      supabase.from("late_time_requests").select("*").order("updated_at", { ascending: false }).limit(20),
+      supabase.from("leave_types").select("id, name"),
+    ]);
+    const ltNames: Record<string, string> = {};
+    (leaveTypes || []).forEach((lt: { id: string; name: string }) => { ltNames[lt.id] = lt.name; });
+    setLeaveTypeNames(ltNames);
+
+    const combined = [
+      ...(leaveReqs || []).map((r: any) => ({ ...r, _kind: "leave" as const })),
+      ...(lateReqs || []).map((r: any) => ({ ...r, _kind: "late" as const })),
+    ].sort((a, b) => new Date(b.updated_at || b.created_at).getTime() - new Date(a.updated_at || a.created_at).getTime())
+      .slice(0, 20);
+    setActivity(combined);
+
+    const ids = Array.from(new Set(
+      combined.flatMap((r) => [r.user_id, r.approver_id, r.approved_by]).filter(Boolean)
+    ));
+    if (ids.length) {
+      const { data: profs } = await supabase.from("profiles").select("id, full_name, email").in("id", ids);
+      const map: Record<string, string> = {};
+      (profs || []).forEach((p: any) => { map[p.id] = p.full_name || p.email || "Unknown"; });
+      setNamesByUser(map);
+    }
+  };
+
+  useEffect(() => { fetchNotices(); fetchActivity(); }, []);
+  useRealtimeSubscription("leave_requests", fetchActivity, "notice-board-leave");
+  useRealtimeSubscription("late_time_requests", fetchActivity, "notice-board-late");
+
+  const activityLine = (r: any) => {
+    const who = namesByUser[r.user_id] || "Someone";
+    const decidedBy = namesByUser[r.approver_id || r.approved_by];
+    if (r._kind === "leave") {
+      const typeName = leaveTypeNames[r.leave_type_id] || "leave";
+      const range = `${r.start_date} → ${r.end_date}`;
+      if (r.status === "pending") return `${who} requested ${typeName} (${range})`;
+      return `${who}'s ${typeName} request (${range}) was ${r.status}${decidedBy ? ` by ${decidedBy}` : ""}`;
+    }
+    const kind = r.request_type === "office_time_change" ? "office time change" : "late adjustment";
+    if (r.status === "pending") return `${who} requested a ${kind} for ${r.effective_date}`;
+    return `${who}'s ${kind} for ${r.effective_date} was ${r.status}${decidedBy ? ` by ${decidedBy}` : ""}`;
+  };
 
   const create = async () => {
     if (!form.title || !form.body) return toast.error("Title and body required");
@@ -96,6 +152,23 @@ const NoticeBoard = () => {
           </Dialog>
         )}
       </div>
+
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-base flex items-center gap-2"><CalendarClock className="h-4 w-4" /> Leave & Late Time Activity</CardTitle>
+          <CardDescription>Requests and decisions you're involved in or can approve.</CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-2">
+          {activity.length === 0 ? (
+            <p className="text-sm text-muted-foreground text-center py-6">No recent activity</p>
+          ) : activity.map((r) => (
+            <div key={`${r._kind}-${r.id}`} className="flex items-center justify-between gap-3 rounded-lg border p-3 text-sm">
+              <span>{activityLine(r)}</span>
+              <Badge variant="outline" className="shrink-0 capitalize">{r.status}</Badge>
+            </div>
+          ))}
+        </CardContent>
+      </Card>
 
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
         {notices.length === 0 ? (
