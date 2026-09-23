@@ -3,12 +3,16 @@ import { format } from "date-fns";
 /**
  * Compute leave days.
  *
- * - `bridgeHolidays=true` (default ON for most leave types): every day in
- *   the range counts, weekends and holidays included. This implements the
- *   "holiday encapsulation" rule (e.g. Thu→Sat with Fri/Sat weekend = 3d).
- * - `bridgeHolidays=false`: weekends/holidays excluded by default;
- *   `sandwich` then counts weekend/holiday days adjacent (either side)
- *   to working leave days within the range.
+ * - Default (`sandwich=false`, `bridgeHolidays=false`): weekends/holidays
+ *   inside the selected range are excluded from the count entirely.
+ * - `bridgeHolidays=true` or `sandwich=true`: the range is first extended
+ *   outward to swallow any weekend/holiday block immediately touching the
+ *   selected start/end date (on either side), then every day in that
+ *   extended range counts — this is what actually "charges" the adjacent
+ *   weekend for e.g. a single Monday (or Friday) leave request, since
+ *   otherwise that weekend never falls inside the user-picked range at
+ *   all. `bridgeHolidays` and `sandwich` use the same mechanism; a leave
+ *   type can enable either (or both) to get this behavior.
  * - Half-day always = 0.5.
  */
 export const computeWorkingDays = (
@@ -28,7 +32,7 @@ export const computeWorkingDays = (
   const isNonWorking = (d: Date) =>
     weekendDays.includes(d.getDay()) || holidaySet.has(format(d, "yyyy-MM-dd"));
 
-  if (bridgeHolidays) {
+  if (bridgeHolidays || sandwich) {
     let extStart = new Date(s);
     let extEnd = new Date(e);
     if (!isNonWorking(extStart)) {
@@ -50,13 +54,7 @@ export const computeWorkingDays = (
 
   let count = 0;
   for (let d = new Date(s); d <= e; d.setDate(d.getDate() + 1)) {
-    if (!isNonWorking(d)) { count += 1; continue; }
-    if (!sandwich) continue;
-    const prev = new Date(d); prev.setDate(prev.getDate() - 1);
-    const next = new Date(d); next.setDate(next.getDate() + 1);
-    const prevInRange = prev >= s && prev <= e && !isNonWorking(prev);
-    const nextInRange = next >= s && next <= e && !isNonWorking(next);
-    if (prevInRange || nextInRange) count += 1;
+    if (!isNonWorking(d)) count += 1;
   }
   return count;
 };

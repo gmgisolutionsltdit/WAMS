@@ -2,7 +2,6 @@ import { Bell, CheckCheck } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Badge } from "@/components/ui/badge";
-import { ScrollArea } from "@/components/ui/scroll-area";
 import { useNotifications } from "@/hooks/useNotifications";
 import { formatDistanceToNow } from "date-fns";
 import { useNavigate } from "react-router-dom";
@@ -37,7 +36,7 @@ export function NotificationBell() {
             </Button>
           )}
         </div>
-        <ScrollArea className="max-h-80">
+        <div className="max-h-80 overflow-y-auto">
           {notifications.length === 0 ? (
             <p className="text-center text-muted-foreground text-sm py-8">No notifications</p>
           ) : (
@@ -60,7 +59,7 @@ export function NotificationBell() {
               </div>
             ))
           )}
-        </ScrollArea>
+        </div>
       </PopoverContent>
     </Popover>
   );
