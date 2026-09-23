@@ -32,6 +32,7 @@ const NoticeBoard = () => {
 
   const [activity, setActivity] = useState<any[]>([]);
   const [namesByUser, setNamesByUser] = useState<Record<string, string>>({});
+  const [rolesByUser, setRolesByUser] = useState<Record<string, string>>({});
   const [leaveTypeNames, setLeaveTypeNames] = useState<Record<string, string>>({});
 
   const fetchNotices = async () => {
@@ -67,10 +68,16 @@ const NoticeBoard = () => {
       combined.flatMap((r) => [r.user_id, r.approver_id, r.approved_by]).filter(Boolean)
     ));
     if (ids.length) {
-      const { data: profs } = await supabase.from("profiles").select("id, full_name, email").in("id", ids);
+      const [{ data: profs }, { data: roles }] = await Promise.all([
+        supabase.from("profiles").select("id, full_name, email").in("id", ids),
+        supabase.from("user_roles").select("user_id, role").in("user_id", ids),
+      ]);
       const map: Record<string, string> = {};
       (profs || []).forEach((p: any) => { map[p.id] = p.full_name || p.email || "Unknown"; });
       setNamesByUser(map);
+      const roleMap: Record<string, string> = {};
+      (roles || []).forEach((r: any) => { roleMap[r.user_id] = r.role; });
+      setRolesByUser(roleMap);
     }
   };
 
@@ -78,18 +85,31 @@ const NoticeBoard = () => {
   useRealtimeSubscription("leave_requests", fetchActivity, "notice-board-leave");
   useRealtimeSubscription("late_time_requests", fetchActivity, "notice-board-late");
 
+  /**
+   * Own request (viewer === requester) shows *who decided it* (their
+   * manager or admin — the role, since that's what matters to an
+   * employee, not the individual's name). Viewing someone else's request
+   * (a manager/admin looking at their team) shows whose request it is
+   * instead — the "by ..." decider suffix is dropped since it's not
+   * useful there (you already know who you or your peers are).
+   */
   const activityLine = (r: any) => {
     const who = namesByUser[r.user_id] || "Someone";
-    const decidedBy = namesByUser[r.approver_id || r.approved_by];
+    const isOwn = !!user && r.user_id === user.id;
+    const deciderId = r.approver_id || r.approved_by;
+    const deciderRole = deciderId ? rolesByUser[deciderId] : undefined;
+    const decidedSuffix = isOwn && deciderRole
+      ? ` by ${deciderRole === "admin" ? "Admin" : deciderRole === "manager" ? "Manager" : deciderRole}`
+      : "";
     if (r._kind === "leave") {
       const typeName = leaveTypeNames[r.leave_type_id] || "leave";
       const range = `${r.start_date} → ${r.end_date}`;
       if (r.status === "pending") return `${who} requested ${typeName} (${range})`;
-      return `${who}'s ${typeName} request (${range}) was ${r.status}${decidedBy ? ` by ${decidedBy}` : ""}`;
+      return `${who}'s ${typeName} request (${range}) was ${r.status}${decidedSuffix}`;
     }
     const kind = r.request_type === "office_time_change" ? "office time change" : "late adjustment";
     if (r.status === "pending") return `${who} requested a ${kind} for ${r.effective_date}`;
-    return `${who}'s ${kind} for ${r.effective_date} was ${r.status}${decidedBy ? ` by ${decidedBy}` : ""}`;
+    return `${who}'s ${kind} for ${r.effective_date} was ${r.status}${decidedSuffix}`;
   };
 
   const create = async () => {
