@@ -70,7 +70,7 @@ const NoticeBoard = () => {
     if (ids.length) {
       const [{ data: profs }, { data: roles }] = await Promise.all([
         supabase.from("profiles").select("id, full_name, email").in("id", ids),
-        supabase.from("user_roles").select("user_id, role").in("user_id", ids),
+        supabase.rpc("role_labels_for", { _user_ids: ids }),
       ]);
       const map: Record<string, string> = {};
       (profs || []).forEach((p: any) => { map[p.id] = p.full_name || p.email || "Unknown"; });

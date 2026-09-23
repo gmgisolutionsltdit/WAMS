@@ -1871,6 +1871,10 @@ export type Database = {
         Args: { _project_id: string; _user_id: string }
         Returns: Database["public"]["Enums"]["project_role"]
       }
+      role_labels_for: {
+        Args: { _user_ids: string[] }
+        Returns: { user_id: string; role: string }[]
+      }
     }
     Enums: {
       app_role:
