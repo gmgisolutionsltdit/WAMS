@@ -436,7 +436,14 @@ const OTRequests = () => {
                         {String(req.requested_start_time).slice(0, 5)} – {String(req.requested_end_time).slice(0, 5)}
                       </TableCell>
                       <TableCell className="max-w-48 truncate">{req.reason || "—"}</TableCell>
-                      <TableCell><Badge className={otStatusStyle(req.status)}>{req.status}</Badge></TableCell>
+                      <TableCell>
+                        <Badge className={otStatusStyle(req.status)}>{req.status}</Badge>
+                        {req.approver_note && (
+                          <div className="text-[10px] text-muted-foreground mt-1 max-w-40 truncate" title={req.approver_note}>
+                            Note: {req.approver_note}
+                          </div>
+                        )}
+                      </TableCell>
                       <TableCell className="text-sm text-muted-foreground">{format(new Date(req.created_at), "MMM d")}</TableCell>
                     </TableRow>
                   ))}

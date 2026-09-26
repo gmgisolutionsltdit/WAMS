@@ -512,6 +512,11 @@ const LeaveManagement = () => {
                             )}
                           </div>
                         )}
+                        {r.approver_note && (
+                          <div className="text-[10px] text-muted-foreground mt-1 max-w-40 truncate" title={r.approver_note}>
+                            Note: {r.approver_note}
+                          </div>
+                        )}
                       </TableCell>
                       <TableCell>
                         {r.status === "pending" && (
