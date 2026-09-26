@@ -19,7 +19,7 @@ const Holidays = () => {
   const [holidays, setHolidays] = useState<any[]>([]);
   const [open, setOpen] = useState(false);
   const [bulkOpen, setBulkOpen] = useState(false);
-  const [form, setForm] = useState({ name: "", holiday_date: "", wing: "ALL" });
+  const [form, setForm] = useState({ name: "", start_date: "", end_date: "", wing: "ALL" });
   const [bulkText, setBulkText] = useState("");
 
   const fetchHolidays = useCallback(async () => {
@@ -39,14 +39,27 @@ const Holidays = () => {
   }
 
   const handleAdd = async () => {
-    if (!form.name || !form.holiday_date) { toast.error("Name and date required"); return; }
-    const { error } = await supabase.from("holidays").insert({
-      name: form.name,
-      holiday_date: form.holiday_date,
-      wing: form.wing === "ALL" ? null : (form.wing as "GMGI" | "MORU"),
-    });
+    if (!form.name || !form.start_date) { toast.error("Name and start date required"); return; }
+    const endDate = form.end_date || form.start_date;
+    if (endDate < form.start_date) { toast.error("End date can't be before start date"); return; }
+
+    const rows: any[] = [];
+    for (let d = new Date(form.start_date + "T00:00:00"); d <= new Date(endDate + "T00:00:00"); d.setDate(d.getDate() + 1)) {
+      rows.push({
+        name: form.name,
+        holiday_date: format(d, "yyyy-MM-dd"),
+        wing: form.wing === "ALL" ? null : (form.wing as "GMGI" | "MORU"),
+      });
+    }
+
+    const { error } = await supabase.from("holidays").insert(rows);
     if (error) toast.error(error.message);
-    else { toast.success("Holiday added"); setOpen(false); setForm({ name: "", holiday_date: "", wing: "ALL" }); fetchHolidays(); }
+    else {
+      toast.success(rows.length > 1 ? `Holiday added for ${rows.length} days` : "Holiday added");
+      setOpen(false);
+      setForm({ name: "", start_date: "", end_date: "", wing: "ALL" });
+      fetchHolidays();
+    }
   };
 
   const handleDelete = async (id: string) => {
@@ -96,7 +109,17 @@ const Holidays = () => {
               <DialogHeader><DialogTitle>Add Holiday</DialogTitle></DialogHeader>
               <div className="space-y-3">
                 <div><Label>Name</Label><Input value={form.name} onChange={(e) => setForm((f) => ({ ...f, name: e.target.value }))} /></div>
-                <div><Label>Date</Label><Input type="date" value={form.holiday_date} onChange={(e) => setForm((f) => ({ ...f, holiday_date: e.target.value }))} /></div>
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <Label>Start Date</Label>
+                    <Input type="date" value={form.start_date} onChange={(e) => setForm((f) => ({ ...f, start_date: e.target.value }))} />
+                  </div>
+                  <div>
+                    <Label>End Date <span className="text-xs text-muted-foreground">(optional)</span></Label>
+                    <Input type="date" value={form.end_date} min={form.start_date || undefined} onChange={(e) => setForm((f) => ({ ...f, end_date: e.target.value }))} />
+                  </div>
+                </div>
+                <p className="text-xs text-muted-foreground">Leave End Date blank for a single-day holiday. A range creates one entry per day.</p>
                 <div>
                   <Label>Wing</Label>
                   <Select value={form.wing} onValueChange={(v) => setForm((f) => ({ ...f, wing: v }))}>
