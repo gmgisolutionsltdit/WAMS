@@ -28,6 +28,7 @@ export type AttendanceSession = {
   gm_task?: string | null;
   gmgi_time?: number | null;
   gm_time?: number | null;
+  work_from?: string | null;
   [key: string]: unknown;
 };
 
@@ -52,6 +53,8 @@ export type MergedDay<T extends AttendanceSession = AttendanceSession> = {
   penaltyReviewed: boolean;
   /** Set only once a late-arrival waiver is approved; null otherwise (the page falls back to the org's official office start time for display). */
   approvedStartTime: string | null;
+  /** Where the day's first session was worked from (Office/Home/Field), if recorded. */
+  workFrom: string | null;
   /** Sum of GMGI task time across sessions, in hours. */
   gmgiTime: number;
   /** Sum of GM task time across sessions, in hours. */
@@ -101,6 +104,7 @@ export const mergeDailySessions = <T extends AttendanceSession>(
         penaltyMinutes: 0,
         penaltyReviewed: false,
         approvedStartTime: null,
+        workFrom: null,
         gmgiTime: 0,
         gmTime: 0,
         open: false,
@@ -124,6 +128,7 @@ export const mergeDailySessions = <T extends AttendanceSession>(
       day.penaltyMinutes = Number(row.penalty_minutes) || 0;
       day.penaltyReviewed = !!row.penalty_reviewed;
       day.approvedStartTime = row.approved_start_time ?? null;
+      day.workFrom = row.work_from ?? null;
     }
     if (row.clock_out) {
       if (!day.lastOut || row.clock_out > day.lastOut) day.lastOut = row.clock_out;

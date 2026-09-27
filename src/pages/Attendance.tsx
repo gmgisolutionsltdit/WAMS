@@ -6,6 +6,10 @@ import { LogIn, LogOut, Pause, Play, Timer } from "lucide-react";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Label } from "@/components/ui/label";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { WORK_FROM_OPTIONS, DEFAULT_WORK_FROM } from "@/lib/workFrom";
 import { format } from "date-fns";
 import { ChevronDown, ChevronRight } from "lucide-react";
 import { useRealtimeSubscription } from "@/hooks/useRealtimeSubscription";
@@ -34,6 +38,8 @@ const Attendance = () => {
   const [schedule, setSchedule] = useState<WorkSchedule | null>(null);
   const [holidays, setHolidays] = useState<Map<string, string>>(new Map());
   const [starting, setStarting] = useState(false);
+  const [workFromOpen, setWorkFromOpen] = useState(false);
+  const [workFrom, setWorkFrom] = useState<string>(DEFAULT_WORK_FROM);
   const [currentTime, setCurrentTime] = useState(new Date());
   // Approved/modified OT request hours, summed per date, for the Approved OT column.
   const [approvedOTByDate, setApprovedOTByDate] = useState<Record<string, number>>({});
@@ -98,8 +104,9 @@ const Attendance = () => {
   };
 
   /** Same clock-in path as the dashboard's Start button — holiday/weekend
-   * aware, records a late penalty when it applies. */
-  const handleStart = async () => {
+   * aware, records a late penalty when it applies. Shows a Work From
+   * selection dialog first; the actual insert happens in confirmStart. */
+  const handleStart = () => {
     if (!user) return;
     const today = localToday();
     const hasOpenSession = logs.some((l) => l.date === today && l.clock_in && !l.clock_out);
@@ -107,7 +114,14 @@ const Attendance = () => {
       toast.error("You already have an open session today — close it before starting a new one.");
       return;
     }
+    setWorkFromOpen(true);
+  };
+
+  const confirmStart = async () => {
+    if (!user) return;
+    setWorkFromOpen(false);
     setStarting(true);
+    const today = localToday();
     const now = new Date();
     const dayKind = classifyDay(today, holidays, weekendDays);
     const arrival = dayKind.nonWorking
@@ -121,6 +135,7 @@ const Attendance = () => {
       late_minutes: arrival.lateMinutes,
       penalty_minutes: arrival.penaltyMinutes,
       penalty_reviewed: true,
+      work_from: workFrom,
     });
     if (error) toast.error(error.message);
     else if (arrival.late) {
@@ -279,6 +294,24 @@ const Attendance = () => {
         </CardHeader>
       </Card>
 
+      <Dialog open={workFromOpen} onOpenChange={setWorkFromOpen}>
+        <DialogContent>
+          <DialogHeader><DialogTitle>Where are you working from today?</DialogTitle></DialogHeader>
+          <div className="space-y-4">
+            <div>
+              <Label>Work From</Label>
+              <Select value={workFrom} onValueChange={setWorkFrom}>
+                <SelectTrigger><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  {WORK_FROM_OPTIONS.map((w) => <SelectItem key={w} value={w}>{w}</SelectItem>)}
+                </SelectContent>
+              </Select>
+            </div>
+            <Button className="w-full" onClick={confirmStart} disabled={starting}>Continue</Button>
+          </div>
+        </DialogContent>
+      </Dialog>
+
       <Card>
       <CardHeader>
         <CardTitle>My Attendance History</CardTitle>
@@ -294,6 +327,7 @@ const Attendance = () => {
                 <TableHead className="w-8" />
                 <TableHead>Date</TableHead>
                 <TableHead>Status</TableHead>
+                <TableHead>Work From</TableHead>
                 <TableHead>Start</TableHead>
                 <TableHead>Approved Start Time</TableHead>
                 <TableHead>Close</TableHead>
@@ -309,7 +343,7 @@ const Attendance = () => {
             </TableHeader>
             <TableBody>
               {days.length === 0 ? (
-                <TableRow><TableCell colSpan={14} className="text-center text-muted-foreground">No attendance records</TableCell></TableRow>
+                <TableRow><TableCell colSpan={15} className="text-center text-muted-foreground">No attendance records</TableCell></TableRow>
               ) : days.map((day) => {
                 const worked = day.workedSeconds;
                 const closed = !day.open && !!day.lastOut;
@@ -389,6 +423,9 @@ const Attendance = () => {
                         ) : (
                           <Badge variant="outline">On time</Badge>
                         )}
+                      </TableCell>
+                      <TableCell className="whitespace-nowrap">
+                        {day.workFrom ? <Badge variant="outline">{day.workFrom}</Badge> : "—"}
                       </TableCell>
                       <TableCell className="font-mono text-xs">{fmtClock(day.firstIn)}</TableCell>
                       <TableCell className="font-mono text-xs">

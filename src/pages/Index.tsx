@@ -10,6 +10,7 @@ import { Badge } from "@/components/ui/badge";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Clock, LogIn, LogOut, Timer, AlertCircle, Users, CheckSquare, Plus, Check, X, Pause, Play } from "lucide-react";
 import { toast } from "sonner";
 import { format } from "date-fns";
@@ -27,6 +28,7 @@ import ManualTimeEntryDialog from "@/components/ManualTimeEntryDialog";
 import { DEFAULT_GRACE_MINUTES, DEFAULT_OFFICE_END, DEFAULT_OFFICE_START, evaluateArrival, humanMinutes, officeStart } from "@/lib/officeTime";
 import { computeDailyTotals, unpaidBreakMinutes, weekendDaysFor, type WorkSchedule } from "@/lib/workSchedule";
 import { notifyManagersAndAdmins } from "@/lib/notifications";
+import { WORK_FROM_OPTIONS, DEFAULT_WORK_FROM } from "@/lib/workFrom";
 
 
 /** Return today's date string in the user's local timezone (yyyy-MM-dd). */
@@ -55,6 +57,8 @@ const Dashboard = () => {
   const [pendingClockOut, setPendingClockOut] = useState<{ clockOutTime: string; logId: string; totalHours: number; overtimeHours: number; breakMins: number } | null>(null);
   const [faceRequired, setFaceRequired] = useState(false);
   const [faceDialogOpen, setFaceDialogOpen] = useState(false);
+  const [workFromOpen, setWorkFromOpen] = useState(false);
+  const [workFrom, setWorkFrom] = useState<string>(DEFAULT_WORK_FROM);
   const [enrolledFace, setEnrolledFace] = useState<number[] | null>(null);
   const [officeTimes, setOfficeTimes] = useState<{ start: string; end: string; grace: number }>({
     start: DEFAULT_OFFICE_START, end: DEFAULT_OFFICE_END, grace: 11,
@@ -124,7 +128,7 @@ const Dashboard = () => {
   useRealtimeSubscription("overtime_requests", () => { fetchEmployeeData(); fetchAdminData(); }, "dashboard-ot");
   useRealtimeSubscription("attendance_logs", () => { fetchEmployeeData(); fetchAdminData(); }, "dashboard-attendance");
 
-  const performClockIn = async (faceDescriptor?: number[]) => {
+  const performClockIn = async (faceDescriptor?: number[], workFromValue?: string) => {
     if (!user) return;
     setLoading(true);
     const now = new Date();
@@ -147,6 +151,7 @@ const Dashboard = () => {
       ip_address: "192.168.1.1 (simulated)",
       device_source: faceDescriptor ? "Web-Face" : "web",
       face_verified: !!faceDescriptor,
+      work_from: workFromValue || workFrom,
       late_minutes: arrival.lateMinutes,
       penalty_minutes: arrival.penaltyMinutes,
       penalty_reviewed: true,
@@ -176,8 +181,13 @@ const Dashboard = () => {
   };
 
   const handleClockIn = async () => {
+    setWorkFromOpen(true);
+  };
+
+  const confirmWorkFrom = async () => {
+    setWorkFromOpen(false);
     if (faceRequired) { setFaceDialogOpen(true); return; }
-    await performClockIn();
+    await performClockIn(undefined, workFrom);
   };
 
   useEffect(() => {
@@ -372,8 +382,27 @@ const Dashboard = () => {
           </p>
           <FaceCheckIn
             enrolledDescriptor={enrolledFace}
-            onVerified={(desc) => { setFaceDialogOpen(false); performClockIn(desc); }}
+            onVerified={(desc) => { setFaceDialogOpen(false); performClockIn(desc, workFrom); }}
           />
+        </DialogContent>
+      </Dialog>
+
+      {/* Work From selection, shown before clocking in */}
+      <Dialog open={workFromOpen} onOpenChange={setWorkFromOpen}>
+        <DialogContent>
+          <DialogHeader><DialogTitle>Where are you working from today?</DialogTitle></DialogHeader>
+          <div className="space-y-4">
+            <div>
+              <Label>Work From</Label>
+              <Select value={workFrom} onValueChange={setWorkFrom}>
+                <SelectTrigger><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  {WORK_FROM_OPTIONS.map((w) => <SelectItem key={w} value={w}>{w}</SelectItem>)}
+                </SelectContent>
+              </Select>
+            </div>
+            <Button className="w-full" onClick={confirmWorkFrom} disabled={loading}>Continue</Button>
+          </div>
         </DialogContent>
       </Dialog>
 

@@ -11,14 +11,35 @@ import { Badge } from "@/components/ui/badge";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Textarea } from "@/components/ui/textarea";
 import { toast } from "sonner";
-import { Calendar, Plus, Trash2, Upload } from "lucide-react";
+import { Calendar, Plus, Trash2, Upload, Pencil } from "lucide-react";
 import { format } from "date-fns";
+
+/** Group consecutive-date rows that share the same name + wing into one display row. */
+const groupHolidays = (rows: any[]) => {
+  const sorted = [...rows].sort((a, b) => a.holiday_date.localeCompare(b.holiday_date));
+  const groups: { ids: string[]; name: string; wing: string | null; start_date: string; end_date: string }[] = [];
+  for (const h of sorted) {
+    const last = groups[groups.length - 1];
+    if (last && last.name === h.name && last.wing === h.wing) {
+      const nextDay = new Date(last.end_date + "T00:00:00");
+      nextDay.setDate(nextDay.getDate() + 1);
+      if (format(nextDay, "yyyy-MM-dd") === h.holiday_date) {
+        last.ids.push(h.id);
+        last.end_date = h.holiday_date;
+        continue;
+      }
+    }
+    groups.push({ ids: [h.id], name: h.name, wing: h.wing, start_date: h.holiday_date, end_date: h.holiday_date });
+  }
+  return groups;
+};
 
 const Holidays = () => {
   const { role } = useAuth();
   const [holidays, setHolidays] = useState<any[]>([]);
   const [open, setOpen] = useState(false);
   const [bulkOpen, setBulkOpen] = useState(false);
+  const [editingIds, setEditingIds] = useState<string[] | null>(null);
   const [form, setForm] = useState({ name: "", start_date: "", end_date: "", wing: "ALL" });
   const [bulkText, setBulkText] = useState("");
 
@@ -38,6 +59,16 @@ const Holidays = () => {
     );
   }
 
+  const resetForm = () => { setForm({ name: "", start_date: "", end_date: "", wing: "ALL" }); setEditingIds(null); };
+
+  const openCreate = () => { resetForm(); setOpen(true); };
+
+  const openEdit = (group: { ids: string[]; name: string; wing: string | null; start_date: string; end_date: string }) => {
+    setEditingIds(group.ids);
+    setForm({ name: group.name, start_date: group.start_date, end_date: group.end_date, wing: group.wing || "ALL" });
+    setOpen(true);
+  };
+
   const handleAdd = async () => {
     if (!form.name || !form.start_date) { toast.error("Name and start date required"); return; }
     const endDate = form.end_date || form.start_date;
@@ -52,18 +83,23 @@ const Holidays = () => {
       });
     }
 
+    if (editingIds) {
+      const { error: delErr } = await supabase.from("holidays").delete().in("id", editingIds);
+      if (delErr) { toast.error(delErr.message); return; }
+    }
+
     const { error } = await supabase.from("holidays").insert(rows);
     if (error) toast.error(error.message);
     else {
-      toast.success(rows.length > 1 ? `Holiday added for ${rows.length} days` : "Holiday added");
+      toast.success(editingIds ? "Holiday updated" : (rows.length > 1 ? `Holiday added for ${rows.length} days` : "Holiday added"));
       setOpen(false);
-      setForm({ name: "", start_date: "", end_date: "", wing: "ALL" });
+      resetForm();
       fetchHolidays();
     }
   };
 
-  const handleDelete = async (id: string) => {
-    const { error } = await supabase.from("holidays").delete().eq("id", id);
+  const handleDeleteGroup = async (ids: string[]) => {
+    const { error } = await supabase.from("holidays").delete().in("id", ids);
     if (error) toast.error(error.message);
     else { toast.success("Removed"); fetchHolidays(); }
   };
@@ -103,10 +139,10 @@ const Holidays = () => {
               </div>
             </DialogContent>
           </Dialog>
-          <Dialog open={open} onOpenChange={setOpen}>
-            <DialogTrigger asChild><Button size="sm"><Plus className="mr-1 h-4 w-4" /> Add Holiday</Button></DialogTrigger>
+          <Dialog open={open} onOpenChange={(v) => { setOpen(v); if (!v) resetForm(); }}>
+            <DialogTrigger asChild><Button size="sm" onClick={openCreate}><Plus className="mr-1 h-4 w-4" /> Add Holiday</Button></DialogTrigger>
             <DialogContent>
-              <DialogHeader><DialogTitle>Add Holiday</DialogTitle></DialogHeader>
+              <DialogHeader><DialogTitle>{editingIds ? "Edit Holiday" : "Add Holiday"}</DialogTitle></DialogHeader>
               <div className="space-y-3">
                 <div><Label>Name</Label><Input value={form.name} onChange={(e) => setForm((f) => ({ ...f, name: e.target.value }))} /></div>
                 <div className="grid grid-cols-2 gap-3">
@@ -131,7 +167,7 @@ const Holidays = () => {
                     </SelectContent>
                   </Select>
                 </div>
-                <Button className="w-full" onClick={handleAdd}>Add</Button>
+                <Button className="w-full" onClick={handleAdd}>{editingIds ? "Save Changes" : "Add"}</Button>
               </div>
             </DialogContent>
           </Dialog>
@@ -150,13 +186,20 @@ const Holidays = () => {
           <TableBody>
             {holidays.length === 0 ? (
               <TableRow><TableCell colSpan={4} className="text-center text-muted-foreground">No holidays declared</TableCell></TableRow>
-            ) : holidays.map((h) => (
-              <TableRow key={h.id}>
-                <TableCell>{format(new Date(h.holiday_date), "EEE, MMM d, yyyy")}</TableCell>
-                <TableCell className="font-medium">{h.name}</TableCell>
-                <TableCell><Badge variant={h.wing ? "secondary" : "outline"}>{h.wing || "All"}</Badge></TableCell>
+            ) : groupHolidays(holidays).map((g) => (
+              <TableRow key={g.ids[0]}>
                 <TableCell>
-                  <Button size="sm" variant="ghost" onClick={() => handleDelete(h.id)}>
+                  {g.start_date === g.end_date
+                    ? format(new Date(g.start_date), "EEE, MMM d, yyyy")
+                    : `${format(new Date(g.start_date), "EEE, MMM d")} – ${format(new Date(g.end_date), "EEE, MMM d, yyyy")}`}
+                </TableCell>
+                <TableCell className="font-medium">{g.name}</TableCell>
+                <TableCell><Badge variant={g.wing ? "secondary" : "outline"}>{g.wing || "All"}</Badge></TableCell>
+                <TableCell className="space-x-1">
+                  <Button size="sm" variant="ghost" onClick={() => openEdit(g)}>
+                    <Pencil className="h-4 w-4" />
+                  </Button>
+                  <Button size="sm" variant="ghost" onClick={() => handleDeleteGroup(g.ids)}>
                     <Trash2 className="h-4 w-4" />
                   </Button>
                 </TableCell>

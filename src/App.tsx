@@ -26,7 +26,6 @@ import NotFound from "./pages/NotFound";
 import Payroll from "./pages/Payroll";
 import SalaryIncrements from "./pages/SalaryIncrements";
 import EmployeeProfile from "./pages/EmployeeProfile";
-import Roster from "./pages/Roster";
 import Loans from "./pages/Loans";
 import Expenses from "./pages/Expenses";
 import NoticeBoard from "./pages/NoticeBoard";
@@ -82,7 +81,6 @@ const AppRoutes = () => (
     <Route path="/payroll" element={<ProtectedRoute><RoleGate allow={["admin"]}><Payroll /></RoleGate></ProtectedRoute>} />
     <Route path="/salary-increments" element={<ProtectedRoute><RoleGate allow={["admin"]}><SalaryIncrements /></RoleGate></ProtectedRoute>} />
     <Route path="/loans" element={<ProtectedRoute><RoleGate allow={["admin"]}><Loans /></RoleGate></ProtectedRoute>} />
-    <Route path="/roster" element={<ProtectedRoute><RoleGate allow={["admin"]}><Roster /></RoleGate></ProtectedRoute>} />
     <Route path="/expenses" element={<ProtectedRoute><Expenses /></ProtectedRoute>} />
     <Route path="/notices" element={<ProtectedRoute><NoticeBoard /></ProtectedRoute>} />
     <Route path="/sop" element={<ProtectedRoute><SOP /></ProtectedRoute>} />
