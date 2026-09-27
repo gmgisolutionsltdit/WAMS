@@ -1875,6 +1875,10 @@ export type Database = {
         Args: { _user_ids: string[] }
         Returns: { user_id: string; role: string }[]
       }
+      manager_candidates: {
+        Args: Record<PropertyKey, never>
+        Returns: { id: string; full_name: string | null; email: string | null }[]
+      }
     }
     Enums: {
       app_role:

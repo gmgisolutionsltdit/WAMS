@@ -48,9 +48,11 @@ const NoticeBoard = () => {
    * manager's own request only surfaces to admin.
    */
   const fetchActivity = async () => {
-    const [{ data: leaveReqs }, { data: lateReqs }, { data: leaveTypes }] = await Promise.all([
+    const [{ data: leaveReqs }, { data: lateReqs }, { data: manualReqs }, { data: otReqs }, { data: leaveTypes }] = await Promise.all([
       supabase.from("leave_requests").select("*").order("updated_at", { ascending: false }).limit(20),
       supabase.from("late_time_requests").select("*").order("updated_at", { ascending: false }).limit(20),
+      supabase.from("manual_time_requests").select("*").order("updated_at", { ascending: false }).limit(20),
+      supabase.from("overtime_requests").select("*").order("updated_at", { ascending: false }).limit(20),
       supabase.from("leave_types").select("id, name"),
     ]);
     const ltNames: Record<string, string> = {};
@@ -60,6 +62,8 @@ const NoticeBoard = () => {
     const combined = [
       ...(leaveReqs || []).map((r: any) => ({ ...r, _kind: "leave" as const })),
       ...(lateReqs || []).map((r: any) => ({ ...r, _kind: "late" as const })),
+      ...(manualReqs || []).map((r: any) => ({ ...r, _kind: "manual" as const })),
+      ...(otReqs || []).map((r: any) => ({ ...r, _kind: "ot" as const })),
     ].sort((a, b) => new Date(b.updated_at || b.created_at).getTime() - new Date(a.updated_at || a.created_at).getTime())
       .slice(0, 20);
     setActivity(combined);
@@ -84,6 +88,8 @@ const NoticeBoard = () => {
   useEffect(() => { fetchNotices(); fetchActivity(); }, []);
   useRealtimeSubscription("leave_requests", fetchActivity, "notice-board-leave");
   useRealtimeSubscription("late_time_requests", fetchActivity, "notice-board-late");
+  useRealtimeSubscription("manual_time_requests", fetchActivity, "notice-board-manual");
+  useRealtimeSubscription("overtime_requests", fetchActivity, "notice-board-ot");
 
   /**
    * Own request (viewer === requester) shows *who decided it* (their
@@ -107,9 +113,20 @@ const NoticeBoard = () => {
       if (r.status === "pending") return `${who} requested ${typeName} (${range})`;
       return `${who}'s ${typeName} request (${range}) was ${r.status}${decidedSuffix}`;
     }
-    const kind = r.request_type === "office_time_change" ? "office time change" : "late adjustment";
-    if (r.status === "pending") return `${who} requested a ${kind} for ${r.effective_date}`;
-    return `${who}'s ${kind} for ${r.effective_date} was ${r.status}${decidedSuffix}`;
+    if (r._kind === "late") {
+      const kind = r.request_type === "office_time_change" ? "office time change" : "late adjustment";
+      if (r.status === "pending") return `${who} requested a ${kind} for ${r.effective_date}`;
+      return `${who}'s ${kind} for ${r.effective_date} was ${r.status}${decidedSuffix}`;
+    }
+    if (r._kind === "manual") {
+      const dateStr = r.date ? format(new Date(r.date), "MMM d") : "";
+      if (r.status === "pending") return `${who} submitted a manual time entry for ${dateStr}`;
+      return `${who}'s manual time entry for ${dateStr} was ${r.status}${decidedSuffix}`;
+    }
+    // overtime
+    const dateStr = r.date ? format(new Date(r.date), "MMM d") : "";
+    if (r.status === "pending") return `${who} requested ${r.requested_hours}h overtime for ${dateStr}`;
+    return `${who}'s ${r.requested_hours}h overtime for ${dateStr} was ${r.status}${decidedSuffix}`;
   };
 
   const create = async () => {
@@ -175,7 +192,7 @@ const NoticeBoard = () => {
 
       <Card>
         <CardHeader>
-          <CardTitle className="text-base flex items-center gap-2"><CalendarClock className="h-4 w-4" /> Leave & Late Time Activity</CardTitle>
+          <CardTitle className="text-base flex items-center gap-2"><CalendarClock className="h-4 w-4" /> Requests Activity</CardTitle>
           <CardDescription>Requests and decisions you're involved in or can approve.</CardDescription>
         </CardHeader>
         <CardContent className="space-y-2">

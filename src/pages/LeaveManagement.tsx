@@ -131,16 +131,17 @@ const LeaveManagement = () => {
 
 
   const submit = async () => {
-    if (!form.leave_type_id || !form.start_date || !form.end_date) { toast.error("Fill leave type and dates"); return; }
+    if (!form.leave_type_id || !form.start_date) { toast.error("Fill leave type and start date"); return; }
+    const endDate = form.end_date || form.start_date;
     const submitLt = leaveTypes.find((t) => t.id === form.leave_type_id);
     if (!canBypass48h(role) && !isWithin48h(form.start_date)) { toast.error(RETRO_LOCK_MESSAGE); return; }
-    const days = computeWorkingDays(form.start_date, form.end_date, form.day_type, weekendFor(user?.id), holidaySet, !!submitLt?.sandwich_leave, submitLt?.bridge_holidays === true);
+    const days = computeWorkingDays(form.start_date, endDate, form.day_type, weekendFor(user?.id), holidaySet, !!submitLt?.sandwich_leave, submitLt?.bridge_holidays === true);
     if (days <= 0) { toast.error("No working days in this range (weekends/holidays excluded)"); return; }
     const { data, error } = await supabase.from("leave_requests").insert({
       user_id: user!.id,
       leave_type_id: form.leave_type_id,
       start_date: form.start_date,
-      end_date: form.end_date,
+      end_date: endDate,
       day_type: form.day_type,
       total_days: days,
       reason: form.reason || null,
@@ -150,7 +151,7 @@ const LeaveManagement = () => {
     const lt = leaveTypes.find((t) => t.id === form.leave_type_id);
     await notifyManagersAndAdmins(
       "New Leave Request",
-      `${user?.email} requested ${lt?.name || "leave"} from ${form.start_date} to ${form.end_date} (${days}d)`,
+      `${user?.email} requested ${lt?.name || "leave"} from ${form.start_date} to ${endDate} (${days}d)`,
       data?.id,
       { route: "/leave", type: "leave_request", requesterId: user?.id }
     );
@@ -302,8 +303,8 @@ const LeaveManagement = () => {
   };
 
   const previewLt = leaveTypes.find((t) => t.id === form.leave_type_id);
-  const previewDays = form.start_date && form.end_date
-    ? computeWorkingDays(form.start_date, form.end_date, form.day_type, weekendFor(user?.id), holidaySet, !!previewLt?.sandwich_leave, previewLt?.bridge_holidays === true)
+  const previewDays = form.start_date
+    ? computeWorkingDays(form.start_date, form.end_date || form.start_date, form.day_type, weekendFor(user?.id), holidaySet, !!previewLt?.sandwich_leave, previewLt?.bridge_holidays === true)
     : 0;
 
   return (
@@ -376,7 +377,7 @@ const LeaveManagement = () => {
               />
             </div>
             <div>
-              <Label>End Date</Label>
+              <Label>End Date <span className="text-xs text-muted-foreground">(optional — same day if left blank)</span></Label>
               <LeaveDatePicker
                 value={form.end_date}
                 onChange={(iso) => setForm((f) => ({ ...f, end_date: iso }))}
