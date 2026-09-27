@@ -1,8 +1,11 @@
 import { supabase } from "@/integrations/supabase/client";
 
 /**
- * Notify the requester's reporting manager (chain) and all admins.
- * Falls back to all admins/managers if reporting manager isn't set.
+ * Notify the requester's chosen reporting manager(s) only. Admins are
+ * notified instead only when the requester has no reporting manager set
+ * at all — an assigned manager means that's who owns the request, not
+ * every admin in the org too. With no requester context (e.g. a generic
+ * broadcast), falls back to every admin + manager.
  */
 export async function notifyManagersAndAdmins(
   title: string,
@@ -12,29 +15,29 @@ export async function notifyManagersAndAdmins(
 ) {
   const recipients = new Set<string>();
 
-  // Direct reporting manager (if requester provided)
   if (options?.requesterId) {
     const { data: prof } = await supabase
       .from("profiles")
-      .select("reporting_manager_id")
+      .select("reporting_manager_ids, reporting_manager_id")
       .eq("id", options.requesterId)
       .maybeSingle();
-    if (prof?.reporting_manager_id) recipients.add(prof.reporting_manager_id);
-  }
+    const managerIds = (prof?.reporting_manager_ids?.length
+      ? prof.reporting_manager_ids
+      : (prof?.reporting_manager_id ? [prof.reporting_manager_id] : [])) as string[];
 
-  // All admins always get notified
-  const { data: admins } = await supabase
-    .from("user_roles")
-    .select("user_id")
-    .eq("role", "admin");
-  (admins || []).forEach((r) => recipients.add(r.user_id));
-
-  // If no direct manager known, also notify all managers as fallback
-  if (!options?.requesterId) {
-    const { data: mgrs } = await supabase
-      .from("user_roles")
-      .select("user_id")
-      .eq("role", "manager");
+    if (managerIds.length) {
+      managerIds.forEach((id) => recipients.add(id));
+    } else {
+      // No reporting manager assigned — admins are the fallback owner.
+      const { data: admins } = await supabase.from("user_roles").select("user_id").eq("role", "admin");
+      (admins || []).forEach((r) => recipients.add(r.user_id));
+    }
+  } else {
+    const [{ data: admins }, { data: mgrs }] = await Promise.all([
+      supabase.from("user_roles").select("user_id").eq("role", "admin"),
+      supabase.from("user_roles").select("user_id").eq("role", "manager"),
+    ]);
+    (admins || []).forEach((r) => recipients.add(r.user_id));
     (mgrs || []).forEach((r) => recipients.add(r.user_id));
   }
 
