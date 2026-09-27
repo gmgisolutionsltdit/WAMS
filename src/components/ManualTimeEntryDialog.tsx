@@ -6,7 +6,9 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Plus } from "lucide-react";
+import { WORK_FROM_OPTIONS, DEFAULT_WORK_FROM } from "@/lib/workFrom";
 import { toast } from "sonner";
 import { format } from "date-fns";
 import type { ReactNode } from "react";
@@ -32,6 +34,7 @@ type FormState = {
   gmgi_time: string;
   gm_time: string;
   reason: string;
+  work_from: string;
 };
 
 const defaultForm: FormState = {
@@ -49,6 +52,7 @@ const defaultForm: FormState = {
   gmgi_time: "",
   gm_time: "",
   reason: "",
+  work_from: DEFAULT_WORK_FROM,
 };
 
 interface Props {
@@ -191,6 +195,7 @@ export const ManualTimeEntryDialog = ({ onSubmitted, trigger, initial, supersede
         gm_time: gmTime,
         reason: form.reason.trim() || null,
         supersedes_log_id: supersedesLogId || null,
+        work_from: form.work_from,
       };
 
       const { data: inserted, error } = await supabase
@@ -257,6 +262,15 @@ export const ManualTimeEntryDialog = ({ onSubmitted, trigger, initial, supersede
               onChange={(e) => setForm((f) => ({ ...f, date: e.target.value }))}
             />
             {!isAdmin && <p className="text-xs text-muted-foreground mt-1">{RETRO_LOCK_MESSAGE}</p>}
+          </div>
+          <div>
+            <Label>Work From</Label>
+            <Select value={form.work_from} onValueChange={(v) => setForm((f) => ({ ...f, work_from: v }))}>
+              <SelectTrigger><SelectValue /></SelectTrigger>
+              <SelectContent>
+                {WORK_FROM_OPTIONS.map((w) => <SelectItem key={w} value={w}>{w}</SelectItem>)}
+              </SelectContent>
+            </Select>
           </div>
           <div className="grid grid-cols-2 gap-4">
             <div><Label>Clock In</Label><Input type="time" value={form.clock_in} onChange={(e) => setForm((f) => ({ ...f, clock_in: e.target.value }))} /></div>

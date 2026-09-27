@@ -39,6 +39,7 @@ export type Database = {
           total_hours: number | null
           updated_at: string
           user_id: string
+          work_from: string | null
         }
         Insert: {
           approved_start_time?: string | null
@@ -64,6 +65,7 @@ export type Database = {
           total_hours?: number | null
           updated_at?: string
           user_id: string
+          work_from?: string | null
         }
         Update: {
           approved_start_time?: string | null
@@ -89,6 +91,7 @@ export type Database = {
           total_hours?: number | null
           updated_at?: string
           user_id?: string
+          work_from?: string | null
         }
         Relationships: [
           {
@@ -672,6 +675,7 @@ export type Database = {
           total_hours: number
           updated_at: string
           user_id: string
+          work_from: string | null
         }
         Insert: {
           applied_log_id?: string | null
@@ -698,6 +702,7 @@ export type Database = {
           total_hours?: number
           updated_at?: string
           user_id: string
+          work_from?: string | null
         }
         Update: {
           applied_log_id?: string | null
@@ -724,6 +729,7 @@ export type Database = {
           total_hours?: number
           updated_at?: string
           user_id?: string
+          work_from?: string | null
         }
         Relationships: [
           {

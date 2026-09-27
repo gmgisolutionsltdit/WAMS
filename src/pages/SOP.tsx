@@ -78,9 +78,20 @@ const SOP = () => {
     });
   }, [documents, updates]);
 
-  const openDocument = (doc: SopDocument) => {
-    const { data } = supabase.storage.from("sop-documents").getPublicUrl(doc.file_path);
-    window.open(data.publicUrl, "_blank", "noopener,noreferrer");
+  const openDocument = async (doc: SopDocument) => {
+    const { data, error } = await supabase.storage.from("sop-documents").download(doc.file_path);
+    if (error || !data) {
+      toast.error(error?.message || "Could not download this file");
+      return;
+    }
+    const url = URL.createObjectURL(data);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = doc.file_name || `${doc.title}.pdf`;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    URL.revokeObjectURL(url);
   };
 
   const handleUpload = async () => {
