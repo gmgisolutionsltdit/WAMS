@@ -32,6 +32,7 @@ const Approvals = () => {
   const [latePending, setLatePending] = useState<any[]>([]);
   const [lateHistory, setLateHistory] = useState<any[]>([]);
   const [leavePending, setLeavePending] = useState<any[]>([]);
+  const [leaveHistory, setLeaveHistory] = useState<any[]>([]);
   const [leaveTypeNames, setLeaveTypeNames] = useState<Record<string, string>>({});
   const [names, setNames] = useState<Record<string, string>>({});
   const [notes, setNotes] = useState<Record<string, string>>({});
@@ -44,7 +45,7 @@ const Approvals = () => {
 
   const fetchData = useCallback(async () => {
     if (!user) return;
-    const [{ data: requests }, { data: resolved }, { data: manualReqs }, { data: lateReqs }, { data: lateHist }, { data: leaveReqs }, { data: leaveTypes }] = await Promise.all([
+    const [{ data: requests }, { data: resolved }, { data: manualReqs }, { data: lateReqs }, { data: lateHist }, { data: leaveReqs }, { data: leaveHist }, { data: leaveTypes }] = await Promise.all([
       supabase
         .from("overtime_requests")
         .select("*, profiles!overtime_requests_user_id_fkey(full_name, email)")
@@ -60,6 +61,7 @@ const Approvals = () => {
       supabase.from("late_time_requests").select("*").eq("status", "pending").order("created_at", { ascending: false }),
       supabase.from("late_time_requests").select("*").neq("status", "pending").order("updated_at", { ascending: false }).limit(20),
       supabase.from("leave_requests").select("*").eq("status", "pending").order("created_at", { ascending: false }),
+      supabase.from("leave_requests").select("*").neq("status", "pending").order("updated_at", { ascending: false }).limit(20),
       supabase.from("leave_types").select("id, name"),
     ]);
     setPending(requests || []);
@@ -68,6 +70,7 @@ const Approvals = () => {
     setLatePending(lateReqs || []);
     setLateHistory(lateHist || []);
     setLeavePending(leaveReqs || []);
+    setLeaveHistory(leaveHist || []);
     const ltNames: Record<string, string> = {};
     (leaveTypes || []).forEach((lt: { id: string; name: string }) => { ltNames[lt.id] = lt.name; });
     setLeaveTypeNames(ltNames);
@@ -76,8 +79,8 @@ const Approvals = () => {
     setStartTimeApproverRole((cfg as { start_time_approver_role?: string } | null)?.start_time_approver_role || "admin");
 
     const ids = Array.from(new Set(
-      [...(manualReqs || []), ...(lateReqs || []), ...(lateHist || []), ...(leaveReqs || [])]
-        .flatMap((r: any) => [r.user_id, r.approved_by])
+      [...(manualReqs || []), ...(lateReqs || []), ...(lateHist || []), ...(leaveReqs || []), ...(leaveHist || [])]
+        .flatMap((r: any) => [r.user_id, r.approved_by, r.approver_id])
         .filter(Boolean)
     ));
     if (ids.length) {
@@ -223,6 +226,22 @@ const Approvals = () => {
     const { error } = await supabase.from("overtime_requests").delete().eq("id", req.id);
     if (error) { toast.error(error.message); return; }
     toast.success("OT request deleted");
+    fetchData();
+  };
+
+  const deleteLeave = async (req: any) => {
+    if (!window.confirm("Delete this leave request? This cannot be undone.")) return;
+    const { error } = await supabase.from("leave_requests").delete().eq("id", req.id);
+    if (error) { toast.error(error.message); return; }
+    toast.success("Leave request deleted");
+    fetchData();
+  };
+
+  const deleteLate = async (req: any) => {
+    if (!window.confirm("Delete this late time request? This cannot be undone.")) return;
+    const { error } = await supabase.from("late_time_requests").delete().eq("id", req.id);
+    if (error) { toast.error(error.message); return; }
+    toast.success("Late time request deleted");
     fetchData();
   };
 
@@ -530,11 +549,12 @@ const Approvals = () => {
                 <TableHead>Status</TableHead>
                 <TableHead>Decided By</TableHead>
                 <TableHead>Note</TableHead>
+                <TableHead>Actions</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
               {lateHistory.length === 0 ? (
-                <TableRow><TableCell colSpan={7} className="text-center text-muted-foreground">No late time request history yet</TableCell></TableRow>
+                <TableRow><TableCell colSpan={8} className="text-center text-muted-foreground">No late time request history yet</TableCell></TableRow>
               ) : lateHistory.map((req) => (
                 <TableRow key={req.id}>
                   <TableCell className="font-medium">{names[req.user_id] || "Unknown"}</TableCell>
@@ -552,6 +572,11 @@ const Approvals = () => {
                   </TableCell>
                   <TableCell className="text-xs text-muted-foreground">{req.approved_by ? names[req.approved_by] || "—" : "—"}</TableCell>
                   <TableCell className="max-w-48 truncate text-xs text-muted-foreground">{req.approver_note || "—"}</TableCell>
+                  <TableCell>
+                    <Button size="sm" variant="ghost" className="text-destructive hover:text-destructive" onClick={() => deleteLate(req)}>
+                      <Trash2 className="h-4 w-4" />
+                    </Button>
+                  </TableCell>
                 </TableRow>
               ))}
             </TableBody>
@@ -559,6 +584,53 @@ const Approvals = () => {
         </CardContent>
       </Card>
 
+      {/* Leave Request Log */}
+      <Card>
+        <CardHeader>
+          <CardTitle>Leave Request Log</CardTitle>
+          <CardDescription>Track every leave request and how it was decided.</CardDescription>
+        </CardHeader>
+        <CardContent>
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead>Employee</TableHead>
+                <TableHead>Type</TableHead>
+                <TableHead>Dates</TableHead>
+                <TableHead>Days</TableHead>
+                <TableHead>Status</TableHead>
+                <TableHead>Decided By</TableHead>
+                <TableHead>Note</TableHead>
+                <TableHead>Actions</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {leaveHistory.length === 0 ? (
+                <TableRow><TableCell colSpan={8} className="text-center text-muted-foreground">No leave request history yet</TableCell></TableRow>
+              ) : leaveHistory.map((req) => (
+                <TableRow key={req.id}>
+                  <TableCell className="font-medium">{names[req.user_id] || "Unknown"}</TableCell>
+                  <TableCell><Badge variant="outline">{leaveTypeNames[req.leave_type_id] || "—"}</Badge></TableCell>
+                  <TableCell className="whitespace-nowrap text-xs">
+                    {format(new Date(req.start_date), "MMM d")} – {format(new Date(req.end_date), "MMM d, yyyy")}
+                  </TableCell>
+                  <TableCell><Badge>{req.total_days}d</Badge></TableCell>
+                  <TableCell>
+                    <Badge className={otStatusStyle(req.status)}>{req.status}</Badge>
+                  </TableCell>
+                  <TableCell className="text-xs text-muted-foreground">{req.approver_id ? names[req.approver_id] || "—" : "—"}</TableCell>
+                  <TableCell className="max-w-48 truncate text-xs text-muted-foreground">{req.approver_note || "—"}</TableCell>
+                  <TableCell>
+                    <Button size="sm" variant="ghost" className="text-destructive hover:text-destructive" onClick={() => deleteLeave(req)}>
+                      <Trash2 className="h-4 w-4" />
+                    </Button>
+                  </TableCell>
+                </TableRow>
+              ))}
+            </TableBody>
+          </Table>
+        </CardContent>
+      </Card>
 
       {/* Approval History */}
       <Card>

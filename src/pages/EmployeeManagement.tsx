@@ -96,7 +96,7 @@ const EmployeeManagement = () => {
   const [employees, setEmployees] = useState<EmployeeRow[]>([]);
   const [leaveTypes, setLeaveTypes] = useState<LeaveType[]>([]);
   const [savingLeave, setSavingLeave] = useState(false);
-  const [managers, setManagers] = useState<EmployeeRow[]>([]);
+  const [managers, setManagers] = useState<{ id: string; full_name: string | null; email: string | null }[]>([]);
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState("");
@@ -163,17 +163,20 @@ const EmployeeManagement = () => {
     const roleMap = new Map((roles || []).map((r) => [r.user_id, r.role as string]));
     const merged = (profiles || []).map((p: any) => ({ ...p, _role: roleMap.get(p.id) || "employee" })) as EmployeeRow[];
     setEmployees(merged);
-
-    // Managers list = anyone in this scope who is admin/manager (used for "Reporting To" dropdown).
-    // Admins additionally need full picker; fetch all when admin.
-    if (role === "admin") {
-      const managerIds = (roles || []).filter((r) => r.role === "manager" || r.role === "admin").map((r) => r.user_id);
-      setManagers(merged.filter((m) => managerIds.includes(m.id)));
-    } else {
-      setManagers([]);
-    }
     setLoadingList(false);
   }, [role, user]);
+
+  /**
+   * Org-wide admin/manager list for the "Reporting To" picker, fetched via
+   * a security-definer RPC so it works the same for every viewer role —
+   * a manager's `profiles` visibility is scoped to their own direct
+   * reports, so building this list from `employees` left it empty
+   * whenever a manager (rather than an admin) opened the dialog.
+   */
+  const fetchManagerCandidates = useCallback(async () => {
+    const { data } = await supabase.rpc("manager_candidates");
+    setManagers(data || []);
+  }, []);
 
   const fetchWings = useCallback(async () => {
     const { data, error } = await supabase
@@ -202,10 +205,12 @@ const EmployeeManagement = () => {
   }, []);
 
   useEffect(() => { fetchEmployees(); }, [fetchEmployees]);
+  useEffect(() => { fetchManagerCandidates(); }, [fetchManagerCandidates]);
   useEffect(() => { fetchWings(); }, [fetchWings]);
   useEffect(() => { fetchProjects(); }, [fetchProjects]);
   useRealtimeSubscription("profiles", fetchEmployees, "emp-mgmt-profiles");
   useRealtimeSubscription("user_roles", fetchEmployees, "emp-mgmt-roles");
+  useRealtimeSubscription("user_roles", fetchManagerCandidates, "emp-mgmt-mgr-candidates");
 
   const fetchLeaveTypes = useCallback(async () => {
     const { data } = await supabase.from("leave_types").select("*").order("name");
