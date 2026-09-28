@@ -12,7 +12,6 @@ import { WORK_FROM_OPTIONS, DEFAULT_WORK_FROM } from "@/lib/workFrom";
 import { toast } from "sonner";
 import { format } from "date-fns";
 import type { ReactNode } from "react";
-import { min48hDateISO, isWithin48h, RETRO_LOCK_MESSAGE } from "@/lib/dateRules";
 import { notifyManagersAndAdmins } from "@/lib/notifications";
 import { computeDailyTotals } from "@/lib/workSchedule";
 import { DEFAULT_OFFICE_END, DEFAULT_OFFICE_START, humanMinutes, timeToMinutes } from "@/lib/officeTime";
@@ -156,10 +155,6 @@ export const ManualTimeEntryDialog = ({ onSubmitted, trigger, initial, supersede
 
   const submit = async () => {
     if (!user) return;
-    if (!isAdmin && !isWithin48h(form.date)) {
-      toast.error(RETRO_LOCK_MESSAGE);
-      return;
-    }
     if (!form.work_from.length) {
       toast.error("Select at least one Work From option");
       return;
@@ -262,10 +257,8 @@ export const ManualTimeEntryDialog = ({ onSubmitted, trigger, initial, supersede
             <Input
               type="date"
               value={form.date}
-              min={isAdmin ? undefined : min48hDateISO()}
               onChange={(e) => setForm((f) => ({ ...f, date: e.target.value }))}
             />
-            {!isAdmin && <p className="text-xs text-muted-foreground mt-1">{RETRO_LOCK_MESSAGE}</p>}
           </div>
           <div>
             <Label>Work From <span className="text-xs text-muted-foreground">(select one or more)</span></Label>
