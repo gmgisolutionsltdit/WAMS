@@ -23,6 +23,9 @@ import { min48hDateISO, isWithin48h, canBypass48h, RETRO_LOCK_MESSAGE } from "@/
 import LeaveDatePicker from "@/components/LeaveDatePicker";
 import { computeWorkingDays } from "@/lib/leaveDays";
 import { weekendDaysFor } from "@/lib/workSchedule";
+import AttachmentsInput from "@/components/AttachmentsInput";
+import AttachmentThumbnails from "@/components/AttachmentThumbnails";
+import { uploadAttachments } from "@/lib/attachments";
 
 type LeaveType = {
   id: string; name: string; code: string; color: string; annual_quota: number;
@@ -38,6 +41,7 @@ type LeaveRequest = {
   modified_by: string | null; modified_at: string | null;
   original_start_date: string | null; original_end_date: string | null;
   original_leave_type_id: string | null; original_day_type: string | null; original_total_days: number | null;
+  attachments?: string[] | null;
 };
 
 type Balance = { id: string; user_id: string; leave_type_id: string; year: number; allocated: number; used: number; carried_forward: number; };
@@ -56,6 +60,7 @@ const LeaveManagement = () => {
   }>({
     leave_type_id: "", start_date: "", end_date: "", day_type: "full", reason: "",
   });
+  const [attachments, setAttachments] = useState<File[]>([]);
   const [tab, setTab] = useState("calendar");
   const [selectedDay, setSelectedDay] = useState<Date | undefined>(new Date());
   const year = new Date().getFullYear();
@@ -137,6 +142,13 @@ const LeaveManagement = () => {
     if (!canBypass48h(role) && !isWithin48h(form.start_date)) { toast.error(RETRO_LOCK_MESSAGE); return; }
     const days = computeWorkingDays(form.start_date, endDate, form.day_type, weekendFor(user?.id), holidaySet, !!submitLt?.sandwich_leave, submitLt?.bridge_holidays === true);
     if (days <= 0) { toast.error("No working days in this range (weekends/holidays excluded)"); return; }
+    let attachmentUrls: string[] = [];
+    try {
+      attachmentUrls = attachments.length ? await uploadAttachments(attachments, user!.id) : [];
+    } catch (e: any) {
+      toast.error(e.message || "Failed to upload attachments");
+      return;
+    }
     const { data, error } = await supabase.from("leave_requests").insert({
       user_id: user!.id,
       leave_type_id: form.leave_type_id,
@@ -145,9 +157,11 @@ const LeaveManagement = () => {
       day_type: form.day_type,
       total_days: days,
       reason: form.reason || null,
+      attachments: attachmentUrls,
     }).select().single();
     if (error) { toast.error(error.message); return; }
     toast.success(`Leave applied (${days} working day${days !== 1 ? "s" : ""})`);
+    setAttachments([]);
     const lt = leaveTypes.find((t) => t.id === form.leave_type_id);
     await notifyManagersAndAdmins(
       "New Leave Request",
@@ -401,6 +415,7 @@ const LeaveManagement = () => {
             </Select>
           </div>
           <div><Label>Reason</Label><Textarea value={form.reason} onChange={(e) => setForm((f) => ({ ...f, reason: e.target.value }))} /></div>
+          <AttachmentsInput files={attachments} onChange={setAttachments} />
           <div className="text-sm text-muted-foreground">
             Chargeable days: <strong>{previewDays}</strong>
             {previewLt?.sandwich_leave && <span className="ml-2 text-xs">(sandwich rule applied)</span>}
@@ -504,7 +519,10 @@ const LeaveManagement = () => {
                       <TableCell>{r.start_date}</TableCell>
                       <TableCell>{r.end_date}</TableCell>
                       <TableCell>{r.total_days}</TableCell>
-                      <TableCell className="max-w-xs truncate">{r.reason || "—"}</TableCell>
+                      <TableCell className="max-w-xs truncate">
+                        {r.reason || "—"}
+                        <AttachmentThumbnails urls={r.attachments} />
+                      </TableCell>
                       <TableCell>
                         {statusBadge(r.status)}
                         {r.modified_by && (
@@ -561,7 +579,10 @@ const LeaveManagement = () => {
                         <TableCell>{r.start_date}</TableCell>
                         <TableCell>{r.end_date}</TableCell>
                         <TableCell>{r.total_days}</TableCell>
-                        <TableCell className="max-w-xs truncate">{r.reason || "—"}</TableCell>
+                        <TableCell className="max-w-xs truncate">
+                          {r.reason || "—"}
+                          <AttachmentThumbnails urls={r.attachments} />
+                        </TableCell>
                         <TableCell>{statusBadge(r.status)}</TableCell>
                         <TableCell className="text-right">
                           {r.status === "pending" && (

@@ -15,6 +15,7 @@ import { useRealtimeSubscription } from "@/hooks/useRealtimeSubscription";
 import { notifyEmployee } from "@/lib/notifications";
 import { applyOTFulfillment } from "@/lib/otFulfillment";
 import { humanMinutes } from "@/lib/officeTime";
+import AttachmentThumbnails from "@/components/AttachmentThumbnails";
 
 const otStatusStyle = (status: string) => {
   if (status === "approved") return "bg-lime-500 text-white hover:bg-lime-600 border-lime-500";
@@ -323,7 +324,10 @@ const Approvals = () => {
                   <TableCell className="font-medium">{(req.profiles as any)?.full_name || (req.profiles as any)?.email || "Unknown"}</TableCell>
                   <TableCell>{format(new Date(req.date), "MMM d, yyyy")}</TableCell>
                   <TableCell><Badge>{req.requested_hours}h</Badge></TableCell>
-                  <TableCell className="max-w-48 truncate">{req.reason}</TableCell>
+                  <TableCell className="max-w-48 truncate">
+                    {req.reason}
+                    <AttachmentThumbnails urls={req.attachments} />
+                  </TableCell>
                   <TableCell className="space-x-1">
                     <Button size="sm" className="bg-lime-500 hover:bg-lime-600 text-white" onClick={() => handleAction(req, "approved")}>
                       <Check className="h-4 w-4 mr-1" /> Approve
@@ -448,7 +452,10 @@ const Approvals = () => {
                       ? `${String(req.requested_start_time).slice(0, 5)} – ${String(req.requested_end_time).slice(0, 5)}`
                       : `Late ${humanMinutes(Number(req.late_minutes) || 0)} · waive ${humanMinutes(Number(req.adjustment_minutes) || 0)}`}
                   </TableCell>
-                  <TableCell className="max-w-48 truncate">{req.reason || "—"}</TableCell>
+                  <TableCell className="max-w-48 truncate">
+                    {req.reason || "—"}
+                    <AttachmentThumbnails urls={req.attachments} />
+                  </TableCell>
                   <TableCell>
                     <Input
                       placeholder="Optional note"
@@ -508,7 +515,10 @@ const Approvals = () => {
                     {format(new Date(req.start_date), "MMM d")} – {format(new Date(req.end_date), "MMM d, yyyy")}
                   </TableCell>
                   <TableCell><Badge>{req.total_days}d</Badge></TableCell>
-                  <TableCell className="max-w-48 truncate">{req.reason || "—"}</TableCell>
+                  <TableCell className="max-w-48 truncate">
+                    {req.reason || "—"}
+                    <AttachmentThumbnails urls={req.attachments} />
+                  </TableCell>
                   <TableCell>
                     <Input
                       placeholder="Optional note"

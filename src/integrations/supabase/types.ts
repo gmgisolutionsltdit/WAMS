@@ -414,6 +414,7 @@ export type Database = {
           approved_by: string | null
           approver_note: string | null
           assigned_approver_id: string | null
+          attachments: string[] | null
           created_at: string
           effective_date: string
           id: string
@@ -431,6 +432,7 @@ export type Database = {
           approved_by?: string | null
           approver_note?: string | null
           assigned_approver_id?: string | null
+          attachments?: string[] | null
           created_at?: string
           effective_date: string
           id?: string
@@ -448,6 +450,7 @@ export type Database = {
           approved_by?: string | null
           approver_note?: string | null
           assigned_approver_id?: string | null
+          attachments?: string[] | null
           created_at?: string
           effective_date?: string
           id?: string
@@ -511,6 +514,7 @@ export type Database = {
           approved_at: string | null
           approver_id: string | null
           approver_note: string | null
+          attachments: string[] | null
           created_at: string
           day_type: Database["public"]["Enums"]["leave_day_type"]
           end_date: string
@@ -536,6 +540,7 @@ export type Database = {
           approved_at?: string | null
           approver_id?: string | null
           approver_note?: string | null
+          attachments?: string[] | null
           created_at?: string
           day_type?: Database["public"]["Enums"]["leave_day_type"]
           end_date: string
@@ -561,6 +566,7 @@ export type Database = {
           approved_at?: string | null
           approver_id?: string | null
           approver_note?: string | null
+          attachments?: string[] | null
           created_at?: string
           day_type?: Database["public"]["Enums"]["leave_day_type"]
           end_date?: string
@@ -883,6 +889,7 @@ export type Database = {
         Row: {
           approved_by: string | null
           assigned_approver_id: string | null
+          attachments: string[] | null
           created_at: string
           date: string
           id: string
@@ -898,6 +905,7 @@ export type Database = {
         Insert: {
           approved_by?: string | null
           assigned_approver_id?: string | null
+          attachments?: string[] | null
           created_at?: string
           date: string
           id?: string
@@ -913,6 +921,7 @@ export type Database = {
         Update: {
           approved_by?: string | null
           assigned_approver_id?: string | null
+          attachments?: string[] | null
           created_at?: string
           date?: string
           id?: string
