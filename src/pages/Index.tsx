@@ -10,7 +10,7 @@ import { Badge } from "@/components/ui/badge";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Checkbox } from "@/components/ui/checkbox";
 import { Clock, LogIn, LogOut, Timer, AlertCircle, Users, CheckSquare, Plus, Check, X, Pause, Play } from "lucide-react";
 import { toast } from "sonner";
 import { format } from "date-fns";
@@ -58,7 +58,7 @@ const Dashboard = () => {
   const [faceRequired, setFaceRequired] = useState(false);
   const [faceDialogOpen, setFaceDialogOpen] = useState(false);
   const [workFromOpen, setWorkFromOpen] = useState(false);
-  const [workFrom, setWorkFrom] = useState<string>(DEFAULT_WORK_FROM);
+  const [workFrom, setWorkFrom] = useState<string[]>([DEFAULT_WORK_FROM]);
   const [enrolledFace, setEnrolledFace] = useState<number[] | null>(null);
   const [officeTimes, setOfficeTimes] = useState<{ start: string; end: string; grace: number }>({
     start: DEFAULT_OFFICE_START, end: DEFAULT_OFFICE_END, grace: 11,
@@ -128,7 +128,7 @@ const Dashboard = () => {
   useRealtimeSubscription("overtime_requests", () => { fetchEmployeeData(); fetchAdminData(); }, "dashboard-ot");
   useRealtimeSubscription("attendance_logs", () => { fetchEmployeeData(); fetchAdminData(); }, "dashboard-attendance");
 
-  const performClockIn = async (faceDescriptor?: number[], workFromValue?: string) => {
+  const performClockIn = async (faceDescriptor?: number[], workFromValue?: string[]) => {
     if (!user) return;
     setLoading(true);
     const now = new Date();
@@ -151,7 +151,7 @@ const Dashboard = () => {
       ip_address: "192.168.1.1 (simulated)",
       device_source: faceDescriptor ? "Web-Face" : "web",
       face_verified: !!faceDescriptor,
-      work_from: workFromValue || workFrom,
+      work_from: workFromValue?.length ? workFromValue : workFrom,
       late_minutes: arrival.lateMinutes,
       penalty_minutes: arrival.penaltyMinutes,
       penalty_reviewed: true,
@@ -185,6 +185,7 @@ const Dashboard = () => {
   };
 
   const confirmWorkFrom = async () => {
+    if (!workFrom.length) { toast.error("Select at least one Work From option"); return; }
     setWorkFromOpen(false);
     if (faceRequired) { setFaceDialogOpen(true); return; }
     await performClockIn(undefined, workFrom);
@@ -393,13 +394,20 @@ const Dashboard = () => {
           <DialogHeader><DialogTitle>Where are you working from today?</DialogTitle></DialogHeader>
           <div className="space-y-4">
             <div>
-              <Label>Work From</Label>
-              <Select value={workFrom} onValueChange={setWorkFrom}>
-                <SelectTrigger><SelectValue /></SelectTrigger>
-                <SelectContent>
-                  {WORK_FROM_OPTIONS.map((w) => <SelectItem key={w} value={w}>{w}</SelectItem>)}
-                </SelectContent>
-              </Select>
+              <Label>Work From <span className="text-xs text-muted-foreground">(select one or more)</span></Label>
+              <div className="flex flex-wrap gap-3 mt-1">
+                {WORK_FROM_OPTIONS.map((w) => (
+                  <label key={w} className="flex items-center gap-1.5 text-sm">
+                    <Checkbox
+                      checked={workFrom.includes(w)}
+                      onCheckedChange={() =>
+                        setWorkFrom((f) => (f.includes(w) ? f.filter((x) => x !== w) : [...f, w]))
+                      }
+                    />
+                    {w}
+                  </label>
+                ))}
+              </div>
             </div>
             <Button className="w-full" onClick={confirmWorkFrom} disabled={loading}>Continue</Button>
           </div>

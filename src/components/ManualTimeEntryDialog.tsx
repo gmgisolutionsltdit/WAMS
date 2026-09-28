@@ -6,7 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Checkbox } from "@/components/ui/checkbox";
 import { Plus } from "lucide-react";
 import { WORK_FROM_OPTIONS, DEFAULT_WORK_FROM } from "@/lib/workFrom";
 import { toast } from "sonner";
@@ -34,7 +34,7 @@ type FormState = {
   gmgi_time: string;
   gm_time: string;
   reason: string;
-  work_from: string;
+  work_from: string[];
 };
 
 const defaultForm: FormState = {
@@ -52,7 +52,7 @@ const defaultForm: FormState = {
   gmgi_time: "",
   gm_time: "",
   reason: "",
-  work_from: DEFAULT_WORK_FROM,
+  work_from: [DEFAULT_WORK_FROM],
 };
 
 interface Props {
@@ -160,6 +160,10 @@ export const ManualTimeEntryDialog = ({ onSubmitted, trigger, initial, supersede
       toast.error(RETRO_LOCK_MESSAGE);
       return;
     }
+    if (!form.work_from.length) {
+      toast.error("Select at least one Work From option");
+      return;
+    }
     if (computed.outT <= computed.inT) {
       toast.error("Clock out must be after clock in");
       return;
@@ -264,13 +268,23 @@ export const ManualTimeEntryDialog = ({ onSubmitted, trigger, initial, supersede
             {!isAdmin && <p className="text-xs text-muted-foreground mt-1">{RETRO_LOCK_MESSAGE}</p>}
           </div>
           <div>
-            <Label>Work From</Label>
-            <Select value={form.work_from} onValueChange={(v) => setForm((f) => ({ ...f, work_from: v }))}>
-              <SelectTrigger><SelectValue /></SelectTrigger>
-              <SelectContent>
-                {WORK_FROM_OPTIONS.map((w) => <SelectItem key={w} value={w}>{w}</SelectItem>)}
-              </SelectContent>
-            </Select>
+            <Label>Work From <span className="text-xs text-muted-foreground">(select one or more)</span></Label>
+            <div className="flex flex-wrap gap-3 mt-1">
+              {WORK_FROM_OPTIONS.map((w) => (
+                <label key={w} className="flex items-center gap-1.5 text-sm">
+                  <Checkbox
+                    checked={form.work_from.includes(w)}
+                    onCheckedChange={() =>
+                      setForm((f) => ({
+                        ...f,
+                        work_from: f.work_from.includes(w) ? f.work_from.filter((x) => x !== w) : [...f.work_from, w],
+                      }))
+                    }
+                  />
+                  {w}
+                </label>
+              ))}
+            </div>
           </div>
           <div className="grid grid-cols-2 gap-4">
             <div><Label>Clock In</Label><Input type="time" value={form.clock_in} onChange={(e) => setForm((f) => ({ ...f, clock_in: e.target.value }))} /></div>

@@ -5,9 +5,13 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Button } from "@/components/ui/button";
 import { Switch } from "@/components/ui/switch";
 import { Badge } from "@/components/ui/badge";
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Label } from "@/components/ui/label";
+import { Checkbox } from "@/components/ui/checkbox";
 import { ScanFace, Fingerprint, Clock, CheckCircle2, Camera, Loader2 } from "lucide-react";
 import { toast } from "sonner";
 import { format } from "date-fns";
+import { WORK_FROM_OPTIONS, DEFAULT_WORK_FROM } from "@/lib/workFrom";
 
 type AttendanceRow = {
   id: string;
@@ -25,6 +29,8 @@ export function AttendancePunchCard() {
   const [todayLog, setTodayLog] = useState<AttendanceRow | null>(null);
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
+  const [workFromOpen, setWorkFromOpen] = useState(false);
+  const [workFrom, setWorkFrom] = useState<string[]>([DEFAULT_WORK_FROM]);
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const streamRef = useRef<MediaStream | null>(null);
 
@@ -82,51 +88,51 @@ export function AttendancePunchCard() {
     if (videoRef.current) videoRef.current.srcObject = null;
   };
 
-  const punch = async () => {
-    if (!user) { toast.error("Not authenticated"); return; }
-    if (busy) return;
+  const isClockIn = !todayLog || !!(todayLog.clock_in && todayLog.clock_out);
 
-    const doPunch = async () => {
-      setBusy(true);
-      try {
-        const nowIso = new Date().toISOString();
-        const isClockIn = !todayLog || (todayLog.clock_in && todayLog.clock_out);
-        if (isClockIn) {
-          const { data, error } = await supabase
-            .from("attendance_logs")
-            .insert({
-              user_id: user.id,
-              date: today,
-              clock_in: nowIso,
-              face_verified: faceMode,
-              device_source: faceMode ? "biometric" : "manual",
-            })
-            .select()
-            .single();
-          if (error) throw error;
-          setTodayLog(data as AttendanceRow);
-          toast.success(`Clocked in at ${format(new Date(nowIso), "HH:mm:ss")}`);
-        } else if (todayLog && todayLog.clock_in && !todayLog.clock_out) {
-          const totalHours = (new Date(nowIso).getTime() - new Date(todayLog.clock_in).getTime()) / 3_600_000;
-          const { data, error } = await supabase
-            .from("attendance_logs")
-            .update({ clock_out: nowIso, total_hours: Math.round(totalHours * 100) / 100 })
-            .eq("id", todayLog.id)
-            .select()
-            .single();
-          if (error) throw error;
-          setTodayLog(data as AttendanceRow);
-          toast.success(`Clocked out at ${format(new Date(nowIso), "HH:mm:ss")}`);
-        }
-      } catch (err: unknown) {
-        const msg = err instanceof Error ? err.message : "Punch failed";
-        console.error("[AttendancePunchCard] punch failed", err);
-        toast.error(msg);
-      } finally {
-        setBusy(false);
+  const doPunch = async () => {
+    if (!user) return;
+    setBusy(true);
+    try {
+      const nowIso = new Date().toISOString();
+      if (isClockIn) {
+        const { data, error } = await supabase
+          .from("attendance_logs")
+          .insert({
+            user_id: user.id,
+            date: today,
+            clock_in: nowIso,
+            face_verified: faceMode,
+            device_source: faceMode ? "biometric" : "manual",
+            work_from: workFrom,
+          })
+          .select()
+          .single();
+        if (error) throw error;
+        setTodayLog(data as AttendanceRow);
+        toast.success(`Clocked in at ${format(new Date(nowIso), "HH:mm:ss")}`);
+      } else if (todayLog && todayLog.clock_in && !todayLog.clock_out) {
+        const totalHours = (new Date(nowIso).getTime() - new Date(todayLog.clock_in).getTime()) / 3_600_000;
+        const { data, error } = await supabase
+          .from("attendance_logs")
+          .update({ clock_out: nowIso, total_hours: Math.round(totalHours * 100) / 100 })
+          .eq("id", todayLog.id)
+          .select()
+          .single();
+        if (error) throw error;
+        setTodayLog(data as AttendanceRow);
+        toast.success(`Clocked out at ${format(new Date(nowIso), "HH:mm:ss")}`);
       }
-    };
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : "Punch failed";
+      console.error("[AttendancePunchCard] punch failed", err);
+      toast.error(msg);
+    } finally {
+      setBusy(false);
+    }
+  };
 
+  const runPunch = () => {
     if (faceMode) {
       setScanning(true);
       setTimeout(async () => {
@@ -134,8 +140,21 @@ export function AttendancePunchCard() {
         await doPunch();
       }, 1600);
     } else {
-      await doPunch();
+      doPunch();
     }
+  };
+
+  const punch = () => {
+    if (!user) { toast.error("Not authenticated"); return; }
+    if (busy) return;
+    if (isClockIn) { setWorkFromOpen(true); return; }
+    runPunch();
+  };
+
+  const confirmWorkFrom = () => {
+    if (!workFrom.length) { toast.error("Select at least one Work From option"); return; }
+    setWorkFromOpen(false);
+    runPunch();
   };
 
   const isOpen = !!(todayLog?.clock_in && !todayLog?.clock_out);
@@ -203,6 +222,31 @@ export function AttendancePunchCard() {
           </Badge>
         </div>
       </CardContent>
+
+      <Dialog open={workFromOpen} onOpenChange={setWorkFromOpen}>
+        <DialogContent>
+          <DialogHeader><DialogTitle>Where are you working from today?</DialogTitle></DialogHeader>
+          <div className="space-y-4">
+            <div>
+              <Label>Work From <span className="text-xs text-muted-foreground">(select one or more)</span></Label>
+              <div className="flex flex-wrap gap-3 mt-1">
+                {WORK_FROM_OPTIONS.map((w) => (
+                  <label key={w} className="flex items-center gap-1.5 text-sm">
+                    <Checkbox
+                      checked={workFrom.includes(w)}
+                      onCheckedChange={() =>
+                        setWorkFrom((f) => (f.includes(w) ? f.filter((x) => x !== w) : [...f, w]))
+                      }
+                    />
+                    {w}
+                  </label>
+                ))}
+              </div>
+            </div>
+            <Button className="w-full" onClick={confirmWorkFrom} disabled={busy}>Continue</Button>
+          </div>
+        </DialogContent>
+      </Dialog>
     </Card>
   );
 }
