@@ -9,7 +9,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogFooter } from "@/components/ui/dialog";
 import { toast } from "sonner";
-import { FileText, Upload, Download, MessageSquareText } from "lucide-react";
+import { FileText, Upload, Download, MessageSquareText, ExternalLink } from "lucide-react";
 import { format } from "date-fns";
 import { useRealtimeSubscription } from "@/hooks/useRealtimeSubscription";
 import { notifyAllUsers } from "@/lib/notifications";
@@ -78,7 +78,14 @@ const SOP = () => {
     });
   }, [documents, updates]);
 
-  const openDocument = async (doc: SopDocument) => {
+  /** Opens the PDF in a new browser tab, like a normal link. */
+  const openInBrowser = (doc: SopDocument) => {
+    const { data } = supabase.storage.from("sop-documents").getPublicUrl(doc.file_path);
+    window.open(data.publicUrl, "_blank", "noopener,noreferrer");
+  };
+
+  /** Forces an actual file download, regardless of the browser's PDF viewer. */
+  const downloadDocument = async (doc: SopDocument) => {
     const { data, error } = await supabase.storage.from("sop-documents").download(doc.file_path);
     if (error || !data) {
       toast.error(error?.message || "Could not download this file");
@@ -218,11 +225,7 @@ const SOP = () => {
           ) : (
             <div className="grid gap-3 sm:grid-cols-2">
               {current.map((doc) => (
-                <button
-                  key={doc.id}
-                  onClick={() => openDocument(doc)}
-                  className="flex items-center justify-between gap-3 rounded-lg border p-4 text-left hover:bg-accent transition-colors"
-                >
+                <div key={doc.id} className="flex items-center justify-between gap-3 rounded-lg border p-4">
                   <div className="min-w-0">
                     <div className="font-medium truncate flex items-center gap-2">
                       {doc.title} <Badge>{doc.version_label}</Badge>
@@ -232,8 +235,15 @@ const SOP = () => {
                       {doc.uploaded_by && ` by ${namesByUser[doc.uploaded_by] || "—"}`}
                     </div>
                   </div>
-                  <Download className="h-4 w-4 text-muted-foreground shrink-0" />
-                </button>
+                  <div className="flex items-center gap-1 shrink-0">
+                    <Button size="icon" variant="ghost" title="Open in browser" onClick={() => openInBrowser(doc)}>
+                      <ExternalLink className="h-4 w-4" />
+                    </Button>
+                    <Button size="icon" variant="ghost" title="Download" onClick={() => downloadDocument(doc)}>
+                      <Download className="h-4 w-4" />
+                    </Button>
+                  </div>
+                </div>
               ))}
             </div>
           )}
@@ -248,11 +258,7 @@ const SOP = () => {
           </CardHeader>
           <CardContent className="space-y-2">
             {history.map((doc) => (
-              <button
-                key={doc.id}
-                onClick={() => openDocument(doc)}
-                className="flex items-center justify-between gap-3 rounded-lg border p-3 w-full text-left hover:bg-accent transition-colors"
-              >
+              <div key={doc.id} className="flex items-center justify-between gap-3 rounded-lg border p-3">
                 <div className="min-w-0">
                   <div className="text-sm font-medium truncate flex items-center gap-2">
                     {doc.title} <Badge variant="outline">{doc.version_label}</Badge>
@@ -262,8 +268,15 @@ const SOP = () => {
                     {doc.uploaded_by && ` · ${namesByUser[doc.uploaded_by] || "—"}`}
                   </div>
                 </div>
-                <Download className="h-4 w-4 text-muted-foreground shrink-0" />
-              </button>
+                <div className="flex items-center gap-1 shrink-0">
+                  <Button size="icon" variant="ghost" title="Open in browser" onClick={() => openInBrowser(doc)}>
+                    <ExternalLink className="h-4 w-4" />
+                  </Button>
+                  <Button size="icon" variant="ghost" title="Download" onClick={() => downloadDocument(doc)}>
+                    <Download className="h-4 w-4" />
+                  </Button>
+                </div>
+              </div>
             ))}
           </CardContent>
         </Card>

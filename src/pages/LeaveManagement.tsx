@@ -363,27 +363,29 @@ const LeaveManagement = () => {
           <div className="grid grid-cols-2 gap-3">
             <div>
               <Label>Start Date</Label>
-              <LeaveDatePicker
+              <Input
+                type="date"
                 value={form.start_date}
-                onChange={(iso) => setForm((f) => ({
-                  ...f,
-                  start_date: iso,
-                  // Keep the range coherent when the new start passes the end.
-                  end_date: f.end_date && f.end_date < iso ? iso : f.end_date,
-                }))}
                 min={canBypass48h(role) ? undefined : min48hDateISO()}
-                holidays={holidaySet}
-                weekendDays={weekendFor(user?.id)}
+                onChange={(e) => setForm((f) => ({
+                  ...f,
+                  start_date: e.target.value,
+                  // Keep the range coherent when the new start passes the end.
+                  end_date: f.end_date && f.end_date < e.target.value ? e.target.value : f.end_date,
+                }))}
+                required
               />
+              {!canBypass48h(role) && (
+                <p className="text-xs text-muted-foreground">Limited to the last 48 hours, up to 2 days ahead.</p>
+              )}
             </div>
             <div>
               <Label>End Date <span className="text-xs text-muted-foreground">(optional — same day if left blank)</span></Label>
-              <LeaveDatePicker
+              <Input
+                type="date"
                 value={form.end_date}
-                onChange={(iso) => setForm((f) => ({ ...f, end_date: iso }))}
                 min={form.start_date || (canBypass48h(role) ? undefined : min48hDateISO())}
-                holidays={holidaySet}
-                weekendDays={weekendFor(user?.id)}
+                onChange={(e) => setForm((f) => ({ ...f, end_date: e.target.value }))}
               />
             </div>
           </div>
