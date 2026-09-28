@@ -10,6 +10,8 @@ import { toast } from "sonner";
 import { format } from "date-fns";
 import { notifyManagersAndAdmins } from "@/lib/notifications";
 import { DEFAULT_OFFICE_END, DEFAULT_OFFICE_START, LATE_PENALTY_MINUTES, humanMinutes } from "@/lib/officeTime";
+import AttachmentsInput from "@/components/AttachmentsInput";
+import { uploadAttachments } from "@/lib/attachments";
 
 interface Props {
   officeStartTime?: string | null;
@@ -30,6 +32,7 @@ export const LateTimeRequestDialog = ({ officeStartTime, officeEndTime, onSubmit
     requested_end_time: officeEndTime?.slice(0, 5) || DEFAULT_OFFICE_END,
     reason: "",
   });
+  const [attachments, setAttachments] = useState<File[]>([]);
 
   useEffect(() => {
     setForm((f) => ({
@@ -44,6 +47,7 @@ export const LateTimeRequestDialog = ({ officeStartTime, officeEndTime, onSubmit
     if (!form.reason.trim()) { toast.error("Please add a reason"); return; }
     setSaving(true);
     try {
+      const attachmentUrls = attachments.length ? await uploadAttachments(attachments, user.id) : [];
       const { data, error } = await supabase.from("late_time_requests").insert({
         user_id: user.id,
         request_type: "office_time_change",
@@ -52,6 +56,7 @@ export const LateTimeRequestDialog = ({ officeStartTime, officeEndTime, onSubmit
         requested_end_time: form.requested_end_time,
         adjustment_minutes: 0,
         reason: form.reason.trim(),
+        attachments: attachmentUrls,
       }).select().single();
       if (error) throw error;
       await notifyManagersAndAdmins(
@@ -62,6 +67,7 @@ export const LateTimeRequestDialog = ({ officeStartTime, officeEndTime, onSubmit
       );
       toast.success("Request submitted for approval");
       setForm((f) => ({ ...f, reason: "" }));
+      setAttachments([]);
       onSubmitted?.();
     } catch (e: any) {
       toast.error(e.message || "Failed to submit request");
@@ -97,6 +103,7 @@ export const LateTimeRequestDialog = ({ officeStartTime, officeEndTime, onSubmit
           <Label>Reason</Label>
           <Textarea rows={3} value={form.reason} onChange={(e) => setForm((f) => ({ ...f, reason: e.target.value }))} />
         </div>
+        <AttachmentsInput files={attachments} onChange={setAttachments} />
         <Button onClick={submit} disabled={saving} className="w-full">
           {saving ? "Submitting…" : "Submit Request"}
         </Button>

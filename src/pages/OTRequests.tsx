@@ -20,6 +20,9 @@ import TimeWithMeridiem from "@/components/TimeWithMeridiem";
 import LateTimeRequestDialog from "@/components/LateTimeRequestDialog";
 import LeaveManagement from "@/pages/LeaveManagement";
 import { min48hDateISO, max2DaysAheadISO, isWithin48h, canBypass48h, RETRO_LOCK_MESSAGE } from "@/lib/dateRules";
+import AttachmentsInput from "@/components/AttachmentsInput";
+import AttachmentThumbnails from "@/components/AttachmentThumbnails";
+import { uploadAttachments } from "@/lib/attachments";
 
 /** Color helper for request status badges */
 const otStatusStyle = (status: string) => {
@@ -42,6 +45,7 @@ const OTRequests = () => {
   const [useCurrentTime, setUseCurrentTime] = useState(false);
   const [manualHours, setManualHours] = useState("");
   const [reason, setReason] = useState("");
+  const [attachments, setAttachments] = useState<File[]>([]);
   const [loading, setLoading] = useState(false);
 
   const [officeTimes, setOfficeTimes] = useState<{ start: string | null; end: string | null }>({ start: null, end: null });
@@ -131,13 +135,14 @@ const OTRequests = () => {
     }
     if (!canBypass48h(role) && !isWithin48h(date)) { toast.error(RETRO_LOCK_MESSAGE); return; }
     setLoading(true);
-    const { data, error } = await supabase
-      .from("overtime_requests")
-      .insert({ user_id: user.id, date, requested_hours: calculatedHours, original_hours: calculatedHours, reason })
-      .select()
-      .single();
-    if (error) toast.error(error.message);
-    else {
+    try {
+      const attachmentUrls = attachments.length ? await uploadAttachments(attachments, user.id) : [];
+      const { data, error } = await supabase
+        .from("overtime_requests")
+        .insert({ user_id: user.id, date, requested_hours: calculatedHours, original_hours: calculatedHours, reason, attachments: attachmentUrls })
+        .select()
+        .single();
+      if (error) throw error;
       toast.success("OT request submitted!");
       await notifyManagersAndAdmins(
         "New OT Request",
@@ -149,9 +154,13 @@ const OTRequests = () => {
       setEndTime("");
       setManualHours("");
       setReason("");
+      setAttachments([]);
       fetchRequests();
+    } catch (e: any) {
+      toast.error(e.message || "Failed to submit request");
+    } finally {
+      setLoading(false);
     }
-    setLoading(false);
   };
 
   const handleApproval = async (req: any, status: "approved" | "rejected") => {
@@ -311,6 +320,7 @@ const OTRequests = () => {
                   <Label>Reason</Label>
                   <Textarea placeholder="Describe the reason for overtime work..." value={reason} onChange={(e) => setReason(e.target.value)} required rows={3} />
                 </div>
+                <AttachmentsInput files={attachments} onChange={setAttachments} />
                 <Button type="submit" disabled={loading || !calculatedHours}>{loading ? "Submitting..." : "Submit Request"}</Button>
               </form>
             </CardContent>
@@ -338,7 +348,10 @@ const OTRequests = () => {
                         <TableCell className="font-medium">{(req.profiles as any)?.full_name || (req.profiles as any)?.email || "Unknown"}</TableCell>
                         <TableCell>{format(new Date(req.date), "MMM d, yyyy")}</TableCell>
                         <TableCell><Badge>{req.requested_hours}h</Badge></TableCell>
-                        <TableCell className="max-w-48 truncate">{req.reason}</TableCell>
+                        <TableCell className="max-w-48 truncate">
+                          {req.reason}
+                          <AttachmentThumbnails urls={req.attachments} />
+                        </TableCell>
                         <TableCell className="space-x-1">
                           <Button size="sm" className="bg-lime-500 hover:bg-lime-600 text-white" onClick={() => handleApproval(req, "approved")}>
                             <Check className="h-4 w-4 mr-1" /> Approve
@@ -386,7 +399,10 @@ const OTRequests = () => {
                           <span className="ml-1 text-xs text-muted-foreground line-through">{req.original_hours}h</span>
                         )}
                       </TableCell>
-                      <TableCell className="max-w-48 truncate">{req.reason}</TableCell>
+                      <TableCell className="max-w-48 truncate">
+                        {req.reason}
+                        <AttachmentThumbnails urls={req.attachments} />
+                      </TableCell>
                       <TableCell>
                         <Badge className={otStatusStyle(getDisplayStatus(req))}>
                           {getDisplayStatus(req)}
@@ -435,7 +451,10 @@ const OTRequests = () => {
                       <TableCell className="text-xs whitespace-nowrap">
                         {String(req.requested_start_time).slice(0, 5)} – {String(req.requested_end_time).slice(0, 5)}
                       </TableCell>
-                      <TableCell className="max-w-48 truncate">{req.reason || "—"}</TableCell>
+                      <TableCell className="max-w-48 truncate">
+                        {req.reason || "—"}
+                        <AttachmentThumbnails urls={req.attachments} />
+                      </TableCell>
                       <TableCell>
                         <Badge className={otStatusStyle(req.status)}>{req.status}</Badge>
                         {req.approver_note && (
