@@ -34,6 +34,9 @@ const NoticeBoard = () => {
   const [namesByUser, setNamesByUser] = useState<Record<string, string>>({});
   const [rolesByUser, setRolesByUser] = useState<Record<string, string>>({});
   const [leaveTypeNames, setLeaveTypeNames] = useState<Record<string, string>>({});
+  const [filterDate, setFilterDate] = useState("");
+  const [filterUser, setFilterUser] = useState("all");
+  const [filterType, setFilterType] = useState("all");
 
   const fetchNotices = async () => {
     const { data } = await supabase.from("notices").select("*").eq("is_active", true).order("pinned", { ascending: false }).order("published_at", { ascending: false });
@@ -49,10 +52,10 @@ const NoticeBoard = () => {
    */
   const fetchActivity = async () => {
     const [{ data: leaveReqs }, { data: lateReqs }, { data: manualReqs }, { data: otReqs }, { data: leaveTypes }] = await Promise.all([
-      supabase.from("leave_requests").select("*").order("updated_at", { ascending: false }).limit(20),
-      supabase.from("late_time_requests").select("*").order("updated_at", { ascending: false }).limit(20),
-      supabase.from("manual_time_requests").select("*").order("updated_at", { ascending: false }).limit(20),
-      supabase.from("overtime_requests").select("*").order("updated_at", { ascending: false }).limit(20),
+      supabase.from("leave_requests").select("*").order("updated_at", { ascending: false }).limit(50),
+      supabase.from("late_time_requests").select("*").order("updated_at", { ascending: false }).limit(50),
+      supabase.from("manual_time_requests").select("*").order("updated_at", { ascending: false }).limit(50),
+      supabase.from("overtime_requests").select("*").order("updated_at", { ascending: false }).limit(50),
       supabase.from("leave_types").select("id, name"),
     ]);
     const ltNames: Record<string, string> = {};
@@ -65,7 +68,7 @@ const NoticeBoard = () => {
       ...(manualReqs || []).map((r: any) => ({ ...r, _kind: "manual" as const })),
       ...(otReqs || []).map((r: any) => ({ ...r, _kind: "ot" as const })),
     ].sort((a, b) => new Date(b.updated_at || b.created_at).getTime() - new Date(a.updated_at || a.created_at).getTime())
-      .slice(0, 20);
+      .slice(0, 50);
     setActivity(combined);
 
     const ids = Array.from(new Set(
@@ -128,6 +131,25 @@ const NoticeBoard = () => {
     if (r.status === "pending") return `${who} requested ${r.requested_hours}h overtime for ${dateStr}`;
     return `${who}'s ${r.requested_hours}h overtime for ${dateStr} was ${r.status}${decidedSuffix}`;
   };
+
+  const activityDate = (r: any): string | null => {
+    if (r._kind === "leave") return r.start_date;
+    if (r._kind === "late") return r.effective_date;
+    return r.date;
+  };
+
+  const TYPE_LABELS: Record<string, string> = { leave: "Leave", late: "Late Time", manual: "Manual Entry", ot: "Overtime" };
+
+  const employeeOptions = Array.from(new Set(activity.map((r) => r.user_id)))
+    .map((id) => ({ id, name: namesByUser[id] || "Unknown" }))
+    .sort((a, b) => a.name.localeCompare(b.name));
+
+  const filteredActivity = activity.filter((r) => {
+    if (filterDate && activityDate(r) !== filterDate) return false;
+    if (filterUser !== "all" && r.user_id !== filterUser) return false;
+    if (filterType !== "all" && r._kind !== filterType) return false;
+    return true;
+  });
 
   const create = async () => {
     if (!form.title || !form.body) return toast.error("Title and body required");
@@ -195,13 +217,45 @@ const NoticeBoard = () => {
           <CardTitle className="text-base flex items-center gap-2"><CalendarClock className="h-4 w-4" /> Requests Activity</CardTitle>
           <CardDescription>Requests and decisions you're involved in or can approve.</CardDescription>
         </CardHeader>
-        <CardContent className="space-y-2">
-          {activity.length === 0 ? (
-            <p className="text-sm text-muted-foreground text-center py-6">No recent activity</p>
-          ) : activity.map((r) => (
+        <CardContent className="space-y-3">
+          <div className="flex flex-wrap gap-2">
+            <Input
+              type="date"
+              value={filterDate}
+              onChange={(e) => setFilterDate(e.target.value)}
+              className="w-auto"
+            />
+            <Select value={filterUser} onValueChange={setFilterUser}>
+              <SelectTrigger className="w-44"><SelectValue placeholder="Employee" /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All Employees</SelectItem>
+                {employeeOptions.map((e) => <SelectItem key={e.id} value={e.id}>{e.name}</SelectItem>)}
+              </SelectContent>
+            </Select>
+            <Select value={filterType} onValueChange={setFilterType}>
+              <SelectTrigger className="w-40"><SelectValue placeholder="Type" /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All Types</SelectItem>
+                {Object.entries(TYPE_LABELS).map(([v, label]) => <SelectItem key={v} value={v}>{label}</SelectItem>)}
+              </SelectContent>
+            </Select>
+            {(filterDate || filterUser !== "all" || filterType !== "all") && (
+              <Button variant="ghost" size="sm" onClick={() => { setFilterDate(""); setFilterUser("all"); setFilterType("all"); }}>
+                Clear filters
+              </Button>
+            )}
+          </div>
+          {filteredActivity.length === 0 ? (
+            <p className="text-sm text-muted-foreground text-center py-6">
+              {activity.length === 0 ? "No recent activity" : "No activity matches these filters"}
+            </p>
+          ) : filteredActivity.map((r) => (
             <div key={`${r._kind}-${r.id}`} className="flex items-center justify-between gap-3 rounded-lg border p-3 text-sm">
               <span>{activityLine(r)}</span>
-              <Badge variant="outline" className="shrink-0 capitalize">{r.status}</Badge>
+              <div className="flex items-center gap-2 shrink-0">
+                <Badge variant="secondary">{TYPE_LABELS[r._kind]}</Badge>
+                <Badge variant="outline" className="capitalize">{r.status}</Badge>
+              </div>
             </div>
           ))}
         </CardContent>

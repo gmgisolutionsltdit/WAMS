@@ -8,7 +8,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Label } from "@/components/ui/label";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Checkbox } from "@/components/ui/checkbox";
 import { WORK_FROM_OPTIONS, DEFAULT_WORK_FROM } from "@/lib/workFrom";
 import { format } from "date-fns";
 import { ChevronDown, ChevronRight } from "lucide-react";
@@ -39,7 +39,7 @@ const Attendance = () => {
   const [holidays, setHolidays] = useState<Map<string, string>>(new Map());
   const [starting, setStarting] = useState(false);
   const [workFromOpen, setWorkFromOpen] = useState(false);
-  const [workFrom, setWorkFrom] = useState<string>(DEFAULT_WORK_FROM);
+  const [workFrom, setWorkFrom] = useState<string[]>([DEFAULT_WORK_FROM]);
   const [currentTime, setCurrentTime] = useState(new Date());
   // Approved/modified OT request hours, summed per date, for the Approved OT column.
   const [approvedOTByDate, setApprovedOTByDate] = useState<Record<string, number>>({});
@@ -119,6 +119,7 @@ const Attendance = () => {
 
   const confirmStart = async () => {
     if (!user) return;
+    if (!workFrom.length) { toast.error("Select at least one Work From option"); return; }
     setWorkFromOpen(false);
     setStarting(true);
     const today = localToday();
@@ -299,13 +300,20 @@ const Attendance = () => {
           <DialogHeader><DialogTitle>Where are you working from today?</DialogTitle></DialogHeader>
           <div className="space-y-4">
             <div>
-              <Label>Work From</Label>
-              <Select value={workFrom} onValueChange={setWorkFrom}>
-                <SelectTrigger><SelectValue /></SelectTrigger>
-                <SelectContent>
-                  {WORK_FROM_OPTIONS.map((w) => <SelectItem key={w} value={w}>{w}</SelectItem>)}
-                </SelectContent>
-              </Select>
+              <Label>Work From <span className="text-xs text-muted-foreground">(select one or more)</span></Label>
+              <div className="flex flex-wrap gap-3 mt-1">
+                {WORK_FROM_OPTIONS.map((w) => (
+                  <label key={w} className="flex items-center gap-1.5 text-sm">
+                    <Checkbox
+                      checked={workFrom.includes(w)}
+                      onCheckedChange={() =>
+                        setWorkFrom((f) => (f.includes(w) ? f.filter((x) => x !== w) : [...f, w]))
+                      }
+                    />
+                    {w}
+                  </label>
+                ))}
+              </div>
             </div>
             <Button className="w-full" onClick={confirmStart} disabled={starting}>Continue</Button>
           </div>
@@ -424,8 +432,8 @@ const Attendance = () => {
                           <Badge variant="outline">On time</Badge>
                         )}
                       </TableCell>
-                      <TableCell className="whitespace-nowrap">
-                        {day.workFrom ? <Badge variant="outline">{day.workFrom}</Badge> : "—"}
+                      <TableCell className="whitespace-nowrap space-x-1">
+                        {day.workFrom?.length ? day.workFrom.map((w) => <Badge key={w} variant="outline">{w}</Badge>) : "—"}
                       </TableCell>
                       <TableCell className="font-mono text-xs">{fmtClock(day.firstIn)}</TableCell>
                       <TableCell className="font-mono text-xs">
