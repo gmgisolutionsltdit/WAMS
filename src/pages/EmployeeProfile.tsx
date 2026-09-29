@@ -14,15 +14,21 @@ import {
   Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
 } from "@/components/ui/table";
 import {
-  Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription,
+  Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter,
 } from "@/components/ui/dialog";
+import {
+  AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription,
+  AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger,
+} from "@/components/ui/alert-dialog";
 import {
   ArrowLeft, Mail, Phone, Calendar, IdCard, Briefcase, UserCheck,
   Users, MapPin, Building2, TrendingUp, DollarSign, FolderKanban, UserCog,
-  ClipboardList,
+  ClipboardList, Pencil, KeyRound, Trash2, Copy,
 } from "lucide-react";
 import { format } from "date-fns";
 import { toast } from "sonner";
+import { invokeAdminUserManagement, edgeErrorMessage } from "@/lib/adminUsers";
+import EmployeeEditDialog from "@/components/EmployeeEditDialog";
 
 type Profile = {
   id: string;
@@ -154,9 +160,13 @@ const statusVariant = (s: string): "default" | "secondary" | "outline" | "destru
 const EmployeeProfile = () => {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
-  const { user } = useAuth();
+  const { user, role: viewerRole } = useAuth();
   const [profile, setProfile] = useState<Profile | null>(null);
+  const [rawProfile, setRawProfile] = useState<any>(null);
   const [role, setRole] = useState<string>("employee");
+  const [editOpen, setEditOpen] = useState(false);
+  const [deleting, setDeleting] = useState(false);
+  const [tempCredentials, setTempCredentials] = useState<{ email: string; password: string } | null>(null);
   const [manager, setManager] = useState<{ id: string; name: string } | null>(null);
   const [increments, setIncrements] = useState<Increment[]>([]);
   const [reports, setReports] = useState<DirectReport[]>([]);
@@ -166,7 +176,10 @@ const EmployeeProfile = () => {
   const [error, setError] = useState<string | null>(null);
   const [personalForm, setPersonalForm] = useState<Partial<Profile>>({});
   const [savingPersonal, setSavingPersonal] = useState(false);
+  const [reloadKey, setReloadKey] = useState(0);
   const isSelf = !!user && user.id === id;
+  const isAdmin = viewerRole === "admin";
+  const canEditPayroll = viewerRole === "admin";
 
   useEffect(() => {
     if (!id) return;
@@ -184,6 +197,7 @@ const EmployeeProfile = () => {
         return;
       }
       setProfile(p as Profile);
+      setRawProfile(p);
       setPersonalForm(p as Profile);
       setRole((r?.role as string) || "employee");
 
@@ -208,7 +222,7 @@ const EmployeeProfile = () => {
       setLoading(false);
     })();
     return () => { cancelled = true; };
-  }, [id]);
+  }, [id, reloadKey]);
 
   const goBack = () => (window.history.length > 1 ? navigate(-1) : navigate("/employees"));
 
@@ -227,6 +241,37 @@ const EmployeeProfile = () => {
       setProfile((p) => (p ? { ...p, ...payload } as Profile : p));
     }
     setSavingPersonal(false);
+  };
+
+  const handleResetPassword = async () => {
+    if (!id || !profile) return;
+    const { data, error } = await invokeAdminUserManagement({
+      body: { action: "reset_password", user_id: id },
+    });
+    if (error || (data as any)?.error) {
+      toast.error(await edgeErrorMessage(error, data, "Reset failed"), { duration: 8000 });
+      return;
+    }
+    setTempCredentials({ email: profile.email || "", password: (data as any).tempPassword });
+    toast.success("Password reset");
+  };
+
+  const handleDelete = async () => {
+    if (!id) return;
+    setDeleting(true);
+    try {
+      const { data, error } = await invokeAdminUserManagement({
+        body: { action: "delete_user", user_id: id },
+      });
+      if (error || (data as any)?.error) {
+        toast.error(await edgeErrorMessage(error, data, "Delete failed"), { duration: 8000 });
+        return;
+      }
+      toast.success("Employee deleted");
+      navigate("/employees");
+    } finally {
+      setDeleting(false);
+    }
   };
 
   const salaryBreakdown = useMemo(() => {
@@ -302,6 +347,56 @@ const EmployeeProfile = () => {
               </button>
             )}
           </div>
+
+          {isAdmin && (
+            <div className="flex flex-wrap items-center gap-2 mt-4 pt-4 border-t">
+              <Button size="sm" variant="outline" onClick={() => setEditOpen(true)}>
+                <Pencil className="h-4 w-4 mr-1" /> Edit
+              </Button>
+              <AlertDialog>
+                <AlertDialogTrigger asChild>
+                  <Button size="sm" variant="outline">
+                    <KeyRound className="h-4 w-4 mr-1" /> Reset Password
+                  </Button>
+                </AlertDialogTrigger>
+                <AlertDialogContent>
+                  <AlertDialogHeader>
+                    <AlertDialogTitle>Reset password?</AlertDialogTitle>
+                    <AlertDialogDescription>
+                      A new temporary password will be generated for <strong>{profile.email}</strong>.
+                      You'll see it once and need to share it securely.
+                    </AlertDialogDescription>
+                  </AlertDialogHeader>
+                  <AlertDialogFooter>
+                    <AlertDialogCancel>Cancel</AlertDialogCancel>
+                    <AlertDialogAction onClick={handleResetPassword}>Reset</AlertDialogAction>
+                  </AlertDialogFooter>
+                </AlertDialogContent>
+              </AlertDialog>
+              <AlertDialog>
+                <AlertDialogTrigger asChild>
+                  <Button size="sm" variant="outline">
+                    <Trash2 className="h-4 w-4 mr-1 text-destructive" /> Delete
+                  </Button>
+                </AlertDialogTrigger>
+                <AlertDialogContent>
+                  <AlertDialogHeader>
+                    <AlertDialogTitle>Delete employee?</AlertDialogTitle>
+                    <AlertDialogDescription>
+                      This permanently removes <strong>{fmt(profile.full_name)}</strong> and their login.
+                      This cannot be undone.
+                    </AlertDialogDescription>
+                  </AlertDialogHeader>
+                  <AlertDialogFooter>
+                    <AlertDialogCancel>Cancel</AlertDialogCancel>
+                    <AlertDialogAction onClick={handleDelete} disabled={deleting}>
+                      {deleting ? "Deleting…" : "Delete"}
+                    </AlertDialogAction>
+                  </AlertDialogFooter>
+                </AlertDialogContent>
+              </AlertDialog>
+            </div>
+          )}
         </CardContent>
       </Card>
 
@@ -569,6 +664,54 @@ const EmployeeProfile = () => {
               </Link>
             ))}
           </div>
+        </DialogContent>
+      </Dialog>
+
+      {isAdmin && rawProfile && (
+        <EmployeeEditDialog
+          employee={{ ...rawProfile, _role: role }}
+          open={editOpen}
+          onOpenChange={setEditOpen}
+          isAdmin={isAdmin}
+          canEditPayroll={canEditPayroll}
+          onSaved={() => setReloadKey((k) => k + 1)}
+        />
+      )}
+
+      {/* Temp credentials dialog */}
+      <Dialog open={!!tempCredentials} onOpenChange={(o) => !o && setTempCredentials(null)}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Temporary Password</DialogTitle>
+            <DialogDescription>
+              Share these credentials securely with the user. They can change the password after first sign-in.
+            </DialogDescription>
+          </DialogHeader>
+          {tempCredentials && (
+            <div className="space-y-3">
+              <div>
+                <Label>Email</Label>
+                <div className="flex items-center gap-2">
+                  <Input readOnly value={tempCredentials.email} />
+                  <Button size="icon" variant="outline" onClick={() => { navigator.clipboard.writeText(tempCredentials.email); toast.success("Copied"); }}>
+                    <Copy className="h-4 w-4" />
+                  </Button>
+                </div>
+              </div>
+              <div>
+                <Label>Temporary Password</Label>
+                <div className="flex items-center gap-2">
+                  <Input readOnly value={tempCredentials.password} className="font-mono" />
+                  <Button size="icon" variant="outline" onClick={() => { navigator.clipboard.writeText(tempCredentials.password); toast.success("Copied"); }}>
+                    <Copy className="h-4 w-4" />
+                  </Button>
+                </div>
+              </div>
+            </div>
+          )}
+          <DialogFooter>
+            <Button onClick={() => setTempCredentials(null)}>Done</Button>
+          </DialogFooter>
         </DialogContent>
       </Dialog>
     </div>
