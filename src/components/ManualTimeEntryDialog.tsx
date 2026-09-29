@@ -6,7 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
-import { Checkbox } from "@/components/ui/checkbox";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Plus } from "lucide-react";
 import { WORK_FROM_OPTIONS, DEFAULT_WORK_FROM } from "@/lib/workFrom";
 import { toast } from "sonner";
@@ -261,23 +261,16 @@ export const ManualTimeEntryDialog = ({ onSubmitted, trigger, initial, supersede
             />
           </div>
           <div>
-            <Label>Work From <span className="text-xs text-muted-foreground">(select one or more)</span></Label>
-            <div className="flex flex-wrap gap-3 mt-1">
-              {WORK_FROM_OPTIONS.map((w) => (
-                <label key={w} className="flex items-center gap-1.5 text-sm">
-                  <Checkbox
-                    checked={form.work_from.includes(w)}
-                    onCheckedChange={() =>
-                      setForm((f) => ({
-                        ...f,
-                        work_from: f.work_from.includes(w) ? f.work_from.filter((x) => x !== w) : [...f.work_from, w],
-                      }))
-                    }
-                  />
-                  {w}
-                </label>
-              ))}
-            </div>
+            <Label>Work From</Label>
+            <Select
+              value={form.work_from[0] || DEFAULT_WORK_FROM}
+              onValueChange={(v) => setForm((f) => ({ ...f, work_from: [v] }))}
+            >
+              <SelectTrigger className="mt-1"><SelectValue /></SelectTrigger>
+              <SelectContent>
+                {WORK_FROM_OPTIONS.map((w) => <SelectItem key={w} value={w}>{w}</SelectItem>)}
+              </SelectContent>
+            </Select>
           </div>
           <div className="grid grid-cols-2 gap-4">
             <div><Label>Clock In</Label><Input type="time" value={form.clock_in} onChange={(e) => setForm((f) => ({ ...f, clock_in: e.target.value }))} /></div>
