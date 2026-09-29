@@ -8,6 +8,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Checkbox } from "@/components/ui/checkbox";
 import { Badge } from "@/components/ui/badge";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription,
 } from "@/components/ui/dialog";
@@ -246,236 +247,258 @@ export const EmployeeEditDialog = ({ employee, open, onOpenChange, isAdmin, canE
           <DialogDescription>Update employee profile, role, OT caps, photo, and reporting structure.</DialogDescription>
         </DialogHeader>
 
-        <div className="flex items-start gap-4 mb-4">
-          <Avatar className="h-20 w-20">
-            <AvatarImage src={form.photo_url || undefined} />
-            <AvatarFallback>{(form.full_name || "?").slice(0, 2).toUpperCase()}</AvatarFallback>
-          </Avatar>
-          <div>
-            <input
-              ref={fileInputRef}
-              type="file"
-              accept="image/*"
-              className="hidden"
-              onChange={(e) => {
-                const f = e.target.files?.[0];
-                if (f) handlePhotoSelect(f);
-              }}
-            />
-            <Button size="sm" variant="outline" onClick={() => fileInputRef.current?.click()} disabled={uploadingPhoto}>
-              <Camera className="mr-1 h-4 w-4" />
-              {uploadingPhoto ? "Uploading…" : "Upload Photo"}
-            </Button>
-            <p className="text-xs text-muted-foreground mt-1">JPG / PNG, up to 3MB</p>
-          </div>
-        </div>
+        <Tabs defaultValue="basic" className="w-full">
+          <TabsList className="grid grid-cols-3 sm:grid-cols-5 w-full">
+            <TabsTrigger value="basic">Basic Info</TabsTrigger>
+            <TabsTrigger value="wing">Wing &amp; Projects</TabsTrigger>
+            <TabsTrigger value="role">Role &amp; Reporting</TabsTrigger>
+            <TabsTrigger value="schedule">Schedule</TabsTrigger>
+            {canEditPayroll && <TabsTrigger value="compensation">Compensation</TabsTrigger>}
+          </TabsList>
 
-        <div className="grid grid-cols-2 gap-3">
-          <div><Label>Full Name *</Label><Input value={form.full_name} onChange={(e) => setForm((f) => ({ ...f, full_name: e.target.value }))} /></div>
-          <div><Label>Email</Label><Input type="email" value={employee.email || ""} disabled /></div>
-          <div><Label>Phone</Label><Input value={form.phone} onChange={(e) => setForm((f) => ({ ...f, phone: e.target.value }))} /></div>
-          <div><Label>Department</Label><Input value={form.department} onChange={(e) => setForm((f) => ({ ...f, department: e.target.value }))} /></div>
-          <div><Label>Designation</Label><Input value={form.designation} onChange={(e) => setForm((f) => ({ ...f, designation: e.target.value }))} /></div>
-          <div>
-            <Label>Wing</Label>
-            <Select
-              value={form.wing_id || "none"}
-              onValueChange={(v) => {
-                if (v === "__add__") { setAddWingOpen(true); return; }
-                const w = wings.find((x) => x.id === v);
-                setForm((f) => ({
-                  ...f,
-                  wing_id: v === "none" ? "" : v,
-                  company_wing: w && LEGACY_WINGS.includes(w.name) ? w.name : f.company_wing,
-                }));
-              }}
-            >
-              <SelectTrigger><SelectValue placeholder="Select wing" /></SelectTrigger>
-              <SelectContent>
-                <SelectItem value="none">Unassigned</SelectItem>
-                {activeWings.map((w) => <SelectItem key={w.id} value={w.id}>{w.name}</SelectItem>)}
-                {canManageWings && <SelectItem value="__add__">+ Add new wing</SelectItem>}
-              </SelectContent>
-            </Select>
-          </div>
+          <TabsContent value="basic" className="space-y-4 mt-4">
+            <div className="flex items-start gap-4">
+              <Avatar className="h-20 w-20">
+                <AvatarImage src={form.photo_url || undefined} />
+                <AvatarFallback>{(form.full_name || "?").slice(0, 2).toUpperCase()}</AvatarFallback>
+              </Avatar>
+              <div>
+                <input
+                  ref={fileInputRef}
+                  type="file"
+                  accept="image/*"
+                  className="hidden"
+                  onChange={(e) => {
+                    const f = e.target.files?.[0];
+                    if (f) handlePhotoSelect(f);
+                  }}
+                />
+                <Button size="sm" variant="outline" onClick={() => fileInputRef.current?.click()} disabled={uploadingPhoto}>
+                  <Camera className="mr-1 h-4 w-4" />
+                  {uploadingPhoto ? "Uploading…" : "Upload Photo"}
+                </Button>
+                <p className="text-xs text-muted-foreground mt-1">JPG / PNG, up to 3MB</p>
+              </div>
+            </div>
+            <div className="grid grid-cols-2 gap-3">
+              <div><Label>Full Name *</Label><Input value={form.full_name} onChange={(e) => setForm((f) => ({ ...f, full_name: e.target.value }))} /></div>
+              <div><Label>Email</Label><Input type="email" value={employee.email || ""} disabled /></div>
+              <div><Label>Phone</Label><Input value={form.phone} onChange={(e) => setForm((f) => ({ ...f, phone: e.target.value }))} /></div>
+              <div><Label>Department</Label><Input value={form.department} onChange={(e) => setForm((f) => ({ ...f, department: e.target.value }))} /></div>
+              <div><Label>Designation</Label><Input value={form.designation} onChange={(e) => setForm((f) => ({ ...f, designation: e.target.value }))} /></div>
+            </div>
+          </TabsContent>
 
-          <div className="col-span-2">
-            <Label>Projects</Label>
-            {projects.length === 0 ? (
-              <p className="text-xs text-muted-foreground mt-1">
-                No active projects yet — create one on the Projects page to assign it here.
-              </p>
-            ) : (
-              <div className="mt-1 flex flex-wrap gap-2 rounded-md border p-2 max-h-32 overflow-y-auto">
-                {projects.map((p) => {
-                  const checked = form.project_ids.includes(p.id);
-                  return (
-                    <label
-                      key={p.id}
-                      className={`flex items-center gap-2 rounded-md border px-2 py-1 text-sm cursor-pointer ${checked ? "bg-primary/10 border-primary/40" : ""}`}
-                    >
+          <TabsContent value="wing" className="space-y-4 mt-4">
+            <div>
+              <Label>Wing</Label>
+              <Select
+                value={form.wing_id || "none"}
+                onValueChange={(v) => {
+                  if (v === "__add__") { setAddWingOpen(true); return; }
+                  const w = wings.find((x) => x.id === v);
+                  setForm((f) => ({
+                    ...f,
+                    wing_id: v === "none" ? "" : v,
+                    company_wing: w && LEGACY_WINGS.includes(w.name) ? w.name : f.company_wing,
+                  }));
+                }}
+              >
+                <SelectTrigger><SelectValue placeholder="Select wing" /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="none">Unassigned</SelectItem>
+                  {activeWings.map((w) => <SelectItem key={w.id} value={w.id}>{w.name}</SelectItem>)}
+                  {canManageWings && <SelectItem value="__add__">+ Add new wing</SelectItem>}
+                </SelectContent>
+              </Select>
+            </div>
+
+            <div>
+              <Label>Projects</Label>
+              {projects.length === 0 ? (
+                <p className="text-xs text-muted-foreground mt-1">
+                  No active projects yet — create one on the Projects page to assign it here.
+                </p>
+              ) : (
+                <div className="mt-1 flex flex-wrap gap-2 rounded-md border p-2 max-h-32 overflow-y-auto">
+                  {projects.map((p) => {
+                    const checked = form.project_ids.includes(p.id);
+                    return (
+                      <label
+                        key={p.id}
+                        className={`flex items-center gap-2 rounded-md border px-2 py-1 text-sm cursor-pointer ${checked ? "bg-primary/10 border-primary/40" : ""}`}
+                      >
+                        <Checkbox
+                          checked={checked}
+                          onCheckedChange={() =>
+                            setForm((f) => ({
+                              ...f,
+                              project_ids: checked
+                                ? f.project_ids.filter((id) => id !== p.id)
+                                : [...f.project_ids, p.id],
+                            }))
+                          }
+                        />
+                        {p.name}
+                      </label>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+          </TabsContent>
+
+          <TabsContent value="role" className="space-y-4 mt-4">
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <Label>Role</Label>
+                <Select value={form.role} onValueChange={(v) => setForm((f) => ({ ...f, role: v }))} disabled={!isAdmin}>
+                  <SelectTrigger><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="admin">Admin</SelectItem>
+                    <SelectItem value="manager">Manager / Reporting Boss</SelectItem>
+                    <SelectItem value="employee">Employee</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              <div>
+                <Label>Reporting To <span className="text-xs text-muted-foreground">(select one or more)</span></Label>
+                <div className="rounded-md border p-2 max-h-36 overflow-y-auto space-y-1">
+                  {managers.filter((m) => m.id !== employee.id).length === 0 ? (
+                    <p className="text-xs text-muted-foreground px-1">No managers/admins available</p>
+                  ) : managers.filter((m) => m.id !== employee.id).map((m) => (
+                    <label key={m.id} className="flex items-center gap-2 text-sm px-1 py-0.5">
                       <Checkbox
-                        checked={checked}
+                        checked={form.reporting_manager_ids.includes(m.id)}
                         onCheckedChange={() =>
                           setForm((f) => ({
                             ...f,
-                            project_ids: checked
-                              ? f.project_ids.filter((id) => id !== p.id)
-                              : [...f.project_ids, p.id],
+                            reporting_manager_ids: f.reporting_manager_ids.includes(m.id)
+                              ? f.reporting_manager_ids.filter((x) => x !== m.id)
+                              : [...f.reporting_manager_ids, m.id],
                           }))
                         }
                       />
-                      {p.name}
+                      {m.full_name || m.email}
                     </label>
-                  );
-                })}
-              </div>
-            )}
-          </div>
-
-          <div>
-            <Label>Role</Label>
-            <Select value={form.role} onValueChange={(v) => setForm((f) => ({ ...f, role: v }))} disabled={!isAdmin}>
-              <SelectTrigger><SelectValue /></SelectTrigger>
-              <SelectContent>
-                <SelectItem value="admin">Admin</SelectItem>
-                <SelectItem value="manager">Manager / Reporting Boss</SelectItem>
-                <SelectItem value="employee">Employee</SelectItem>
-              </SelectContent>
-            </Select>
-          </div>
-          <div>
-            <Label>Reporting To <span className="text-xs text-muted-foreground">(select one or more)</span></Label>
-            <div className="rounded-md border p-2 max-h-36 overflow-y-auto space-y-1">
-              {managers.filter((m) => m.id !== employee.id).length === 0 ? (
-                <p className="text-xs text-muted-foreground px-1">No managers/admins available</p>
-              ) : managers.filter((m) => m.id !== employee.id).map((m) => (
-                <label key={m.id} className="flex items-center gap-2 text-sm px-1 py-0.5">
-                  <Checkbox
-                    checked={form.reporting_manager_ids.includes(m.id)}
-                    onCheckedChange={() =>
-                      setForm((f) => ({
-                        ...f,
-                        reporting_manager_ids: f.reporting_manager_ids.includes(m.id)
-                          ? f.reporting_manager_ids.filter((x) => x !== m.id)
-                          : [...f.reporting_manager_ids, m.id],
-                      }))
-                    }
-                  />
-                  {m.full_name || m.email}
-                </label>
-              ))}
-            </div>
-          </div>
-          <div>
-            <Label>Service Status</Label>
-            <Select value={form.service_status} onValueChange={(v) => setForm((f) => ({ ...f, service_status: v }))}>
-              <SelectTrigger><SelectValue /></SelectTrigger>
-              <SelectContent>{SERVICE_STATUS.map((s) => <SelectItem key={s} value={s}>{s}</SelectItem>)}</SelectContent>
-            </Select>
-          </div>
-          <div>
-            <Label>Employee Status</Label>
-            <Select value={form.employee_status} onValueChange={(v) => setForm((f) => ({ ...f, employee_status: v }))}>
-              <SelectTrigger><SelectValue /></SelectTrigger>
-              <SelectContent>{EMPLOYEE_STATUS.map((s) => <SelectItem key={s} value={s}>{s}</SelectItem>)}</SelectContent>
-            </Select>
-          </div>
-          <div><Label>Joining Date</Label><Input type="date" value={form.joining_date} onChange={(e) => setForm((f) => ({ ...f, joining_date: e.target.value }))} /></div>
-          <div><Label>Promotion Date</Label><Input type="date" value={form.promotion_date} onChange={(e) => setForm((f) => ({ ...f, promotion_date: e.target.value }))} /></div>
-          <div><Label>Resign Date</Label><Input type="date" value={form.resign_date} onChange={(e) => setForm((f) => ({ ...f, resign_date: e.target.value }))} /></div>
-          <div></div>
-          <div><Label>Daily OT Cap (hrs)</Label><Input type="number" step="0.5" value={form.daily_ot_cap} onChange={(e) => setForm((f) => ({ ...f, daily_ot_cap: e.target.value }))} /></div>
-          <div><Label>Monthly OT Cap (hrs)</Label><Input type="number" step="1" value={form.monthly_ot_cap} onChange={(e) => setForm((f) => ({ ...f, monthly_ot_cap: e.target.value }))} /></div>
-        </div>
-
-        <div className="mt-5 rounded-md border p-3 bg-muted/30">
-          <Label className="text-sm font-semibold">Office Hours &amp; Work Schedule</Label>
-          <p className="text-xs text-muted-foreground mt-1 mb-3">
-            This employee's own schedule. Attendance, late arrival, due time, overtime and leave are all
-            calculated against these values.
-          </p>
-          <div className="grid grid-cols-2 gap-3">
-            <div>
-              <Label>Office Start</Label>
-              <Input type="time" value={form.office_start_time}
-                onChange={(e) => setForm((f) => ({ ...f, office_start_time: e.target.value }))} />
-            </div>
-            <div>
-              <Label>Office End</Label>
-              <Input type="time" value={form.office_end_time}
-                onChange={(e) => setForm((f) => ({ ...f, office_end_time: e.target.value }))} />
-            </div>
-            <div>
-              <Label>Standard Shift Hours</Label>
-              <Input type="number" step="0.5" min="0.5" max="24" value={form.standard_daily_hours}
-                onChange={(e) => setForm((f) => ({ ...f, standard_daily_hours: e.target.value }))} />
-              <p className="text-[11px] text-muted-foreground mt-1">Office window length, break included.</p>
-            </div>
-            <div>
-              <Label>Daily Break Allowance (minutes)</Label>
-              <Input type="number" step="5" min="0" value={form.unpaid_break_minutes}
-                onChange={(e) => setForm((f) => ({ ...f, unpaid_break_minutes: e.target.value }))} />
-              <p className="text-[11px] text-muted-foreground mt-1">Unpaid break inside the office window.</p>
-            </div>
-            <div>
-              <Label>Late Grace (minutes)</Label>
-              <Input type="number" step="1" min="0" value={form.late_grace_minutes}
-                onChange={(e) => setForm((f) => ({ ...f, late_grace_minutes: e.target.value }))} />
-              <p className="text-[11px] text-muted-foreground mt-1">Arriving later than this counts as late.</p>
-            </div>
-            <div className="col-span-2">
-              <Label>Working Days <span className="text-xs text-muted-foreground">(unchecked days count as weekend)</span></Label>
-              <div className="flex flex-wrap gap-3 mt-1">
-                {DOW.map((d) => (
-                  <label key={d.v} className="flex items-center gap-1.5 text-sm">
-                    <Checkbox
-                      checked={form.working_days.includes(d.v)}
-                      onCheckedChange={() =>
-                        setForm((f) => ({
-                          ...f,
-                          working_days: f.working_days.includes(d.v)
-                            ? f.working_days.filter((x) => x !== d.v)
-                            : [...f.working_days, d.v].sort((a, b) => a - b),
-                        }))
-                      }
-                    />
-                    {d.label}
-                  </label>
-                ))}
-              </div>
-            </div>
-          </div>
-        </div>
-
-        {canEditPayroll && (
-          <div className="mt-5 rounded-md border p-3 bg-muted/30">
-            <div className="flex items-center justify-between mb-2">
-              <Label className="text-sm font-semibold">Compensation</Label>
-              <Badge variant="outline" className="text-[10px]">Admin only</Badge>
-            </div>
-            <p className="text-xs text-muted-foreground mb-3">
-              Update base salary on promotion or revision. Changes take effect on the next payroll generation.
-            </p>
-            <div className="grid grid-cols-3 gap-3">
-              <div>
-                <Label>Base Salary (monthly)</Label>
-                <Input type="number" step="0.01" min="0" value={form.base_salary}
-                  onChange={(e) => setForm((f) => ({ ...f, base_salary: e.target.value }))} />
+                  ))}
+                </div>
               </div>
               <div>
-                <Label>Hourly OT Rate</Label>
-                <Input type="number" step="0.01" min="0" value={form.hourly_overtime_rate}
-                  onChange={(e) => setForm((f) => ({ ...f, hourly_overtime_rate: e.target.value }))} />
+                <Label>Service Status</Label>
+                <Select value={form.service_status} onValueChange={(v) => setForm((f) => ({ ...f, service_status: v }))}>
+                  <SelectTrigger><SelectValue /></SelectTrigger>
+                  <SelectContent>{SERVICE_STATUS.map((s) => <SelectItem key={s} value={s}>{s}</SelectItem>)}</SelectContent>
+                </Select>
               </div>
               <div>
-                <Label>PF Contribution (%)</Label>
-                <Input type="number" step="0.01" min="0" max="100" value={form.pf_contribution_pct}
-                  onChange={(e) => setForm((f) => ({ ...f, pf_contribution_pct: e.target.value }))} />
+                <Label>Employee Status</Label>
+                <Select value={form.employee_status} onValueChange={(v) => setForm((f) => ({ ...f, employee_status: v }))}>
+                  <SelectTrigger><SelectValue /></SelectTrigger>
+                  <SelectContent>{EMPLOYEE_STATUS.map((s) => <SelectItem key={s} value={s}>{s}</SelectItem>)}</SelectContent>
+                </Select>
+              </div>
+              <div><Label>Joining Date</Label><Input type="date" value={form.joining_date} onChange={(e) => setForm((f) => ({ ...f, joining_date: e.target.value }))} /></div>
+              <div><Label>Promotion Date</Label><Input type="date" value={form.promotion_date} onChange={(e) => setForm((f) => ({ ...f, promotion_date: e.target.value }))} /></div>
+              <div><Label>Resign Date</Label><Input type="date" value={form.resign_date} onChange={(e) => setForm((f) => ({ ...f, resign_date: e.target.value }))} /></div>
+              <div></div>
+              <div><Label>Daily OT Cap (hrs)</Label><Input type="number" step="0.5" value={form.daily_ot_cap} onChange={(e) => setForm((f) => ({ ...f, daily_ot_cap: e.target.value }))} /></div>
+              <div><Label>Monthly OT Cap (hrs)</Label><Input type="number" step="1" value={form.monthly_ot_cap} onChange={(e) => setForm((f) => ({ ...f, monthly_ot_cap: e.target.value }))} /></div>
+            </div>
+          </TabsContent>
+
+          <TabsContent value="schedule" className="mt-4">
+            <div className="rounded-md border p-3 bg-muted/30">
+              <Label className="text-sm font-semibold">Office Hours &amp; Work Schedule</Label>
+              <p className="text-xs text-muted-foreground mt-1 mb-3">
+                This employee's own schedule. Attendance, late arrival, due time, overtime and leave are all
+                calculated against these values.
+              </p>
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <Label>Office Start</Label>
+                  <Input type="time" value={form.office_start_time}
+                    onChange={(e) => setForm((f) => ({ ...f, office_start_time: e.target.value }))} />
+                </div>
+                <div>
+                  <Label>Office End</Label>
+                  <Input type="time" value={form.office_end_time}
+                    onChange={(e) => setForm((f) => ({ ...f, office_end_time: e.target.value }))} />
+                </div>
+                <div>
+                  <Label>Standard Shift Hours</Label>
+                  <Input type="number" step="0.5" min="0.5" max="24" value={form.standard_daily_hours}
+                    onChange={(e) => setForm((f) => ({ ...f, standard_daily_hours: e.target.value }))} />
+                  <p className="text-[11px] text-muted-foreground mt-1">Office window length, break included.</p>
+                </div>
+                <div>
+                  <Label>Daily Break Allowance (minutes)</Label>
+                  <Input type="number" step="5" min="0" value={form.unpaid_break_minutes}
+                    onChange={(e) => setForm((f) => ({ ...f, unpaid_break_minutes: e.target.value }))} />
+                  <p className="text-[11px] text-muted-foreground mt-1">Unpaid break inside the office window.</p>
+                </div>
+                <div>
+                  <Label>Late Grace (minutes)</Label>
+                  <Input type="number" step="1" min="0" value={form.late_grace_minutes}
+                    onChange={(e) => setForm((f) => ({ ...f, late_grace_minutes: e.target.value }))} />
+                  <p className="text-[11px] text-muted-foreground mt-1">Arriving later than this counts as late.</p>
+                </div>
+                <div className="col-span-2">
+                  <Label>Working Days <span className="text-xs text-muted-foreground">(unchecked days count as weekend)</span></Label>
+                  <div className="flex flex-wrap gap-3 mt-1">
+                    {DOW.map((d) => (
+                      <label key={d.v} className="flex items-center gap-1.5 text-sm">
+                        <Checkbox
+                          checked={form.working_days.includes(d.v)}
+                          onCheckedChange={() =>
+                            setForm((f) => ({
+                              ...f,
+                              working_days: f.working_days.includes(d.v)
+                                ? f.working_days.filter((x) => x !== d.v)
+                                : [...f.working_days, d.v].sort((a, b) => a - b),
+                            }))
+                          }
+                        />
+                        {d.label}
+                      </label>
+                    ))}
+                  </div>
+                </div>
               </div>
             </div>
-          </div>
-        )}
+          </TabsContent>
+
+          {canEditPayroll && (
+            <TabsContent value="compensation" className="mt-4">
+              <div className="rounded-md border p-3 bg-muted/30">
+                <div className="flex items-center justify-between mb-2">
+                  <Label className="text-sm font-semibold">Compensation</Label>
+                  <Badge variant="outline" className="text-[10px]">Admin only</Badge>
+                </div>
+                <p className="text-xs text-muted-foreground mb-3">
+                  Update base salary on promotion or revision. Changes take effect on the next payroll generation.
+                </p>
+                <div className="grid grid-cols-3 gap-3">
+                  <div>
+                    <Label>Base Salary (monthly)</Label>
+                    <Input type="number" step="0.01" min="0" value={form.base_salary}
+                      onChange={(e) => setForm((f) => ({ ...f, base_salary: e.target.value }))} />
+                  </div>
+                  <div>
+                    <Label>Hourly OT Rate</Label>
+                    <Input type="number" step="0.01" min="0" value={form.hourly_overtime_rate}
+                      onChange={(e) => setForm((f) => ({ ...f, hourly_overtime_rate: e.target.value }))} />
+                  </div>
+                  <div>
+                    <Label>PF Contribution (%)</Label>
+                    <Input type="number" step="0.01" min="0" max="100" value={form.pf_contribution_pct}
+                      onChange={(e) => setForm((f) => ({ ...f, pf_contribution_pct: e.target.value }))} />
+                  </div>
+                </div>
+              </div>
+            </TabsContent>
+          )}
+        </Tabs>
 
         <DialogFooter>
           <Button onClick={handleSave} disabled={saving} className="w-full mt-3">
