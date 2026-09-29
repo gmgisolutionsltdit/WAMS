@@ -13,10 +13,13 @@ import { toast } from "sonner";
 import { useAuth } from "@/contexts/AuthContext";
 import { mergeDailySessions, sessionWorkedSeconds, type AttendanceSession } from "@/lib/attendance";
 import { fmtHMS, fmtClock, hoursToHMS } from "@/lib/time";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import ReportsSummary from "@/components/ReportsSummary";
 
 const Reports = () => {
   const { role } = useAuth();
   const isAdmin = role === "admin";
+  const isManagerOrAdmin = ["manager", "admin"].includes(role);
   const [logs, setLogs] = useState<any[]>([]);
   const [dateFrom, setDateFrom] = useState("");
   const [dateTo, setDateTo] = useState("");
@@ -110,8 +113,23 @@ const Reports = () => {
     else { toast.success("Session deleted"); fetchLogs(); }
   };
 
+  if (!isManagerOrAdmin) {
+    return <ReportsSummary />;
+  }
+
   return (
-    <Card>
+    <Tabs defaultValue="attendance" className="space-y-4">
+      <TabsList>
+        <TabsTrigger value="attendance">Attendance Log</TabsTrigger>
+        <TabsTrigger value="summary">Performance Summary</TabsTrigger>
+      </TabsList>
+
+      <TabsContent value="summary">
+        <ReportsSummary />
+      </TabsContent>
+
+      <TabsContent value="attendance">
+      <Card>
       <CardHeader>
         <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
           <CardTitle>Attendance & Overtime Reports</CardTitle>
@@ -254,7 +272,9 @@ const Reports = () => {
         </Table>
 
       </CardContent>
-    </Card>
+      </Card>
+      </TabsContent>
+    </Tabs>
   );
 };
 

@@ -30,6 +30,7 @@ import Loans from "./pages/Loans";
 import Expenses from "./pages/Expenses";
 import NoticeBoard from "./pages/NoticeBoard";
 import SOP from "./pages/SOP";
+import TeamMemberDetails from "./pages/TeamMemberDetails";
 
 const queryClient = new QueryClient();
 
@@ -70,7 +71,7 @@ const AppRoutes = () => (
     <Route path="/attendance" element={<ProtectedRoute><Attendance /></ProtectedRoute>} />
     <Route path="/ot-requests" element={<ProtectedRoute><OTRequests /></ProtectedRoute>} />
     <Route path="/approvals" element={<ProtectedRoute><RoleGate allow={["admin", "manager"]}><Approvals /></RoleGate></ProtectedRoute>} />
-    <Route path="/reports" element={<ProtectedRoute><RoleGate allow={["admin", "manager"]}><Reports /></RoleGate></ProtectedRoute>} />
+    <Route path="/reports" element={<ProtectedRoute><Reports /></ProtectedRoute>} />
     <Route path="/settings" element={<ProtectedRoute><RoleGate allow={["admin"]}><SettingsPage /></RoleGate></ProtectedRoute>} />
     <Route path="/employees" element={<ProtectedRoute><RoleGate allow={["admin"]}><EmployeeManagement /></RoleGate></ProtectedRoute>} />
     <Route path="/employees/:id" element={<ProtectedRoute><EmployeeProfile /></ProtectedRoute>} />
@@ -84,6 +85,7 @@ const AppRoutes = () => (
     <Route path="/expenses" element={<ProtectedRoute><Expenses /></ProtectedRoute>} />
     <Route path="/notices" element={<ProtectedRoute><NoticeBoard /></ProtectedRoute>} />
     <Route path="/sop" element={<ProtectedRoute><SOP /></ProtectedRoute>} />
+    <Route path="/team-member-details" element={<ProtectedRoute><TeamMemberDetails /></ProtectedRoute>} />
 
     <Route path="*" element={<NotFound />} />
   </Routes>
