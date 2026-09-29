@@ -1052,6 +1052,39 @@ export type Database = {
         }
         Relationships: []
       }
+      employee_documents: {
+        Row: {
+          category: string
+          created_at: string
+          file_name: string
+          file_path: string
+          file_size: number | null
+          id: string
+          uploaded_by: string | null
+          user_id: string
+        }
+        Insert: {
+          category: string
+          created_at?: string
+          file_name: string
+          file_path: string
+          file_size?: number | null
+          id?: string
+          uploaded_by?: string | null
+          user_id: string
+        }
+        Update: {
+          category?: string
+          created_at?: string
+          file_name?: string
+          file_path?: string
+          file_size?: number | null
+          id?: string
+          uploaded_by?: string | null
+          user_id?: string
+        }
+        Relationships: []
+      }
       profiles: {
         Row: {
           base_salary: number
@@ -1094,6 +1127,9 @@ export type Database = {
           monthly_ot_cap: number
           office_end_time: string
           office_start_time: string
+          official_gmail: string | null
+          official_onedrive: string | null
+          personal_email: string | null
           pf_contribution_pct: number
           phone: string | null
           photo_url: string | null
@@ -1149,6 +1185,9 @@ export type Database = {
           monthly_ot_cap?: number
           office_end_time?: string
           office_start_time?: string
+          official_gmail?: string | null
+          official_onedrive?: string | null
+          personal_email?: string | null
           pf_contribution_pct?: number
           phone?: string | null
           photo_url?: string | null
@@ -1204,6 +1243,9 @@ export type Database = {
           monthly_ot_cap?: number
           office_end_time?: string
           office_start_time?: string
+          official_gmail?: string | null
+          official_onedrive?: string | null
+          personal_email?: string | null
           pf_contribution_pct?: number
           phone?: string | null
           photo_url?: string | null

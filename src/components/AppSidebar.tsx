@@ -1,4 +1,4 @@
-import { Clock, LayoutDashboard, CalendarDays, FileText, CheckSquare, BarChart3, Settings, LogOut, Users, CalendarHeart, FolderKanban, Wallet, Megaphone, Receipt, Banknote, TrendingUp, BookOpenCheck } from "lucide-react";
+import { Clock, LayoutDashboard, CalendarDays, FileText, CheckSquare, BarChart3, Settings, LogOut, Users, CalendarHeart, FolderKanban, Wallet, Megaphone, Receipt, Banknote, TrendingUp, BookOpenCheck, IdCard } from "lucide-react";
 import { NavLink } from "@/components/NavLink";
 import { useLocation } from "react-router-dom";
 import { useAuth } from "@/contexts/AuthContext";
@@ -20,6 +20,8 @@ const employeeItems = [
   { title: "Dashboard", url: "/", icon: LayoutDashboard },
   { title: "My Attendance", url: "/attendance", icon: CalendarDays },
   { title: "Requests", url: "/ot-requests", icon: FileText },
+  { title: "Reports", url: "/reports", icon: BarChart3 },
+  { title: "Team Member Details", url: "/team-member-details", icon: IdCard },
   { title: "Expenses", url: "/expenses", icon: Receipt },
   { title: "Notice Board", url: "/notices", icon: Megaphone },
   { title: "SOP", url: "/sop", icon: BookOpenCheck },
@@ -28,7 +30,6 @@ const employeeItems = [
 
 const managerItems = [
   { title: "Pending Approvals", url: "/approvals", icon: CheckSquare },
-  { title: "Reports", url: "/reports", icon: BarChart3 },
 ];
 
 const adminItems = [

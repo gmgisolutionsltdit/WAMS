@@ -29,6 +29,7 @@ import { format } from "date-fns";
 import { toast } from "sonner";
 import { invokeAdminUserManagement, edgeErrorMessage } from "@/lib/adminUsers";
 import EmployeeEditDialog from "@/components/EmployeeEditDialog";
+import EmployeeDocumentsTab from "@/components/EmployeeDocumentsTab";
 
 type Profile = {
   id: string;
@@ -401,12 +402,13 @@ const EmployeeProfile = () => {
       </Card>
 
       <Tabs defaultValue="overview" className="w-full">
-        <TabsList className="grid grid-cols-2 sm:grid-cols-5 w-full sm:w-auto">
+        <TabsList className="grid grid-cols-2 sm:grid-cols-6 w-full sm:w-auto">
           <TabsTrigger value="overview">Overview</TabsTrigger>
           <TabsTrigger value="personal">Personal Info</TabsTrigger>
           <TabsTrigger value="financial">Financial</TabsTrigger>
           <TabsTrigger value="tasks">Projects & Tasks</TabsTrigger>
           <TabsTrigger value="team">Team</TabsTrigger>
+          <TabsTrigger value="documents">Contract Documents</TabsTrigger>
         </TabsList>
 
         {/* OVERVIEW */}
@@ -634,6 +636,11 @@ const EmployeeProfile = () => {
               )}
             </CardContent>
           </Card>
+        </TabsContent>
+
+        {/* CONTRACT DOCUMENTS */}
+        <TabsContent value="documents" className="mt-4">
+          <EmployeeDocumentsTab userId={id!} canManage={isSelf || isAdmin} />
         </TabsContent>
       </Tabs>
 
