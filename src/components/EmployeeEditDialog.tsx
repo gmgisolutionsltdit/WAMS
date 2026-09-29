@@ -26,6 +26,11 @@ const DOW = [
 ];
 
 type WingRow = { id: string; name: string; code: string; active: boolean };
+type LeaveType = {
+  id: string; name: string; code: string; color: string;
+  annual_quota: number; half_day_allowed: boolean; is_paid: boolean; active: boolean;
+  sandwich_leave: boolean;
+};
 
 interface Props {
   employee: any;
@@ -50,6 +55,8 @@ export const EmployeeEditDialog = ({ employee, open, onOpenChange, isAdmin, canE
   const [savingWing, setSavingWing] = useState(false);
   const [saving, setSaving] = useState(false);
   const [uploadingPhoto, setUploadingPhoto] = useState(false);
+  const [leaveTypes, setLeaveTypes] = useState<LeaveType[]>([]);
+  const [savingLeave, setSavingLeave] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const canManageWings = isAdmin;
 
@@ -75,17 +82,19 @@ export const EmployeeEditDialog = ({ employee, open, onOpenChange, isAdmin, canE
   useEffect(() => {
     if (!open || !employee) return;
     (async () => {
-      const [{ data: mgrs }, { data: wingRows }, { data: projectRows }, { data: memberRows }] = await Promise.all([
+      const [{ data: mgrs }, { data: wingRows }, { data: projectRows }, { data: memberRows }, { data: leaveTypeRows }] = await Promise.all([
         supabase.rpc("manager_candidates"),
         supabase.from("company_wings").select("id, name, code, active").order("name", { ascending: true }),
         supabase.from("projects").select("id, name, key").eq("archived", false).order("name", { ascending: true }),
         supabase.from("project_members").select("project_id").eq("user_id", employee.id),
+        supabase.from("leave_types").select("*").order("name"),
       ]);
       setManagers(mgrs || []);
       const wingList = (wingRows || []) as WingRow[];
       setWings(wingList);
       setProjects((projectRows || []) as { id: string; name: string; key: string }[]);
       setMemberProjectIds((memberRows || []).map((m: { project_id: string }) => m.project_id));
+      setLeaveTypes((leaveTypeRows || []) as LeaveType[]);
 
       const wingId = employee.wing_id || wingList.find((w) => w.name === employee.company_wing)?.id || "";
       setForm({
@@ -188,6 +197,28 @@ export const EmployeeEditDialog = ({ employee, open, onOpenChange, isAdmin, canE
     }
   };
 
+  const updateLeaveType = (id: string, patch: Partial<LeaveType>) => {
+    setLeaveTypes((prev) => prev.map((lt) => (lt.id === id ? { ...lt, ...patch } : lt)));
+  };
+
+  const saveLeaveDefaults = async () => {
+    setSavingLeave(true);
+    const updates = leaveTypes.map((lt) =>
+      supabase.from("leave_types").update({
+        annual_quota: Number(lt.annual_quota) || 0,
+        half_day_allowed: lt.half_day_allowed,
+        is_paid: lt.is_paid,
+        color: lt.color,
+        sandwich_leave: lt.sandwich_leave,
+      }).eq("id", lt.id)
+    );
+    const results = await Promise.all(updates);
+    const firstErr = results.find((r) => r.error);
+    if (firstErr?.error) toast.error(firstErr.error.message);
+    else toast.success("Leave defaults updated");
+    setSavingLeave(false);
+  };
+
   const handleSave = async () => {
     if (!form.full_name) { toast.error("Name is required"); return; }
     setSaving(true);
@@ -248,11 +279,12 @@ export const EmployeeEditDialog = ({ employee, open, onOpenChange, isAdmin, canE
         </DialogHeader>
 
         <Tabs defaultValue="basic" className="w-full">
-          <TabsList className="grid grid-cols-3 sm:grid-cols-5 w-full">
+          <TabsList className="grid grid-cols-3 sm:grid-cols-6 w-full">
             <TabsTrigger value="basic">Basic Info</TabsTrigger>
             <TabsTrigger value="wing">Wing &amp; Projects</TabsTrigger>
             <TabsTrigger value="role">Role &amp; Reporting</TabsTrigger>
             <TabsTrigger value="schedule">Schedule</TabsTrigger>
+            {isAdmin && <TabsTrigger value="leave">Leave Defaults</TabsTrigger>}
             {canEditPayroll && <TabsTrigger value="compensation">Compensation</TabsTrigger>}
           </TabsList>
 
@@ -467,6 +499,52 @@ export const EmployeeEditDialog = ({ employee, open, onOpenChange, isAdmin, canE
               </div>
             </div>
           </TabsContent>
+
+          {isAdmin && (
+            <TabsContent value="leave" className="mt-4">
+              <div className="rounded-md border p-3 bg-muted/30">
+                <Label className="text-sm font-semibold">Leave Defaults</Label>
+                <p className="text-xs text-muted-foreground mt-1 mb-3">
+                  Applies to every employee for each leave type — not just this one.
+                </p>
+                <div className="grid gap-3">
+                  {leaveTypes.map((lt) => (
+                    <div key={lt.id} className="grid grid-cols-1 md:grid-cols-12 gap-3 items-center rounded-lg border p-3 bg-card">
+                      <div className="md:col-span-5 flex items-center gap-3">
+                        <input
+                          type="color"
+                          value={lt.color}
+                          onChange={(e) => updateLeaveType(lt.id, { color: e.target.value })}
+                          className="h-8 w-8 rounded border cursor-pointer"
+                        />
+                        <div>
+                          <div className="font-medium text-sm">{lt.name}</div>
+                          <div className="text-xs text-muted-foreground">{lt.code}</div>
+                        </div>
+                      </div>
+                      <div className="md:col-span-4 space-y-1">
+                        <Label className="text-xs">Annual Quota (days)</Label>
+                        <Input
+                          type="number"
+                          min={0}
+                          step="0.5"
+                          value={lt.annual_quota}
+                          onChange={(e) => updateLeaveType(lt.id, { annual_quota: parseFloat(e.target.value) || 0 })}
+                        />
+                      </div>
+                      <div className="md:col-span-3 flex items-center gap-2" title="Charge weekends/holidays adjacent (either side) to leave days">
+                        <Switch checked={!!lt.sandwich_leave} onCheckedChange={(v) => updateLeaveType(lt.id, { sandwich_leave: v })} />
+                        <Label className="text-xs">Sandwich</Label>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+                <Button className="mt-3" onClick={saveLeaveDefaults} disabled={savingLeave}>
+                  {savingLeave ? "Saving..." : "Save Leave Defaults"}
+                </Button>
+              </div>
+            </TabsContent>
+          )}
 
           {canEditPayroll && (
             <TabsContent value="compensation" className="mt-4">
