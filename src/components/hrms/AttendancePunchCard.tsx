@@ -7,7 +7,7 @@ import { Switch } from "@/components/ui/switch";
 import { Badge } from "@/components/ui/badge";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Label } from "@/components/ui/label";
-import { Checkbox } from "@/components/ui/checkbox";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { ScanFace, Fingerprint, Clock, CheckCircle2, Camera, Loader2 } from "lucide-react";
 import { toast } from "sonner";
 import { format } from "date-fns";
@@ -228,20 +228,13 @@ export function AttendancePunchCard() {
           <DialogHeader><DialogTitle>Where are you working from today?</DialogTitle></DialogHeader>
           <div className="space-y-4">
             <div>
-              <Label>Work From <span className="text-xs text-muted-foreground">(select one or more)</span></Label>
-              <div className="flex flex-wrap gap-3 mt-1">
-                {WORK_FROM_OPTIONS.map((w) => (
-                  <label key={w} className="flex items-center gap-1.5 text-sm">
-                    <Checkbox
-                      checked={workFrom.includes(w)}
-                      onCheckedChange={() =>
-                        setWorkFrom((f) => (f.includes(w) ? f.filter((x) => x !== w) : [...f, w]))
-                      }
-                    />
-                    {w}
-                  </label>
-                ))}
-              </div>
+              <Label>Work From</Label>
+              <Select value={workFrom[0] || DEFAULT_WORK_FROM} onValueChange={(v) => setWorkFrom([v])}>
+                <SelectTrigger className="mt-1"><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  {WORK_FROM_OPTIONS.map((w) => <SelectItem key={w} value={w}>{w}</SelectItem>)}
+                </SelectContent>
+              </Select>
             </div>
             <Button className="w-full" onClick={confirmWorkFrom} disabled={busy}>Continue</Button>
           </div>
