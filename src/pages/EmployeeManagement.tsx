@@ -1,4 +1,4 @@
-import { invokeAdminUserManagement } from "@/lib/adminUsers";
+import { invokeAdminUserManagement, edgeErrorMessage } from "@/lib/adminUsers";
 import { useEffect, useState, useCallback, useRef } from "react";
 import { useAuth } from "@/contexts/AuthContext";
 import { supabase } from "@/integrations/supabase/client";
@@ -15,13 +15,9 @@ import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogFooter, DialogDescription,
 } from "@/components/ui/dialog";
-import {
-  AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription,
-  AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger,
-} from "@/components/ui/alert-dialog";
 import { toast } from "sonner";
 import {
-  Plus, Pencil, Users, Search, KeyRound, Upload, Download, Trash2, Camera, Copy, CalendarHeart,
+  Plus, Users, Search, Upload, Download, Camera, Copy, CalendarHeart, ArrowRight,
 } from "lucide-react";
 import { useRealtimeSubscription } from "@/hooks/useRealtimeSubscription";
 import { useNavigate } from "react-router-dom";
@@ -38,19 +34,6 @@ const DOW = [
 
 type WingRow = { id: string; name: string; code: string; active: boolean };
 
-
-/** Extracts the real error text from a Supabase edge-function failure (non-2xx bodies). */
-async function edgeErrorMessage(error: any, data: any, fallback: string) {
-  if (data?.error) return String(data.error);
-  const res = error?.context;
-  if (res && typeof res.json === "function") {
-    try {
-      const body = await res.clone().json();
-      if (body?.error) return String(body.error);
-    } catch { /* body not JSON */ }
-  }
-  return error?.message || fallback;
-}
 
 type EmployeeRow = {
   id: string;
@@ -98,7 +81,6 @@ const EmployeeManagement = () => {
   const [savingLeave, setSavingLeave] = useState(false);
   const [managers, setManagers] = useState<{ id: string; full_name: string | null; email: string | null }[]>([]);
   const [dialogOpen, setDialogOpen] = useState(false);
-  const [editingId, setEditingId] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState("");
   const [filterRole, setFilterRole] = useState("all");
   const [filterWing, setFilterWing] = useState("all");
@@ -251,42 +233,9 @@ const EmployeeManagement = () => {
   const wingLabelFor = (emp: { wing_id?: string | null; company_wing?: string | null }) =>
     wings.find((w) => w.id === emp.wing_id)?.name || emp.company_wing || "—";
 
-  const resetForm = () => { setForm(initialForm); setEditingId(null); };
+  const resetForm = () => { setForm(initialForm); };
 
   const openCreate = () => { resetForm(); setDialogOpen(true); };
-
-  const openEdit = (emp: EmployeeRow) => {
-    setForm({
-      full_name: emp.full_name || "", email: emp.email || "",
-      department: emp.department || "", designation: emp.designation || "",
-      phone: emp.phone || "", role: emp._role || "employee",
-      reporting_manager_ids: emp.reporting_manager_ids?.length
-        ? emp.reporting_manager_ids
-        : (emp.reporting_manager_id ? [emp.reporting_manager_id] : []),
-      company_wing: emp.company_wing || "GMGI",
-      wing_id: wingIdFor(emp),
-
-      service_status: emp.service_status || "Permanent",
-      employee_status: emp.employee_status || "Active",
-      joining_date: emp.joining_date || "", promotion_date: emp.promotion_date || "",
-      resign_date: emp.resign_date || "",
-      daily_ot_cap: String(emp.daily_ot_cap ?? 4),
-      monthly_ot_cap: String(emp.monthly_ot_cap ?? 40),
-      photo_url: emp.photo_url || "",
-      base_salary: String(emp.base_salary ?? 0),
-      hourly_overtime_rate: String(emp.hourly_overtime_rate ?? 0),
-      pf_contribution_pct: String(emp.pf_contribution_pct ?? 0),
-      project_ids: memberProjects[emp.id] ?? [],
-      office_start_time: (emp.office_start_time || DEFAULT_OFFICE_START).slice(0, 5),
-      office_end_time: (emp.office_end_time || DEFAULT_OFFICE_END).slice(0, 5),
-      standard_daily_hours: String(emp.standard_daily_hours ?? 8),
-      unpaid_break_minutes: String(emp.unpaid_break_minutes ?? 60),
-      late_grace_minutes: String(emp.late_grace_minutes ?? DEFAULT_GRACE_MINUTES),
-      working_days: (emp.working_days?.length ? emp.working_days.map(Number) : [...DEFAULT_WORKING_DAYS]),
-    });
-    setEditingId(emp.id);
-    setDialogOpen(true);
-  };
 
   const handlePhotoSelect = async (file: File, userIdForPath: string) => {
     if (!file.type.startsWith("image/")) { toast.error("Please select an image"); return; }
@@ -299,10 +248,6 @@ const EmployeeManagement = () => {
       if (upErr) throw upErr;
       const { data: pub } = supabase.storage.from("avatars").getPublicUrl(path);
       setForm((f) => ({ ...f, photo_url: pub.publicUrl }));
-      if (editingId) {
-        await supabase.from("profiles").update({ photo_url: pub.publicUrl }).eq("id", editingId);
-        fetchEmployees();
-      }
       toast.success("Photo uploaded");
     } catch (e: any) {
       toast.error(e.message || "Upload failed");
@@ -403,86 +348,48 @@ const EmployeeManagement = () => {
         profilePayload.pf_contribution_pct = parseFloat(form.pf_contribution_pct) || 0;
       }
 
-      if (editingId) {
-        const { error } = await supabase.from("profiles").update(profilePayload).eq("id", editingId);
-        if (error) { toast.error(error.message); return; }
-        const { data: existing } = await supabase.from("user_roles").select("id").eq("user_id", editingId).maybeSingle();
-        if (existing) await supabase.from("user_roles").update({ role: form.role as any }).eq("user_id", editingId);
-        else await supabase.from("user_roles").insert({ user_id: editingId, role: form.role as any });
-        await syncProjectMembers(editingId);
-        toast.success("Employee updated");
-        setDialogOpen(false);
-        resetForm();
-        fetchEmployees();
-        fetchProjects();
-      } else {
-        // Admin create with temp password via the authenticated API
-        const { data, error } = await invokeAdminUserManagement({
-          body: {
-            action: "create_user",
-            payload: {
-              email: form.email,
-              full_name: form.full_name,
-              department: form.department,
-              designation: form.designation,
-              phone: form.phone,
-              company_wing: legacyWing,
-              service_status: form.service_status,
-              employee_status: form.employee_status,
-              joining_date: form.joining_date || null,
-              reporting_manager_id: form.reporting_manager_ids[0] || null,
-              daily_ot_cap: parseFloat(form.daily_ot_cap) || 4,
-              monthly_ot_cap: parseFloat(form.monthly_ot_cap) || 40,
-              role: form.role,
-            },
+      // Admin create with temp password via the authenticated API
+      const { data, error } = await invokeAdminUserManagement({
+        body: {
+          action: "create_user",
+          payload: {
+            email: form.email,
+            full_name: form.full_name,
+            department: form.department,
+            designation: form.designation,
+            phone: form.phone,
+            company_wing: legacyWing,
+            service_status: form.service_status,
+            employee_status: form.employee_status,
+            joining_date: form.joining_date || null,
+            reporting_manager_id: form.reporting_manager_ids[0] || null,
+            daily_ot_cap: parseFloat(form.daily_ot_cap) || 4,
+            monthly_ot_cap: parseFloat(form.monthly_ot_cap) || 40,
+            role: form.role,
           },
-        });
-        if (error || (data as any)?.error) {
-          toast.error(await edgeErrorMessage(error, data, "Create failed"), { duration: 8000 });
-          return;
-        }
-        const created = data as any;
-        // Apply photo / wing selection made before saving
-        const postCreate: any = { ...schedulePayload(), reporting_manager_ids: form.reporting_manager_ids };
-        if (form.photo_url) postCreate.photo_url = form.photo_url;
-        if (form.wing_id) postCreate.wing_id = form.wing_id;
-        await supabase.from("profiles").update(postCreate).eq("id", created.userId);
-        await syncProjectMembers(created.userId);
-
-        setTempCredentials({ email: created.email, password: created.tempPassword });
-        toast.success("Employee created");
-        setDialogOpen(false);
-        resetForm();
-        fetchEmployees();
-        fetchProjects();
+        },
+      });
+      if (error || (data as any)?.error) {
+        toast.error(await edgeErrorMessage(error, data, "Create failed"), { duration: 8000 });
+        return;
       }
+      const created = data as any;
+      // Apply photo / wing selection made before saving
+      const postCreate: any = { ...schedulePayload(), reporting_manager_ids: form.reporting_manager_ids };
+      if (form.photo_url) postCreate.photo_url = form.photo_url;
+      if (form.wing_id) postCreate.wing_id = form.wing_id;
+      await supabase.from("profiles").update(postCreate).eq("id", created.userId);
+      await syncProjectMembers(created.userId);
+
+      setTempCredentials({ email: created.email, password: created.tempPassword });
+      toast.success("Employee created");
+      setDialogOpen(false);
+      resetForm();
+      fetchEmployees();
+      fetchProjects();
     } finally {
       setSaving(false);
     }
-  };
-
-  const handleResetPassword = async (emp: EmployeeRow) => {
-    const { data, error } = await invokeAdminUserManagement({
-      body: { action: "reset_password", user_id: emp.id },
-    });
-    if (error || (data as any)?.error) {
-      toast.error(await edgeErrorMessage(error, data, "Reset failed"), { duration: 8000 });
-      return;
-    }
-    setTempCredentials({ email: emp.email || "", password: (data as any).tempPassword });
-    toast.success("Password reset");
-  };
-
-  const handleDelete = async (emp: EmployeeRow) => {
-    const { data, error } = await invokeAdminUserManagement({
-      body: { action: "delete_user", user_id: emp.id },
-    });
-    if (error || (data as any)?.error) {
-      toast.error(await edgeErrorMessage(error, data, "Delete failed"), { duration: 8000 });
-      return;
-    }
-    toast.success("Employee deleted");
-    fetchEmployees();
   };
 
   const downloadTemplate = () => {
@@ -624,11 +531,9 @@ const EmployeeManagement = () => {
         <Dialog open={dialogOpen} onOpenChange={(o) => { setDialogOpen(o); if (!o) resetForm(); }}>
           <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto">
             <DialogHeader>
-              <DialogTitle>{editingId ? "Edit Employee" : "Add New Employee"}</DialogTitle>
+              <DialogTitle>Add New Employee</DialogTitle>
               <DialogDescription>
-                {editingId
-                  ? "Update employee profile, role, OT caps, photo, and reporting structure."
-                  : "Account is created with a temporary password shown after save. Share it securely; the user can change it after first login."}
+                Account is created with a temporary password shown after save. Share it securely; the user can change it after first login.
               </DialogDescription>
             </DialogHeader>
 
@@ -645,7 +550,7 @@ const EmployeeManagement = () => {
                   className="hidden"
                   onChange={(e) => {
                     const f = e.target.files?.[0];
-                    if (f) handlePhotoSelect(f, editingId || crypto.randomUUID());
+                    if (f) handlePhotoSelect(f, crypto.randomUUID());
                   }}
                 />
                 <Button size="sm" variant="outline" onClick={() => fileInputRef.current?.click()} disabled={uploadingPhoto}>
@@ -658,7 +563,7 @@ const EmployeeManagement = () => {
 
             <div className="grid grid-cols-2 gap-3">
               <div><Label>Full Name *</Label><Input value={form.full_name} onChange={(e) => setForm((f) => ({ ...f, full_name: e.target.value }))} /></div>
-              <div><Label>Email *</Label><Input type="email" value={form.email} onChange={(e) => setForm((f) => ({ ...f, email: e.target.value }))} disabled={!!editingId} /></div>
+              <div><Label>Email *</Label><Input type="email" value={form.email} onChange={(e) => setForm((f) => ({ ...f, email: e.target.value }))} /></div>
               <div><Label>Phone</Label><Input value={form.phone} onChange={(e) => setForm((f) => ({ ...f, phone: e.target.value }))} /></div>
               <div><Label>Department</Label><Input value={form.department} onChange={(e) => setForm((f) => ({ ...f, department: e.target.value }))} /></div>
               <div><Label>Designation</Label><Input value={form.designation} onChange={(e) => setForm((f) => ({ ...f, designation: e.target.value }))} /></div>
@@ -733,9 +638,9 @@ const EmployeeManagement = () => {
               <div>
                 <Label>Reporting To <span className="text-xs text-muted-foreground">(select one or more)</span></Label>
                 <div className="rounded-md border p-2 max-h-36 overflow-y-auto space-y-1">
-                  {managers.filter((m) => m.id !== editingId).length === 0 ? (
+                  {managers.length === 0 ? (
                     <p className="text-xs text-muted-foreground px-1">No managers/admins available</p>
-                  ) : managers.filter((m) => m.id !== editingId).map((m) => (
+                  ) : managers.map((m) => (
                     <label key={m.id} className="flex items-center gap-2 text-sm px-1 py-0.5">
                       <Checkbox
                         checked={form.reporting_manager_ids.includes(m.id)}
@@ -834,50 +739,6 @@ const EmployeeManagement = () => {
               </div>
             </div>
 
-            {isAdmin && (
-              <div className="mt-5 rounded-md border p-3 bg-muted/30">
-                <Label className="text-sm font-semibold flex items-center gap-2"><CalendarHeart className="h-4 w-4" /> Leave Defaults</Label>
-                <p className="text-xs text-muted-foreground mt-1 mb-3">
-                  Applies to every employee for each leave type — not just this one.
-                </p>
-                <div className="grid gap-3">
-                  {leaveTypes.map((lt) => (
-                    <div key={lt.id} className="grid grid-cols-1 md:grid-cols-12 gap-3 items-center rounded-lg border p-3 bg-card">
-                      <div className="md:col-span-5 flex items-center gap-3">
-                        <input
-                          type="color"
-                          value={lt.color}
-                          onChange={(e) => updateLeaveType(lt.id, { color: e.target.value })}
-                          className="h-8 w-8 rounded border cursor-pointer"
-                        />
-                        <div>
-                          <div className="font-medium text-sm">{lt.name}</div>
-                          <div className="text-xs text-muted-foreground">{lt.code}</div>
-                        </div>
-                      </div>
-                      <div className="md:col-span-4 space-y-1">
-                        <Label className="text-xs">Annual Quota (days)</Label>
-                        <Input
-                          type="number"
-                          min={0}
-                          step="0.5"
-                          value={lt.annual_quota}
-                          onChange={(e) => updateLeaveType(lt.id, { annual_quota: parseFloat(e.target.value) || 0 })}
-                        />
-                      </div>
-                      <div className="md:col-span-3 flex items-center gap-2" title="Charge weekends/holidays adjacent (either side) to leave days">
-                        <Switch checked={!!lt.sandwich_leave} onCheckedChange={(v) => updateLeaveType(lt.id, { sandwich_leave: v })} />
-                        <Label className="text-xs">Sandwich</Label>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-                <Button className="mt-3" onClick={saveLeaveDefaults} disabled={savingLeave}>
-                  {savingLeave ? "Saving..." : "Save Leave Defaults"}
-                </Button>
-              </div>
-            )}
-
             {canEditPayroll && (
               <div className="mt-5 rounded-md border p-3 bg-muted/30">
                 <div className="flex items-center justify-between mb-2">
@@ -909,7 +770,7 @@ const EmployeeManagement = () => {
 
             <DialogFooter>
               <Button onClick={handleSave} disabled={saving} className="w-full mt-3">
-                {saving ? "Saving..." : editingId ? "Update Employee" : "Create Employee"}
+                {saving ? "Saving..." : "Create Employee"}
               </Button>
             </DialogFooter>
           </DialogContent>
@@ -1030,60 +891,9 @@ const EmployeeManagement = () => {
                 <TableCell><Badge variant="outline" className={statusBadge(emp.employee_status)}>{emp.employee_status}</Badge></TableCell>
                 <TableCell className="text-xs">{emp.daily_ot_cap}h / {emp.monthly_ot_cap}h</TableCell>
                 <TableCell className="text-right" onClick={(e) => e.stopPropagation()}>
-                  <div className="flex items-center gap-1 justify-end">
-                    {(isAdmin || canEditPayroll) && (
-                      <Button size="sm" variant="outline" onClick={() => openEdit(emp)} title="Edit">
-                        <Pencil className="h-4 w-4" />
-                      </Button>
-                    )}
-                    {isAdmin && (
-                      <>
-                        <AlertDialog>
-                          <AlertDialogTrigger asChild>
-                            <Button size="sm" variant="outline" title="Reset password">
-                              <KeyRound className="h-4 w-4" />
-                            </Button>
-                          </AlertDialogTrigger>
-                          <AlertDialogContent>
-                            <AlertDialogHeader>
-                              <AlertDialogTitle>Reset password?</AlertDialogTitle>
-                              <AlertDialogDescription>
-                                A new temporary password will be generated for <strong>{emp.email}</strong>.
-                                You'll see it once and need to share it securely.
-                              </AlertDialogDescription>
-                            </AlertDialogHeader>
-                            <AlertDialogFooter>
-                              <AlertDialogCancel>Cancel</AlertDialogCancel>
-                              <AlertDialogAction onClick={() => handleResetPassword(emp)}>Reset</AlertDialogAction>
-                            </AlertDialogFooter>
-                          </AlertDialogContent>
-                        </AlertDialog>
-                        <AlertDialog>
-                          <AlertDialogTrigger asChild>
-                            <Button size="sm" variant="outline" title="Delete">
-                              <Trash2 className="h-4 w-4 text-destructive" />
-                            </Button>
-                          </AlertDialogTrigger>
-                          <AlertDialogContent>
-                            <AlertDialogHeader>
-                              <AlertDialogTitle>Delete employee?</AlertDialogTitle>
-                              <AlertDialogDescription>
-                                This permanently removes <strong>{emp.full_name || emp.email}</strong> and their login.
-                                This cannot be undone.
-                              </AlertDialogDescription>
-                            </AlertDialogHeader>
-                            <AlertDialogFooter>
-                              <AlertDialogCancel>Cancel</AlertDialogCancel>
-                              <AlertDialogAction onClick={() => handleDelete(emp)}>Delete</AlertDialogAction>
-                            </AlertDialogFooter>
-                          </AlertDialogContent>
-                        </AlertDialog>
-                      </>
-                    )}
-                    {!isAdmin && !canEditPayroll && (
-                      <span className="text-xs text-muted-foreground">View only</span>
-                    )}
-                  </div>
+                  <Button size="sm" variant="outline" onClick={() => navigate(`/employees/${emp.id}`)}>
+                    See Details <ArrowRight className="ml-1 h-4 w-4" />
+                  </Button>
                 </TableCell>
               </TableRow>
             ))}
@@ -1188,6 +998,52 @@ const EmployeeManagement = () => {
         </DialogContent>
       </Dialog>
     </Card>
+
+    {isAdmin && (
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2 text-base"><CalendarHeart className="h-4 w-4" /> Leave Defaults</CardTitle>
+          <CardDescription>Applies to every employee for each leave type.</CardDescription>
+        </CardHeader>
+        <CardContent>
+          <div className="grid gap-3">
+            {leaveTypes.map((lt) => (
+              <div key={lt.id} className="grid grid-cols-1 md:grid-cols-12 gap-3 items-center rounded-lg border p-3 bg-card">
+                <div className="md:col-span-5 flex items-center gap-3">
+                  <input
+                    type="color"
+                    value={lt.color}
+                    onChange={(e) => updateLeaveType(lt.id, { color: e.target.value })}
+                    className="h-8 w-8 rounded border cursor-pointer"
+                  />
+                  <div>
+                    <div className="font-medium text-sm">{lt.name}</div>
+                    <div className="text-xs text-muted-foreground">{lt.code}</div>
+                  </div>
+                </div>
+                <div className="md:col-span-4 space-y-1">
+                  <Label className="text-xs">Annual Quota (days)</Label>
+                  <Input
+                    type="number"
+                    min={0}
+                    step="0.5"
+                    value={lt.annual_quota}
+                    onChange={(e) => updateLeaveType(lt.id, { annual_quota: parseFloat(e.target.value) || 0 })}
+                  />
+                </div>
+                <div className="md:col-span-3 flex items-center gap-2" title="Charge weekends/holidays adjacent (either side) to leave days">
+                  <Switch checked={!!lt.sandwich_leave} onCheckedChange={(v) => updateLeaveType(lt.id, { sandwich_leave: v })} />
+                  <Label className="text-xs">Sandwich</Label>
+                </div>
+              </div>
+            ))}
+          </div>
+          <Button className="mt-3" onClick={saveLeaveDefaults} disabled={savingLeave}>
+            {savingLeave ? "Saving..." : "Save Leave Defaults"}
+          </Button>
+        </CardContent>
+      </Card>
+    )}
     </div>
   );
 };

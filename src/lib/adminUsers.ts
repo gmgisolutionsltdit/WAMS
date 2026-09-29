@@ -1,5 +1,18 @@
 import { supabase } from "@/integrations/supabase/client";
 
+/** Extracts the real error text from a Supabase edge-function failure (non-2xx bodies). */
+export async function edgeErrorMessage(error: any, data: any, fallback: string) {
+  if (data?.error) return String(data.error);
+  const res = error?.context;
+  if (res && typeof res.json === "function") {
+    try {
+      const body = await res.clone().json();
+      if (body?.error) return String(body.error);
+    } catch { /* body not JSON */ }
+  }
+  return error?.message || fallback;
+}
+
 export async function invokeAdminUserManagement(options: { body: Record<string, unknown> }) {
   try {
     const { data: { session }, error } = await supabase.auth.getSession();
