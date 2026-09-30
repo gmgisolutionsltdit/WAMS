@@ -37,7 +37,13 @@ const TeamProfiles = () => {
       if (isManager) query = query.contains("reporting_manager_ids", [user.id]);
       else query = query.eq("id", user.id);
       const { data } = await query;
-      setRows((data || []) as Row[]);
+      let result = (data || []) as Row[];
+      if (isManager && result.length) {
+        const { data: roleRows } = await supabase.rpc("role_labels_for", { _user_ids: result.map((r) => r.id) });
+        const managerIds = new Set((roleRows || []).filter((r: any) => r.role === "manager").map((r: any) => r.user_id));
+        result = result.filter((r) => managerIds.has(r.id));
+      }
+      setRows(result);
       setLoading(false);
     })();
   }, [user, isManager]);
@@ -54,7 +60,7 @@ const TeamProfiles = () => {
         <CardHeader>
           <CardTitle className="flex items-center gap-2"><Users className="h-5 w-5" /> Profile</CardTitle>
           <CardDescription>
-            {isManager ? "Directory panels for your direct reports." : "Your own directory panel."}
+            {isManager ? "Directory panels for the managers who report to you." : "Your own directory panel."}
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
