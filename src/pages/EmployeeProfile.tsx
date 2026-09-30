@@ -47,6 +47,9 @@ type Profile = {
   full_name: string | null;
   email: string | null;
   phone: string | null;
+  personal_email: string | null;
+  official_gmail: string | null;
+  official_onedrive: string | null;
   photo_url: string | null;
   department: string | null;
   designation: string | null;
@@ -96,6 +99,10 @@ type Profile = {
 };
 
 const PERSONAL_INFO_FIELDS: { key: keyof Profile; label: string; type?: "text" | "date" | "number" | "textarea" }[] = [
+  { key: "personal_email", label: "Personal Email" },
+  { key: "official_gmail", label: "Official Gmail" },
+  { key: "official_onedrive", label: "Official OneDrive" },
+  { key: "phone", label: "Phone Number" },
   { key: "date_of_birth", label: "Date of Birth", type: "date" },
   { key: "national_id", label: "National ID Number" },
   { key: "passport_number", label: "Passport Number" },
@@ -467,8 +474,10 @@ const EmployeeProfile = () => {
     setSavingLeave(false);
   };
 
+  const canEditPersonalInfo = isSelf || isAdmin;
+
   const savePersonalInfo = async () => {
-    if (!id || !isSelf) return;
+    if (!id || !canEditPersonalInfo) return;
     setSavingPersonal(true);
     const payload: Record<string, unknown> = {};
     PERSONAL_INFO_FIELDS.forEach(({ key, type }) => {
@@ -864,13 +873,13 @@ const EmployeeProfile = () => {
             <CardHeader>
               <CardTitle className="text-base flex items-center gap-2"><ClipboardList className="h-4 w-4" /> Personal Information</CardTitle>
               <CardDescription>
-                {isSelf
-                  ? "Fill this in yourself — it's used for HR records and only visible to you and management."
-                  : "Filled in by the account holder. Read-only here."}
+                {canEditPersonalInfo
+                  ? "Used for HR records. Personal Email, Official Gmail, Official OneDrive and Phone Number also appear in Team Member Details."
+                  : "Filled in by the account holder or an admin. Read-only here."}
               </CardDescription>
             </CardHeader>
             <CardContent>
-              {isSelf ? (
+              {canEditPersonalInfo ? (
                 <div className="grid gap-4 md:grid-cols-2">
                   {PERSONAL_INFO_FIELDS.map(({ key, label, type }) => (
                     <div key={key} className={type === "textarea" ? "md:col-span-2 space-y-1" : "space-y-1"}>

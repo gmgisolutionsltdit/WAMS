@@ -1,69 +1,39 @@
-import { useCallback, useEffect, useState } from "react";
+import { useEffect, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
-import { useAuth } from "@/contexts/AuthContext";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import { Textarea } from "@/components/ui/textarea";
-import { Button } from "@/components/ui/button";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { IdCard, Users } from "lucide-react";
-import { toast } from "sonner";
-import { PERSONAL_INFO_FIELDS, TEAM_MEMBER_CONTACT_FIELDS } from "@/lib/personalInfoFields";
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { IdCard } from "lucide-react";
 
-type ProfileRow = { id: string; full_name: string | null; email: string | null } & Record<string, any>;
+type DirectoryRow = {
+  id: string;
+  full_name: string | null;
+  designation: string | null;
+  personal_email: string | null;
+  official_gmail: string | null;
+  official_onedrive: string | null;
+  phone: string | null;
+};
 
-const ALL_FIELDS = [...TEAM_MEMBER_CONTACT_FIELDS, ...PERSONAL_INFO_FIELDS];
+const fmt = (v: string | null) => (v && v.trim() ? v : "—");
 
-const fmt = (v: unknown) => (v === null || v === undefined || v === "" ? "—" : String(v));
-
+/**
+ * Read-only, company-wide directory — every employee/manager/admin's name,
+ * designation and contact details. Editing happens on each person's own
+ * Personal Info tab (self, or an admin editing anyone); this page only
+ * displays the result, the same for every viewer role.
+ */
 const TeamMemberDetails = () => {
-  const { user, role } = useAuth();
-  const isAdmin = role === "admin";
-  const [employees, setEmployees] = useState<{ id: string; full_name: string | null; email: string | null }[]>([]);
-  const [selectedId, setSelectedId] = useState<string>("");
-  const [profile, setProfile] = useState<ProfileRow | null>(null);
-  const [form, setForm] = useState<Record<string, any>>({});
+  const [rows, setRows] = useState<DirectoryRow[]>([]);
   const [loading, setLoading] = useState(true);
-  const [saving, setSaving] = useState(false);
 
   useEffect(() => {
-    if (!isAdmin) return;
     (async () => {
-      const { data } = await supabase.from("profiles").select("id, full_name, email").order("full_name");
-      setEmployees(data || []);
+      setLoading(true);
+      const { data } = await supabase.rpc("team_member_directory");
+      setRows((data || []) as DirectoryRow[]);
+      setLoading(false);
     })();
-  }, [isAdmin]);
-
-  const targetId = isAdmin ? selectedId : user?.id;
-
-  const fetchProfile = useCallback(async () => {
-    if (!targetId) { setLoading(false); return; }
-    setLoading(true);
-    const { data } = await supabase.from("profiles").select("*").eq("id", targetId).maybeSingle();
-    setProfile(data as ProfileRow | null);
-    setForm(data || {});
-    setLoading(false);
-  }, [targetId]);
-
-  useEffect(() => { fetchProfile(); }, [fetchProfile]);
-
-  const save = async () => {
-    if (!targetId) return;
-    setSaving(true);
-    const payload: Record<string, unknown> = {};
-    ALL_FIELDS.forEach(({ key, type }) => {
-      const v = form[key];
-      payload[key] = type === "number" ? (v === "" || v == null ? null : Number(v)) : (v || null);
-    });
-    const { error } = await supabase.from("profiles").update(payload as never).eq("id", targetId);
-    if (error) toast.error(error.message);
-    else {
-      toast.success("Team member details saved");
-      setProfile((p) => (p ? { ...p, ...payload } : p));
-    }
-    setSaving(false);
-  };
+  }, []);
 
   return (
     <div className="space-y-4">
@@ -71,65 +41,43 @@ const TeamMemberDetails = () => {
         <CardHeader>
           <CardTitle className="flex items-center gap-2"><IdCard className="h-5 w-5" /> Team Member Details</CardTitle>
           <CardDescription>
-            {isAdmin
-              ? "Personal and contact information for any employee. Only admins can edit these fields."
-              : "Your personal and contact information. Only an admin can edit these fields."}
+            Name, designation and contact details for every employee, manager and admin. Read-only —
+            each person's own Personal Info tab (or an admin, for anyone) is where this is edited.
           </CardDescription>
         </CardHeader>
-        <CardContent className="space-y-4">
-          {isAdmin && (
-            <div className="max-w-sm">
-              <Label>Employee</Label>
-              <Select value={selectedId} onValueChange={setSelectedId}>
-                <SelectTrigger><SelectValue placeholder="Select an employee" /></SelectTrigger>
-                <SelectContent>
-                  {employees.map((e) => (
-                    <SelectItem key={e.id} value={e.id}>{e.full_name || e.email}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-          )}
-
+        <CardContent>
           {loading ? (
             <p className="text-sm text-muted-foreground">Loading…</p>
-          ) : !targetId || !profile ? (
-            <div className="text-center text-muted-foreground py-8">
-              <Users className="h-10 w-10 mx-auto mb-2 opacity-50" />
-              {isAdmin ? "Select an employee to view their details." : "No profile found."}
-            </div>
-          ) : isAdmin ? (
-            <div className="grid gap-4 md:grid-cols-2">
-              {ALL_FIELDS.map(({ key, label, type }) => (
-                <div key={key} className={type === "textarea" ? "md:col-span-2 space-y-1" : "space-y-1"}>
-                  <Label className="text-xs">{label}</Label>
-                  {type === "textarea" ? (
-                    <Textarea
-                      rows={2}
-                      value={form[key] ?? ""}
-                      onChange={(e) => setForm((f) => ({ ...f, [key]: e.target.value }))}
-                    />
-                  ) : (
-                    <Input
-                      type={type === "date" ? "date" : type === "number" ? "number" : "text"}
-                      value={form[key] ?? ""}
-                      onChange={(e) => setForm((f) => ({ ...f, [key]: e.target.value }))}
-                    />
-                  )}
-                </div>
-              ))}
-              <div className="md:col-span-2">
-                <Button onClick={save} disabled={saving}>{saving ? "Saving..." : "Save"}</Button>
-              </div>
-            </div>
+          ) : rows.length === 0 ? (
+            <p className="text-sm text-muted-foreground text-center py-8">No team members found.</p>
           ) : (
-            <div className="grid gap-4 md:grid-cols-2">
-              {ALL_FIELDS.map(({ key, label }) => (
-                <div key={key} className="space-y-1">
-                  <div className="text-xs text-muted-foreground">{label}</div>
-                  <div className="text-sm font-medium break-words">{fmt(profile[key])}</div>
-                </div>
-              ))}
+            <div className="overflow-x-auto">
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead className="w-12">SL. No.</TableHead>
+                    <TableHead>Employee Name</TableHead>
+                    <TableHead>Designation</TableHead>
+                    <TableHead>Personal Email</TableHead>
+                    <TableHead>Official Gmail</TableHead>
+                    <TableHead>Official OneDrive</TableHead>
+                    <TableHead>Phone Number</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {rows.map((r, i) => (
+                    <TableRow key={r.id}>
+                      <TableCell>{i + 1}</TableCell>
+                      <TableCell className="font-medium">{fmt(r.full_name)}</TableCell>
+                      <TableCell>{fmt(r.designation)}</TableCell>
+                      <TableCell>{fmt(r.personal_email)}</TableCell>
+                      <TableCell>{fmt(r.official_gmail)}</TableCell>
+                      <TableCell>{fmt(r.official_onedrive)}</TableCell>
+                      <TableCell>{fmt(r.phone)}</TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
             </div>
           )}
         </CardContent>
