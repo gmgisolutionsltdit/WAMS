@@ -25,7 +25,8 @@ const Reports = () => {
   const [dateTo, setDateTo] = useState("");
   const [name, setName] = useState("");
   const [department, setDepartment] = useState("all");
-  const [month, setMonth] = useState(""); // YYYY-MM
+  const [monthFrom, setMonthFrom] = useState(""); // YYYY-MM
+  const [monthTo, setMonthTo] = useState(""); // YYYY-MM
   const [departments, setDepartments] = useState<string[]>([]);
   const [expanded, setExpanded] = useState<Record<string, boolean>>({});
 
@@ -41,10 +42,13 @@ const Reports = () => {
 
     let effectiveFrom = dateFrom;
     let effectiveTo = dateTo;
-    if (month) {
-      const [y, m] = month.split("-").map(Number);
-      const start = new Date(y, m - 1, 1);
-      const end = new Date(y, m, 0);
+    if (monthFrom || monthTo) {
+      const startMonth = monthFrom || monthTo;
+      const endMonth = monthTo || monthFrom;
+      const [ys, ms] = startMonth.split("-").map(Number);
+      const [ye, me] = endMonth.split("-").map(Number);
+      const start = new Date(ys, ms - 1, 1);
+      const end = new Date(ye, me, 0);
       effectiveFrom = format(start, "yyyy-MM-dd");
       effectiveTo = format(end, "yyyy-MM-dd");
     }
@@ -103,7 +107,7 @@ const Reports = () => {
   };
 
   const clearFilters = () => {
-    setDateFrom(""); setDateTo(""); setName(""); setDepartment("all"); setMonth("");
+    setDateFrom(""); setDateTo(""); setName(""); setDepartment("all"); setMonthFrom(""); setMonthTo("");
   };
 
   const deleteSession = async (id: string) => {
@@ -137,7 +141,7 @@ const Reports = () => {
         </div>
       </CardHeader>
       <CardContent className="space-y-4">
-        <div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-6 gap-4 items-end">
+        <div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-7 gap-4 items-end">
           <div className="space-y-2">
             <Label>Name / Email</Label>
             <Input placeholder="Search employee" value={name} onChange={(e) => setName(e.target.value)} />
@@ -155,16 +159,20 @@ const Reports = () => {
             </Select>
           </div>
           <div className="space-y-2">
-            <Label>Month</Label>
-            <Input type="month" value={month} onChange={(e) => { setMonth(e.target.value); if (e.target.value) { setDateFrom(""); setDateTo(""); } }} />
+            <Label>Month From</Label>
+            <Input type="month" value={monthFrom} onChange={(e) => { setMonthFrom(e.target.value); if (e.target.value) { setDateFrom(""); setDateTo(""); } }} />
+          </div>
+          <div className="space-y-2">
+            <Label>Month To</Label>
+            <Input type="month" value={monthTo} onChange={(e) => { setMonthTo(e.target.value); if (e.target.value) { setDateFrom(""); setDateTo(""); } }} />
           </div>
           <div className="space-y-2">
             <Label>From</Label>
-            <Input type="date" value={dateFrom} disabled={!!month} onChange={(e) => setDateFrom(e.target.value)} />
+            <Input type="date" value={dateFrom} disabled={!!monthFrom || !!monthTo} onChange={(e) => setDateFrom(e.target.value)} />
           </div>
           <div className="space-y-2">
             <Label>To</Label>
-            <Input type="date" value={dateTo} disabled={!!month} onChange={(e) => setDateTo(e.target.value)} />
+            <Input type="date" value={dateTo} disabled={!!monthFrom || !!monthTo} onChange={(e) => setDateTo(e.target.value)} />
           </div>
           <div className="flex gap-2">
             <Button onClick={fetchLogs} className="flex-1">Filter</Button>

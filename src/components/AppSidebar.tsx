@@ -1,4 +1,4 @@
-import { Clock, LayoutDashboard, CalendarDays, FileText, CheckSquare, BarChart3, Settings, LogOut, Users, CalendarHeart, FolderKanban, Wallet, Megaphone, Receipt, Banknote, TrendingUp, BookOpenCheck, IdCard } from "lucide-react";
+import { Clock, LayoutDashboard, CalendarDays, FileText, CheckSquare, BarChart3, Settings, LogOut, Users, CalendarHeart, FolderKanban, Wallet, Megaphone, Receipt, Banknote, TrendingUp, BookOpenCheck, IdCard, UserCircle } from "lucide-react";
 import { NavLink } from "@/components/NavLink";
 import { useLocation } from "react-router-dom";
 import { useAuth } from "@/contexts/AuthContext";
@@ -70,6 +70,16 @@ export function AppSidebar() {
                   </SidebarMenuButton>
                 </SidebarMenuItem>
               ))}
+              {!isAdmin && (
+                <SidebarMenuItem>
+                  <SidebarMenuButton asChild isActive={isActive("/profile")}>
+                    <NavLink to="/profile" end className="hover:bg-muted/50" activeClassName="bg-muted text-primary font-medium">
+                      <UserCircle className="mr-2 h-4 w-4" />
+                      {!collapsed && <span>Profile</span>}
+                    </NavLink>
+                  </SidebarMenuButton>
+                </SidebarMenuItem>
+              )}
             </SidebarMenu>
           </SidebarGroupContent>
         </SidebarGroup>
