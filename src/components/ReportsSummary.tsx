@@ -124,7 +124,6 @@ const ReportsSummary = () => {
         const schedule = scheduleMap.get(r.user_id);
         const required = netRequiredHours(schedule);
         const total = Number(r.total_hours) || 0;
-        s.netWorkingHours += total;
         if (total < required) {
           s.shortDays += 1;
           s.shortfallHoursTotal += required - total;
@@ -143,6 +142,12 @@ const ReportsSummary = () => {
       otDaySets.forEach((set, id) => {
         const s = byUser.get(id);
         if (s) s.otDays = set.size;
+      });
+
+      // Net Working Hour is the sum of the three other cards' hour values —
+      // total late time, total shortfall, and total approved overtime.
+      byUser.forEach((s) => {
+        s.netWorkingHours = s.lateMinutesTotal / 60 + s.shortfallHoursTotal + s.otHoursTotal;
       });
 
       setRows(Array.from(byUser.values()).sort((a, b) => a.name.localeCompare(b.name)));
