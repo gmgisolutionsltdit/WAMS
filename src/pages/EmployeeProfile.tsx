@@ -181,6 +181,11 @@ const EmployeeProfile = () => {
   const isSelf = !!user && user.id === id;
   const isAdmin = viewerRole === "admin";
   const canEditPayroll = viewerRole === "admin";
+  const isDirectManager = viewerRole === "manager" && !!user && !!rawProfile && (
+    rawProfile.reporting_manager_id === user.id
+    || (rawProfile.reporting_manager_ids || []).includes(user.id)
+  );
+  const canManageThisEmployee = isAdmin || isDirectManager;
 
   useEffect(() => {
     if (!id) return;
@@ -349,7 +354,7 @@ const EmployeeProfile = () => {
             )}
           </div>
 
-          {isAdmin && (
+          {canManageThisEmployee && (
             <div className="flex flex-wrap items-center gap-2 mt-4 pt-4 border-t">
               <Button size="sm" variant="outline" onClick={() => setEditOpen(true)}>
                 <Pencil className="h-4 w-4 mr-1" /> Edit
@@ -674,7 +679,7 @@ const EmployeeProfile = () => {
         </DialogContent>
       </Dialog>
 
-      {isAdmin && rawProfile && (
+      {canManageThisEmployee && rawProfile && (
         <EmployeeEditDialog
           employee={{ ...rawProfile, _role: role }}
           open={editOpen}
