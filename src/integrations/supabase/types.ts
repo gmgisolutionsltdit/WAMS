@@ -1946,6 +1946,29 @@ export type Database = {
           official_gmail: string | null
           official_onedrive: string | null
           phone: string | null
+          date_of_birth: string | null
+          national_id: string | null
+          passport_number: string | null
+          birth_reg_number: string | null
+          blood_group: string | null
+          religion: string | null
+          father_name: string | null
+          mother_name: string | null
+          marital_status: string | null
+          spouse_name: string | null
+          children_count: number | null
+          ongoing_education: string | null
+          present_address: string | null
+          permanent_address: string | null
+          emergency_contact_name: string | null
+          emergency_contact_phone: string | null
+          emergency_contact_relationship: string | null
+          bank_account_name: string | null
+          bank_account_number: string | null
+          bank_name: string | null
+          bank_branch: string | null
+          bank_swift_code: string | null
+          bank_routing_number: string | null
           created_at: string
         }[]
       }
