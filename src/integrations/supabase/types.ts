@@ -1936,6 +1936,19 @@ export type Database = {
         Args: Record<PropertyKey, never>
         Returns: { id: string; full_name: string | null; email: string | null }[]
       }
+      team_member_directory: {
+        Args: Record<PropertyKey, never>
+        Returns: {
+          id: string
+          full_name: string | null
+          designation: string | null
+          personal_email: string | null
+          official_gmail: string | null
+          official_onedrive: string | null
+          phone: string | null
+          created_at: string
+        }[]
+      }
     }
     Enums: {
       app_role:

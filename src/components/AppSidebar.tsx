@@ -43,12 +43,13 @@ export function AppSidebar() {
   const { state } = useSidebar();
   const collapsed = state === "collapsed";
   const location = useLocation();
-  const { role, profile, signOut } = useAuth();
+  const { user, role, profile, signOut } = useAuth();
 
   const isActive = (path: string) => location.pathname === path;
   const isManagerOrAdmin = ["manager", "admin"].includes(role);
   const isAdmin = role === "admin";
   const canPayroll = role === "admin";
+  const profileUrl = `/employees/${user?.id}`;
 
   return (
     <Sidebar collapsible="icon">
@@ -70,10 +71,10 @@ export function AppSidebar() {
                   </SidebarMenuButton>
                 </SidebarMenuItem>
               ))}
-              {!isAdmin && (
+              {!isAdmin && user && (
                 <SidebarMenuItem>
-                  <SidebarMenuButton asChild isActive={isActive("/profile")}>
-                    <NavLink to="/profile" end className="hover:bg-muted/50" activeClassName="bg-muted text-primary font-medium">
+                  <SidebarMenuButton asChild isActive={isActive(profileUrl)}>
+                    <NavLink to={profileUrl} end className="hover:bg-muted/50" activeClassName="bg-muted text-primary font-medium">
                       <UserCircle className="mr-2 h-4 w-4" />
                       {!collapsed && <span>Profile</span>}
                     </NavLink>
