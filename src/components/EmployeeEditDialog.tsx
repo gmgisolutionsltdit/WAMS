@@ -258,10 +258,15 @@ export const EmployeeEditDialog = ({ employee, open, onOpenChange, isAdmin, canE
 
       const { error } = await supabase.from("profiles").update(profilePayload).eq("id", employee.id);
       if (error) { toast.error(error.message); return; }
-      const { data: existing } = await supabase.from("user_roles").select("id").eq("user_id", employee.id).maybeSingle();
-      if (existing) await supabase.from("user_roles").update({ role: form.role as any }).eq("user_id", employee.id);
-      else await supabase.from("user_roles").insert({ user_id: employee.id, role: form.role as any });
-      await syncProjectMembers();
+      // Role and project assignment stay admin-only — a manager editing
+      // their own report doesn't have RLS access to change either, and the
+      // Role select is already disabled for them above.
+      if (isAdmin) {
+        const { data: existing } = await supabase.from("user_roles").select("id").eq("user_id", employee.id).maybeSingle();
+        if (existing) await supabase.from("user_roles").update({ role: form.role as any }).eq("user_id", employee.id);
+        else await supabase.from("user_roles").insert({ user_id: employee.id, role: form.role as any });
+        await syncProjectMembers();
+      }
       toast.success("Employee updated");
       onOpenChange(false);
       onSaved?.();
@@ -347,6 +352,9 @@ export const EmployeeEditDialog = ({ employee, open, onOpenChange, isAdmin, canE
 
             <div>
               <Label>Projects</Label>
+              {!isAdmin && (
+                <p className="text-xs text-muted-foreground mt-1 mb-1">View only — project assignment is managed by an admin.</p>
+              )}
               {projects.length === 0 ? (
                 <p className="text-xs text-muted-foreground mt-1">
                   No active projects yet — create one on the Projects page to assign it here.
@@ -358,10 +366,11 @@ export const EmployeeEditDialog = ({ employee, open, onOpenChange, isAdmin, canE
                     return (
                       <label
                         key={p.id}
-                        className={`flex items-center gap-2 rounded-md border px-2 py-1 text-sm cursor-pointer ${checked ? "bg-primary/10 border-primary/40" : ""}`}
+                        className={`flex items-center gap-2 rounded-md border px-2 py-1 text-sm ${isAdmin ? "cursor-pointer" : "cursor-not-allowed opacity-80"} ${checked ? "bg-primary/10 border-primary/40" : ""}`}
                       >
                         <Checkbox
                           checked={checked}
+                          disabled={!isAdmin}
                           onCheckedChange={() =>
                             setForm((f) => ({
                               ...f,

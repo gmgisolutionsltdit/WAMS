@@ -48,6 +48,27 @@ async function isAdmin(userId: string, admin: any) {
   return !!data;
 }
 
+async function isManager(userId: string, admin: any) {
+  const { data } = await admin
+    .from("user_roles")
+    .select("role")
+    .eq("user_id", userId)
+    .eq("role", "manager")
+    .maybeSingle();
+  return !!data;
+}
+
+/** True when `managerId` is one of `targetUserId`'s assigned reporting managers. */
+async function isManagerOfEmployee(managerId: string, targetUserId: string, admin: any) {
+  const { data } = await admin
+    .from("profiles")
+    .select("reporting_manager_id, reporting_manager_ids")
+    .eq("id", targetUserId)
+    .maybeSingle();
+  if (!data) return false;
+  return data.reporting_manager_id === managerId || (data.reporting_manager_ids || []).includes(managerId);
+}
+
 async function createSingleUser(admin: any, p: CreateUserPayload) {
   const email = (p.email ?? "").trim().toLowerCase();
   if (!email || !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) {
@@ -136,13 +157,28 @@ export default { async fetch(req: Request): Promise<Response> {
       return json({ error: `Invalid session: ${userErr?.message ?? "no user"}` }, 401);
     }
 
-    if (!(await isAdmin(userData.user.id, admin))) {
+    const callerIsAdmin = await isAdmin(userData.user.id, admin);
+    const callerIsManager = !callerIsAdmin && (await isManager(userData.user.id, admin));
+    if (!callerIsAdmin && !callerIsManager) {
       return json({ error: "Admin role required" }, 403);
     }
 
-
     const body = await req.json();
     const action = body.action as string;
+
+    // Only admins create accounts or set roles.
+    if ((action === "create_user" || action === "bulk_create") && !callerIsAdmin) {
+      return json({ error: "Admin role required" }, 403);
+    }
+
+    // Managers may reset the password of, or delete, only their own direct
+    // reports — everything else stays admin-only.
+    if ((action === "reset_password" || action === "delete_user") && callerIsManager) {
+      const targetUserId = body.user_id as string;
+      if (!targetUserId || !(await isManagerOfEmployee(userData.user.id, targetUserId, admin))) {
+        return json({ error: "You can only manage your own direct reports" }, 403);
+      }
+    }
 
     if (action === "create_user") {
       const result = await createSingleUser(admin, body.payload as CreateUserPayload);
@@ -174,6 +210,7 @@ export default { async fetch(req: Request): Promise<Response> {
     }
 
     if (action === "send_reset_link") {
+      if (!callerIsAdmin) return json({ error: "Admin role required" }, 403);
       const email = body.email as string;
       const redirectTo = body.redirect_to as string | undefined;
       const { data, error } = await admin.auth.admin.generateLink({
