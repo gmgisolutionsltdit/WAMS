@@ -8,7 +8,7 @@ import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
-import { Clock, TimerOff, Timer } from "lucide-react";
+import { Clock, TimerOff, Timer, Gauge } from "lucide-react";
 import { format } from "date-fns";
 import { netRequiredHours } from "@/lib/workSchedule";
 import { humanMinutes } from "@/lib/officeTime";
@@ -27,6 +27,7 @@ type Summary = {
   shortfallHoursTotal: number;
   otDays: number;
   otHoursTotal: number;
+  netWorkingHours: number;
 };
 
 const round1 = (n: number) => Math.round(n * 10) / 10;
@@ -37,7 +38,8 @@ const ReportsSummary = () => {
 
   const [dateFrom, setDateFrom] = useState("");
   const [dateTo, setDateTo] = useState("");
-  const [month, setMonth] = useState("");
+  const [monthFrom, setMonthFrom] = useState("");
+  const [monthTo, setMonthTo] = useState("");
   const [employees, setEmployees] = useState<EmployeeOption[]>([]);
   const [employeeFilter, setEmployeeFilter] = useState("all");
   const [loading, setLoading] = useState(true);
@@ -56,14 +58,17 @@ const ReportsSummary = () => {
   }, [isAdmin]);
 
   const effectiveRange = useMemo(() => {
-    if (month) {
-      const [y, m] = month.split("-").map(Number);
-      const start = new Date(y, m - 1, 1);
-      const end = new Date(y, m, 0);
+    if (monthFrom || monthTo) {
+      const startMonth = monthFrom || monthTo;
+      const endMonth = monthTo || monthFrom;
+      const [ys, ms] = startMonth.split("-").map(Number);
+      const [ye, me] = endMonth.split("-").map(Number);
+      const start = new Date(ys, ms - 1, 1);
+      const end = new Date(ye, me, 0);
       return { from: format(start, "yyyy-MM-dd"), to: format(end, "yyyy-MM-dd") };
     }
     return { from: dateFrom, to: dateTo };
-  }, [month, dateFrom, dateTo]);
+  }, [monthFrom, monthTo, dateFrom, dateTo]);
 
   const fetchSummary = useCallback(async () => {
     setLoading(true);
@@ -105,6 +110,7 @@ const ReportsSummary = () => {
           lateDays: 0, lateMinutesTotal: 0,
           shortDays: 0, shortfallHoursTotal: 0,
           otDays: 0, otHoursTotal: 0,
+          netWorkingHours: 0,
         });
       });
 
@@ -118,6 +124,7 @@ const ReportsSummary = () => {
         const schedule = scheduleMap.get(r.user_id);
         const required = netRequiredHours(schedule);
         const total = Number(r.total_hours) || 0;
+        s.netWorkingHours += total;
         if (total < required) {
           s.shortDays += 1;
           s.shortfallHoursTotal += required - total;
@@ -146,7 +153,7 @@ const ReportsSummary = () => {
 
   useEffect(() => { fetchSummary(); }, [fetchSummary]);
 
-  const clearFilters = () => { setDateFrom(""); setDateTo(""); setMonth(""); setEmployeeFilter("all"); };
+  const clearFilters = () => { setDateFrom(""); setDateTo(""); setMonthFrom(""); setMonthTo(""); setEmployeeFilter("all"); };
 
   const mine = rows.find((r) => r.userId === user?.id) || rows[0];
 
@@ -158,7 +165,7 @@ const ReportsSummary = () => {
           <CardDescription>Late arrivals, short-duration days, and approved overtime.</CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
-          <div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-5 gap-4 items-end">
+          <div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-6 gap-4 items-end">
             {isAdmin && (
               <div className="space-y-2">
                 <Label>Employee</Label>
@@ -174,16 +181,20 @@ const ReportsSummary = () => {
               </div>
             )}
             <div className="space-y-2">
-              <Label>Month</Label>
-              <Input type="month" value={month} onChange={(e) => { setMonth(e.target.value); if (e.target.value) { setDateFrom(""); setDateTo(""); } }} />
+              <Label>Month From</Label>
+              <Input type="month" value={monthFrom} onChange={(e) => { setMonthFrom(e.target.value); if (e.target.value) { setDateFrom(""); setDateTo(""); } }} />
+            </div>
+            <div className="space-y-2">
+              <Label>Month To</Label>
+              <Input type="month" value={monthTo} onChange={(e) => { setMonthTo(e.target.value); if (e.target.value) { setDateFrom(""); setDateTo(""); } }} />
             </div>
             <div className="space-y-2">
               <Label>From</Label>
-              <Input type="date" value={dateFrom} disabled={!!month} onChange={(e) => setDateFrom(e.target.value)} />
+              <Input type="date" value={dateFrom} disabled={!!monthFrom || !!monthTo} onChange={(e) => setDateFrom(e.target.value)} />
             </div>
             <div className="space-y-2">
               <Label>To</Label>
-              <Input type="date" value={dateTo} disabled={!!month} onChange={(e) => setDateTo(e.target.value)} />
+              <Input type="date" value={dateTo} disabled={!!monthFrom || !!monthTo} onChange={(e) => setDateTo(e.target.value)} />
             </div>
             <div className="flex gap-2">
               <Button onClick={fetchSummary} className="flex-1">Filter</Button>
@@ -206,11 +217,12 @@ const ReportsSummary = () => {
                     <TableHead>Total Shortfall</TableHead>
                     <TableHead>Approved OT Days</TableHead>
                     <TableHead>Total OT Hours</TableHead>
+                    <TableHead>Net Working Hour</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
                   {rows.length === 0 ? (
-                    <TableRow><TableCell colSpan={8} className="text-center text-muted-foreground">No records</TableCell></TableRow>
+                    <TableRow><TableCell colSpan={9} className="text-center text-muted-foreground">No records</TableCell></TableRow>
                   ) : rows.map((r) => (
                     <TableRow key={r.userId}>
                       <TableCell className="font-medium">{r.name}</TableCell>
@@ -221,32 +233,40 @@ const ReportsSummary = () => {
                       <TableCell>{round1(r.shortfallHoursTotal)}h</TableCell>
                       <TableCell>{r.otDays}</TableCell>
                       <TableCell>{round1(r.otHoursTotal)}h</TableCell>
+                      <TableCell>{round1(r.netWorkingHours)}h</TableCell>
                     </TableRow>
                   ))}
                 </TableBody>
               </Table>
             </div>
           ) : (
-            <div className="grid gap-4 md:grid-cols-3">
+            <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
               <Card>
                 <CardHeader className="pb-2"><CardDescription className="flex items-center gap-2"><Clock className="h-4 w-4" /> Late Arrivals</CardDescription></CardHeader>
                 <CardContent>
                   <div className="text-2xl font-bold">{mine?.lateDays ?? 0} days</div>
-                  <p className="text-xs text-muted-foreground mt-1">{humanMinutes(mine?.lateMinutesTotal ?? 0)} total, against due time</p>
+                  <p className="text-xs font-semibold text-primary mt-1">{humanMinutes(mine?.lateMinutesTotal ?? 0)} total, against due time</p>
                 </CardContent>
               </Card>
               <Card>
                 <CardHeader className="pb-2"><CardDescription className="flex items-center gap-2"><TimerOff className="h-4 w-4" /> Short Duration Days</CardDescription></CardHeader>
                 <CardContent>
                   <div className="text-2xl font-bold">{mine?.shortDays ?? 0} days</div>
-                  <p className="text-xs text-muted-foreground mt-1">{round1(mine?.shortfallHoursTotal ?? 0)}h short of due time</p>
+                  <p className="text-xs font-semibold text-primary mt-1">{round1(mine?.shortfallHoursTotal ?? 0)}h short of due time</p>
                 </CardContent>
               </Card>
               <Card>
                 <CardHeader className="pb-2"><CardDescription className="flex items-center gap-2"><Timer className="h-4 w-4" /> Approved Overtime</CardDescription></CardHeader>
                 <CardContent>
                   <div className="text-2xl font-bold">{mine?.otDays ?? 0} days</div>
-                  <p className="text-xs text-muted-foreground mt-1">{round1(mine?.otHoursTotal ?? 0)}h total overtime</p>
+                  <p className="text-xs font-semibold text-primary mt-1">{round1(mine?.otHoursTotal ?? 0)}h total overtime</p>
+                </CardContent>
+              </Card>
+              <Card>
+                <CardHeader className="pb-2"><CardDescription className="flex items-center gap-2"><Gauge className="h-4 w-4" /> Net Working Hour</CardDescription></CardHeader>
+                <CardContent>
+                  <div className="text-2xl font-bold">{round1(mine?.netWorkingHours ?? 0)}h</div>
+                  <p className="text-xs font-semibold text-primary mt-1">net hours worked in range</p>
                 </CardContent>
               </Card>
             </div>
