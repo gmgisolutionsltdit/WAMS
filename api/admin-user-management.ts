@@ -159,12 +159,16 @@ export default { async fetch(req: Request): Promise<Response> {
 
     const callerIsAdmin = await isAdmin(userData.user.id, admin);
     const callerIsManager = !callerIsAdmin && (await isManager(userData.user.id, admin));
-    if (!callerIsAdmin && !callerIsManager) {
+
+    let body: any = {};
+    try { body = await req.json(); } catch { /* no/invalid body — handled by the checks below */ }
+    const action = body.action as string;
+    const isSelfTarget = (action === "reset_password" || action === "delete_user")
+      && body.user_id === userData.user.id;
+
+    if (!callerIsAdmin && !callerIsManager && !isSelfTarget) {
       return json({ error: "Admin role required" }, 403);
     }
-
-    const body = await req.json();
-    const action = body.action as string;
 
     // Only admins create accounts or set roles.
     if ((action === "create_user" || action === "bulk_create") && !callerIsAdmin) {
@@ -172,8 +176,9 @@ export default { async fetch(req: Request): Promise<Response> {
     }
 
     // Managers may reset the password of, or delete, only their own direct
-    // reports — everything else stays admin-only.
-    if ((action === "reset_password" || action === "delete_user") && callerIsManager) {
+    // reports; anyone may do the same to their own account — everything
+    // else stays admin-only.
+    if ((action === "reset_password" || action === "delete_user") && callerIsManager && !isSelfTarget) {
       const targetUserId = body.user_id as string;
       if (!targetUserId || !(await isManagerOfEmployee(userData.user.id, targetUserId, admin))) {
         return json({ error: "You can only manage your own direct reports" }, 403);

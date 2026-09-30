@@ -161,7 +161,7 @@ const statusVariant = (s: string): "default" | "secondary" | "outline" | "destru
 const EmployeeProfile = () => {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
-  const { user, role: viewerRole } = useAuth();
+  const { user, role: viewerRole, signOut } = useAuth();
   const [profile, setProfile] = useState<Profile | null>(null);
   const [rawProfile, setRawProfile] = useState<any>(null);
   const [role, setRole] = useState<string>("employee");
@@ -185,7 +185,7 @@ const EmployeeProfile = () => {
     rawProfile.reporting_manager_id === user.id
     || (rawProfile.reporting_manager_ids || []).includes(user.id)
   );
-  const canManageThisEmployee = isAdmin || isDirectManager;
+  const canManageThisEmployee = isAdmin || isDirectManager || isSelf;
 
   useEffect(() => {
     if (!id) return;
@@ -273,8 +273,13 @@ const EmployeeProfile = () => {
         toast.error(await edgeErrorMessage(error, data, "Delete failed"), { duration: 8000 });
         return;
       }
-      toast.success("Employee deleted");
-      navigate("/employees");
+      toast.success(isSelf ? "Your account has been deleted" : "Employee deleted");
+      if (isSelf) {
+        await signOut();
+        navigate("/login");
+      } else {
+        navigate(isAdmin ? "/employees" : "/profile");
+      }
     } finally {
       setDeleting(false);
     }
@@ -387,10 +392,11 @@ const EmployeeProfile = () => {
                 </AlertDialogTrigger>
                 <AlertDialogContent>
                   <AlertDialogHeader>
-                    <AlertDialogTitle>Delete employee?</AlertDialogTitle>
+                    <AlertDialogTitle>{isSelf ? "Delete your account?" : "Delete employee?"}</AlertDialogTitle>
                     <AlertDialogDescription>
-                      This permanently removes <strong>{fmt(profile.full_name)}</strong> and their login.
-                      This cannot be undone.
+                      {isSelf
+                        ? "This permanently removes your account and login. You'll be signed out immediately. This cannot be undone."
+                        : <>This permanently removes <strong>{fmt(profile.full_name)}</strong> and their login. This cannot be undone.</>}
                     </AlertDialogDescription>
                   </AlertDialogHeader>
                   <AlertDialogFooter>
