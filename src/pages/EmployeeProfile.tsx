@@ -304,6 +304,7 @@ const EmployeeProfile = () => {
 
   // ---- Contract Documents — no local form, just an edit-lock around upload/delete ----
   const [documentsEditing, setDocumentsEditing] = useState(false);
+  const [accountActionsUnlocked, setAccountActionsUnlocked] = useState(false);
 
   const [activeTab, setActiveTab] = useState("overview");
 
@@ -369,6 +370,7 @@ const EmployeeProfile = () => {
     if (projectsEdit.editing) projectsEdit.cancelEdit();
     if (teamEdit.editing) teamEdit.cancelEdit();
     setDocumentsEditing(false);
+    setAccountActionsUnlocked(false);
   };
 
   const confirmDiscardIfNeeded = () => {
@@ -1137,13 +1139,23 @@ const EmployeeProfile = () => {
           {canManageThisEmployee && (
             <Card>
               <CardHeader>
-                <CardTitle className="text-base flex items-center gap-2"><ShieldAlert className="h-4 w-4" /> Account Actions</CardTitle>
-                <CardDescription>Reset password or permanently remove this account.</CardDescription>
+                <div className="flex items-start justify-between gap-2 flex-wrap">
+                  <div>
+                    <CardTitle className="text-base flex items-center gap-2"><ShieldAlert className="h-4 w-4" /> Account Actions</CardTitle>
+                    <CardDescription>Reset password or permanently remove this account.</CardDescription>
+                  </div>
+                  <Button
+                    size="sm" variant="outline"
+                    onClick={() => setAccountActionsUnlocked((v) => !v)}
+                  >
+                    {accountActionsUnlocked ? "Lock" : (<><Pencil className="h-4 w-4 mr-1" /> Edit</>)}
+                  </Button>
+                </div>
               </CardHeader>
               <CardContent className="flex flex-wrap items-center gap-2">
                 <AlertDialog>
                   <AlertDialogTrigger asChild>
-                    <Button size="sm" variant="outline" disabled={!overviewAnyEditing}>
+                    <Button size="sm" variant="outline" disabled={!accountActionsUnlocked}>
                       <KeyRound className="h-4 w-4 mr-1" /> Reset Password
                     </Button>
                   </AlertDialogTrigger>
@@ -1163,7 +1175,7 @@ const EmployeeProfile = () => {
                 </AlertDialog>
                 <AlertDialog>
                   <AlertDialogTrigger asChild>
-                    <Button size="sm" variant="outline" disabled={!overviewAnyEditing}>
+                    <Button size="sm" variant="outline" disabled={!accountActionsUnlocked}>
                       <Trash2 className="h-4 w-4 mr-1 text-destructive" /> Delete
                     </Button>
                   </AlertDialogTrigger>
