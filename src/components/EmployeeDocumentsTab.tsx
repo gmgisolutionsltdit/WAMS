@@ -44,9 +44,11 @@ const humanSize = (bytes: number | null) => {
 interface Props {
   userId: string;
   canManage: boolean;
+  editing: boolean;
 }
 
-export const EmployeeDocumentsTab = ({ userId, canManage }: Props) => {
+export const EmployeeDocumentsTab = ({ userId, canManage, editing }: Props) => {
+  const canEdit = canManage && editing;
   const [docs, setDocs] = useState<DocRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [uploadingKey, setUploadingKey] = useState<string | null>(null);
@@ -142,7 +144,7 @@ export const EmployeeDocumentsTab = ({ userId, canManage }: Props) => {
                     <Button
                       size="sm"
                       variant="outline"
-                      disabled={uploadingKey === cat.key}
+                      disabled={!canEdit || uploadingKey === cat.key}
                       onClick={() => inputRefs.current[cat.key]?.click()}
                     >
                       <Upload className="h-4 w-4 mr-1" />
@@ -175,7 +177,7 @@ export const EmployeeDocumentsTab = ({ userId, canManage }: Props) => {
                           <Download className="h-4 w-4" />
                         </Button>
                         {canManage && (
-                          <Button size="icon" variant="ghost" title="Delete" onClick={() => handleDelete(doc)}>
+                          <Button size="icon" variant="ghost" title="Delete" disabled={!canEdit} onClick={() => handleDelete(doc)}>
                             <Trash2 className="h-4 w-4 text-destructive" />
                           </Button>
                         )}

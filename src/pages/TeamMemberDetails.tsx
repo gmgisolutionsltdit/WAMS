@@ -1,9 +1,9 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { format } from "date-fns";
 import { IdCard } from "lucide-react";
+import { useRealtimeSubscription } from "@/hooks/useRealtimeSubscription";
 
 type DirectoryRow = {
   id: string;
@@ -13,84 +13,29 @@ type DirectoryRow = {
   official_gmail: string | null;
   official_onedrive: string | null;
   phone: string | null;
-  date_of_birth: string | null;
-  national_id: string | null;
-  passport_number: string | null;
-  birth_reg_number: string | null;
-  blood_group: string | null;
-  religion: string | null;
-  father_name: string | null;
-  mother_name: string | null;
-  marital_status: string | null;
-  spouse_name: string | null;
-  children_count: number | null;
-  ongoing_education: string | null;
-  present_address: string | null;
-  permanent_address: string | null;
-  emergency_contact_name: string | null;
-  emergency_contact_phone: string | null;
-  emergency_contact_relationship: string | null;
-  bank_account_name: string | null;
-  bank_account_number: string | null;
-  bank_name: string | null;
-  bank_branch: string | null;
-  bank_swift_code: string | null;
-  bank_routing_number: string | null;
 };
 
-const COLUMNS: { key: keyof DirectoryRow; label: string; date?: boolean }[] = [
-  { key: "full_name", label: "Employee Name" },
-  { key: "designation", label: "Designation" },
-  { key: "personal_email", label: "Personal Email" },
-  { key: "official_gmail", label: "Official Gmail" },
-  { key: "official_onedrive", label: "Official OneDrive" },
-  { key: "phone", label: "Phone Number" },
-  { key: "date_of_birth", label: "Date of Birth", date: true },
-  { key: "national_id", label: "National ID Number" },
-  { key: "passport_number", label: "Passport Number" },
-  { key: "birth_reg_number", label: "Birth Registration Number" },
-  { key: "blood_group", label: "Blood Group" },
-  { key: "religion", label: "Religion" },
-  { key: "father_name", label: "Father's Name" },
-  { key: "mother_name", label: "Mother's Name" },
-  { key: "marital_status", label: "Marital Status" },
-  { key: "spouse_name", label: "Spouse's Name" },
-  { key: "children_count", label: "Number of Children" },
-  { key: "ongoing_education", label: "Ongoing Education / Studies" },
-  { key: "present_address", label: "Present Address" },
-  { key: "permanent_address", label: "Permanent Address" },
-  { key: "emergency_contact_name", label: "Emergency Contact Name" },
-  { key: "emergency_contact_phone", label: "Emergency Contact Mobile" },
-  { key: "emergency_contact_relationship", label: "Emergency Contact Relationship" },
-  { key: "bank_account_name", label: "Bank Account Name" },
-  { key: "bank_account_number", label: "Bank Account Number" },
-  { key: "bank_name", label: "Bank Name" },
-  { key: "bank_branch", label: "Bank Branch" },
-  { key: "bank_swift_code", label: "SWIFT Code" },
-  { key: "bank_routing_number", label: "Routing Number" },
-];
-
-const fmt = (v: unknown) => (v === null || v === undefined || v === "" ? "—" : String(v));
+const fmt = (v: string | null) => (v && v.trim() ? v : "—");
 
 /**
- * Read-only, company-wide directory — every field from the Personal Info
- * tab, for every employee/manager/admin, laid out row-per-person /
- * column-per-field like a spreadsheet export. No filters. Editing happens
- * on each person's own Personal Info tab (self, or an admin editing
- * anyone); this page only displays the result, the same for every viewer.
+ * Read-only, company-wide directory — name, designation and contact details
+ * for every employee/manager/admin. Data is read live from each person's own
+ * profile (via team_member_directory(), since profiles RLS only lets a
+ * viewer see themselves or their management chain) — no duplicate copy is
+ * kept, so saving on the Personal Info tab is reflected here automatically.
  */
 const TeamMemberDetails = () => {
   const [rows, setRows] = useState<DirectoryRow[]>([]);
   const [loading, setLoading] = useState(true);
 
-  useEffect(() => {
-    (async () => {
-      setLoading(true);
-      const { data } = await supabase.rpc("team_member_directory");
-      setRows((data || []) as DirectoryRow[]);
-      setLoading(false);
-    })();
+  const fetchDirectory = useCallback(async () => {
+    const { data } = await supabase.rpc("team_member_directory");
+    setRows((data || []) as DirectoryRow[]);
+    setLoading(false);
   }, []);
+
+  useEffect(() => { fetchDirectory(); }, [fetchDirectory]);
+  useRealtimeSubscription("profiles", fetchDirectory, "team-member-details");
 
   return (
     <div className="space-y-4">
@@ -98,8 +43,8 @@ const TeamMemberDetails = () => {
         <CardHeader>
           <CardTitle className="flex items-center gap-2"><IdCard className="h-5 w-5" /> Team Member Details</CardTitle>
           <CardDescription>
-            Full personal information for every employee, manager and admin. Read-only — each person's own
-            Personal Info tab (or an admin, for anyone) is where this is edited.
+            Name, designation and contact details for every employee, manager and admin. Read-only —
+            each person's own Personal Info tab (or an admin, for anyone) is where this is edited.
           </CardDescription>
         </CardHeader>
         <CardContent>
@@ -113,20 +58,24 @@ const TeamMemberDetails = () => {
                 <TableHeader>
                   <TableRow>
                     <TableHead className="w-12">SL. No.</TableHead>
-                    {COLUMNS.map((c) => (
-                      <TableHead key={c.key} className="whitespace-nowrap">{c.label}</TableHead>
-                    ))}
+                    <TableHead>Employee Name</TableHead>
+                    <TableHead>Designation</TableHead>
+                    <TableHead>Personal Email</TableHead>
+                    <TableHead>Official Gmail</TableHead>
+                    <TableHead>Official OneDrive</TableHead>
+                    <TableHead>Phone Number</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
                   {rows.map((r, i) => (
                     <TableRow key={r.id}>
                       <TableCell>{i + 1}</TableCell>
-                      {COLUMNS.map((c) => (
-                        <TableCell key={c.key} className="whitespace-nowrap">
-                          {c.date && r[c.key] ? format(new Date(r[c.key] as string), "MMM d, yyyy") : fmt(r[c.key])}
-                        </TableCell>
-                      ))}
+                      <TableCell className="font-medium">{fmt(r.full_name)}</TableCell>
+                      <TableCell>{fmt(r.designation)}</TableCell>
+                      <TableCell>{fmt(r.personal_email)}</TableCell>
+                      <TableCell>{fmt(r.official_gmail)}</TableCell>
+                      <TableCell>{fmt(r.official_onedrive)}</TableCell>
+                      <TableCell>{fmt(r.phone)}</TableCell>
                     </TableRow>
                   ))}
                 </TableBody>
