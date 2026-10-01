@@ -275,6 +275,7 @@ const EmployeeProfile = () => {
   const [savingOverview, setSavingOverview] = useState(false);
   const [managers, setManagers] = useState<{ id: string; full_name: string | null; email: string | null }[]>([]);
   const [wings, setWings] = useState<WingRow[]>([]);
+  const [wingDesignations, setWingDesignations] = useState<{ id: string; wing_id: string; title: string }[]>([]);
   const [overviewForm, setOverviewForm] = useState({
     full_name: "", phone: "", department: "", designation: "",
     photo_url: "", wing_id: "", company_wing: "GMGI",
@@ -306,9 +307,32 @@ const EmployeeProfile = () => {
 
   const [activeTab, setActiveTab] = useState("overview");
 
-  const overviewEdit = useSectionEdit(overviewForm, setOverviewForm);
   const projectsEdit = useSectionEdit(selectedProjectIds, setSelectedProjectIds);
   const teamEdit = useSectionEdit(leaveTypes, setLeaveTypes);
+
+  // Overview: independent fields each get their own pencil; Role+Reporting To
+  // and Wing+Designation are linked parent->child pairs and share one pencil
+  // each. All of them save through the existing saveOverview() whole-form
+  // write — nothing here changes what gets persisted or how.
+  const overviewFieldEdit = useFieldEdit(overviewForm, setOverviewForm, async () => saveOverview());
+  const roleGroupEdit = useSectionEdit(
+    { role: overviewForm.role, reporting_manager_ids: overviewForm.reporting_manager_ids },
+    (v) => setOverviewForm((f) => ({ ...f, role: v.role, reporting_manager_ids: v.reporting_manager_ids })),
+  );
+  const wingGroupEdit = useSectionEdit(
+    { wing_id: overviewForm.wing_id, company_wing: overviewForm.company_wing, designation: overviewForm.designation },
+    (v) => setOverviewForm((f) => ({ ...f, wing_id: v.wing_id, company_wing: v.company_wing, designation: v.designation })),
+  );
+  const overviewAnyEditing = overviewFieldEdit.hasEditing || roleGroupEdit.editing || wingGroupEdit.editing;
+  const saveAllOverview = async () => {
+    if (!overviewAnyEditing) return;
+    const ok = await saveOverview();
+    if (ok) {
+      overviewFieldEdit.stopAll();
+      if (roleGroupEdit.editing) roleGroupEdit.stopEditing();
+      if (wingGroupEdit.editing) wingGroupEdit.stopEditing();
+    }
+  };
 
   const personalFieldEdit = useFieldEdit(personalForm, setPersonalForm, async (key, current) => {
     if (!id || !(isSelf || isAdmin)) return false;
@@ -332,11 +356,14 @@ const EmployeeProfile = () => {
   });
 
   const hasUnsavedChanges = () =>
-    overviewEdit.hasChanges || personalFieldEdit.hasEditing || financialFieldEdit.hasEditing
+    overviewFieldEdit.hasEditing || roleGroupEdit.hasChanges || wingGroupEdit.hasChanges
+    || personalFieldEdit.hasEditing || financialFieldEdit.hasEditing
     || projectsEdit.hasChanges || teamEdit.hasChanges || documentsEditing;
 
   const discardAllEdits = () => {
-    if (overviewEdit.editing) overviewEdit.cancelEdit();
+    overviewFieldEdit.cancelAll();
+    if (roleGroupEdit.editing) roleGroupEdit.cancelEdit();
+    if (wingGroupEdit.editing) wingGroupEdit.cancelEdit();
     personalFieldEdit.cancelAll();
     financialFieldEdit.cancelAll();
     if (projectsEdit.editing) projectsEdit.cancelEdit();
@@ -425,12 +452,13 @@ const EmployeeProfile = () => {
   useEffect(() => {
     if (!canManageThisEmployee || !id) return;
     (async () => {
-      const [{ data: mgrs }, { data: wingRows }, { data: projectRows }, { data: memberRows }, { data: leaveTypeRows }] = await Promise.all([
+      const [{ data: mgrs }, { data: wingRows }, { data: projectRows }, { data: memberRows }, { data: leaveTypeRows }, { data: designationRows }] = await Promise.all([
         supabase.rpc("manager_candidates"),
         supabase.from("company_wings").select("id, name, code, active").order("name", { ascending: true }),
         supabase.from("projects").select("id, name, key").eq("archived", false).order("name", { ascending: true }),
         supabase.from("project_members").select("project_id").eq("user_id", id),
         supabase.from("leave_types").select("*").order("name"),
+        supabase.from("wing_designations").select("id, wing_id, title").order("position", { ascending: true }),
       ]);
       setManagers(mgrs || []);
       setWings((wingRows || []) as WingRow[]);
@@ -439,6 +467,7 @@ const EmployeeProfile = () => {
       setMemberProjectIds(ids);
       setSelectedProjectIds(ids);
       setLeaveTypes((leaveTypeRows || []) as LeaveType[]);
+      setWingDesignations((designationRows || []) as { id: string; wing_id: string; title: string }[]);
     })();
   }, [canManageThisEmployee, id]);
 
@@ -698,17 +727,14 @@ const EmployeeProfile = () => {
                 <div className="flex items-start justify-between gap-2 flex-wrap">
                   <div>
                     <CardTitle className="text-base flex items-center gap-2"><Pencil className="h-4 w-4" /> Edit Profile</CardTitle>
-                    <CardDescription>Basic info, role &amp; reporting, and work schedule.</CardDescription>
+                    <CardDescription>Basic info, role &amp; reporting, and work schedule. Each field has its own pencil; Role+Reporting To and Wing+Designation edit together.</CardDescription>
                   </div>
-                  <EditSaveCancel
-                    section={overviewEdit}
-                    saving={savingOverview}
-                    onSave={async () => { if (await saveOverview()) overviewEdit.stopEditing(); }}
-                  />
+                  <Button size="sm" onClick={saveAllOverview} disabled={!overviewAnyEditing || savingOverview}>
+                    {savingOverview ? "Saving..." : "Save All"}
+                  </Button>
                 </div>
               </CardHeader>
               <CardContent className="space-y-5">
-                <fieldset disabled={!overviewEdit.editing} className="space-y-5 disabled:opacity-60">
                 <div className="flex items-center gap-4">
                   <Avatar className="h-16 w-16">
                     <AvatarImage src={overviewForm.photo_url || undefined} />
@@ -722,7 +748,7 @@ const EmployeeProfile = () => {
                       className="hidden"
                       onChange={(e) => { const f = e.target.files?.[0]; if (f) handlePhotoSelect(f); }}
                     />
-                    <Button size="sm" variant="outline" disabled={!overviewEdit.editing || uploadingPhoto}
+                    <Button size="sm" variant="outline" disabled={!overviewAnyEditing || uploadingPhoto}
                       onClick={() => document.getElementById("profile-photo-input")?.click()}>
                       <Camera className="mr-1 h-4 w-4" />
                       {uploadingPhoto ? "Uploading…" : "Upload Photo"}
@@ -732,131 +758,308 @@ const EmployeeProfile = () => {
                 </div>
 
                 <div className="grid gap-3 md:grid-cols-2">
-                  <div><Label>Full Name *</Label><Input value={overviewForm.full_name} onChange={(e) => setOverviewForm((f) => ({ ...f, full_name: e.target.value }))} /></div>
-                  <div><Label>Email</Label><Input type="email" value={profile.email || ""} disabled /></div>
-                  <div><Label>Phone</Label><Input value={overviewForm.phone} onChange={(e) => setOverviewForm((f) => ({ ...f, phone: e.target.value }))} /></div>
-                  <div><Label>Department</Label><Input value={overviewForm.department} onChange={(e) => setOverviewForm((f) => ({ ...f, department: e.target.value }))} /></div>
-                  <div><Label>Designation</Label><Input value={overviewForm.designation} onChange={(e) => setOverviewForm((f) => ({ ...f, designation: e.target.value }))} /></div>
-                  <div>
-                    <Label>Wing</Label>
-                    <Select value={overviewForm.wing_id || "none"} onValueChange={(v) => setOverviewForm((f) => ({ ...f, wing_id: v === "none" ? "" : v }))} disabled={!overviewEdit.editing}>
-                      <SelectTrigger><SelectValue placeholder="Select wing" /></SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="none">Unassigned</SelectItem>
-                        {activeWings.map((w) => <SelectItem key={w.id} value={w.id}>{w.name}</SelectItem>)}
-                      </SelectContent>
-                    </Select>
+                  <FieldEdit
+                    label="Full Name *"
+                    editing={overviewFieldEdit.isEditing("full_name")} saving={overviewFieldEdit.isSaving("full_name")}
+                    onStart={() => overviewFieldEdit.startEdit("full_name")} onSave={() => overviewFieldEdit.saveEdit("full_name")} onCancel={() => overviewFieldEdit.cancelEdit("full_name")}
+                    display={fmt(profile.full_name)}
+                  >
+                    <Input value={overviewForm.full_name} onChange={(e) => setOverviewForm((f) => ({ ...f, full_name: e.target.value }))} />
+                  </FieldEdit>
+                  <div><Label className="text-xs">Email</Label><Input type="email" value={profile.email || ""} disabled className="mt-1" /></div>
+                  <FieldEdit
+                    label="Phone"
+                    editing={overviewFieldEdit.isEditing("phone")} saving={overviewFieldEdit.isSaving("phone")}
+                    onStart={() => overviewFieldEdit.startEdit("phone")} onSave={() => overviewFieldEdit.saveEdit("phone")} onCancel={() => overviewFieldEdit.cancelEdit("phone")}
+                    display={fmt(profile.phone)}
+                  >
+                    <Input value={overviewForm.phone} onChange={(e) => setOverviewForm((f) => ({ ...f, phone: e.target.value }))} />
+                  </FieldEdit>
+                  <FieldEdit
+                    label="Department"
+                    editing={overviewFieldEdit.isEditing("department")} saving={overviewFieldEdit.isSaving("department")}
+                    onStart={() => overviewFieldEdit.startEdit("department")} onSave={() => overviewFieldEdit.saveEdit("department")} onCancel={() => overviewFieldEdit.cancelEdit("department")}
+                    display={fmt(profile.department)}
+                  >
+                    <Input value={overviewForm.department} onChange={(e) => setOverviewForm((f) => ({ ...f, department: e.target.value }))} />
+                  </FieldEdit>
+
+                  <div className="md:col-span-2">
+                    <div className="flex items-center justify-between gap-2">
+                      <Label className="text-xs">Wing &amp; Designation</Label>
+                      {!wingGroupEdit.editing && (
+                        <Button type="button" size="icon" variant="ghost" className="h-5 w-5" onClick={wingGroupEdit.startEdit} aria-label="Edit Wing and Designation">
+                          <Pencil className="h-3 w-3" />
+                        </Button>
+                      )}
+                    </div>
+                    <fieldset disabled={!wingGroupEdit.editing} className="grid gap-3 md:grid-cols-2 mt-1 disabled:opacity-60">
+                      <div>
+                        <Label className="text-xs">Wing</Label>
+                        <Select
+                          value={overviewForm.wing_id || "none"}
+                          onValueChange={(v) => {
+                            const wingId = v === "none" ? "" : v;
+                            const selectedWing = wings.find((w) => w.id === wingId);
+                            const validTitles = wingDesignations.filter((d) => d.wing_id === wingId).map((d) => d.title);
+                            setOverviewForm((f) => ({
+                              ...f,
+                              wing_id: wingId,
+                              company_wing: selectedWing?.name || f.company_wing,
+                              // Only clear Designation when the new wing has its own
+                              // defined list and the current value isn't in it — a
+                              // wing with no defined designations yet (true for all
+                              // of them today) leaves Designation as free text below,
+                              // untouched.
+                              designation: validTitles.length === 0 || validTitles.includes(f.designation) ? f.designation : "",
+                            }));
+                          }}
+                        >
+                          <SelectTrigger><SelectValue placeholder="Select wing" /></SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="none">Unassigned</SelectItem>
+                            {activeWings.map((w) => <SelectItem key={w.id} value={w.id}>{w.name}</SelectItem>)}
+                          </SelectContent>
+                        </Select>
+                      </div>
+                      <div>
+                        <Label className="text-xs">Designation</Label>
+                        {(() => {
+                          const designationOptions = wingDesignations.filter((d) => d.wing_id === overviewForm.wing_id);
+                          return designationOptions.length > 0 ? (
+                            <Select
+                              value={overviewForm.designation || ""}
+                              onValueChange={(v) => setOverviewForm((f) => ({ ...f, designation: v }))}
+                            >
+                              <SelectTrigger><SelectValue placeholder="Select designation" /></SelectTrigger>
+                              <SelectContent>
+                                {designationOptions.map((d) => (
+                                  <SelectItem key={d.id} value={d.title}>{d.title}</SelectItem>
+                                ))}
+                              </SelectContent>
+                            </Select>
+                          ) : (
+                            <Input value={overviewForm.designation} onChange={(e) => setOverviewForm((f) => ({ ...f, designation: e.target.value }))} />
+                          );
+                        })()}
+                      </div>
+                    </fieldset>
+                    {wingGroupEdit.editing && (
+                      <div className="flex gap-1.5 mt-2">
+                        <Button type="button" size="sm" onClick={async () => { if (await saveOverview()) wingGroupEdit.stopEditing(); }}>
+                          {savingOverview ? "Saving..." : "Save"}
+                        </Button>
+                        <Button type="button" size="sm" variant="outline" onClick={wingGroupEdit.cancelEdit}>Cancel</Button>
+                      </div>
+                    )}
                   </div>
                 </div>
 
                 <div className="grid gap-3 md:grid-cols-2">
-                  <div>
-                    <Label>Role</Label>
-                    <Select value={overviewForm.role} onValueChange={(v) => setOverviewForm((f) => ({ ...f, role: v }))} disabled={!overviewEdit.editing || !isAdmin}>
-                      <SelectTrigger><SelectValue /></SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="admin">Admin</SelectItem>
-                        <SelectItem value="manager">Manager / Reporting Boss</SelectItem>
-                        <SelectItem value="employee">Employee</SelectItem>
-                      </SelectContent>
-                    </Select>
-                  </div>
-                  <div>
-                    <Label>Reporting To <span className="text-xs text-muted-foreground">(admin only)</span></Label>
-                    <div className="rounded-md border p-2 max-h-32 overflow-y-auto space-y-1">
-                      {managers.filter((m) => m.id !== id).length === 0 ? (
-                        <p className="text-xs text-muted-foreground px-1">No managers/admins available</p>
-                      ) : managers.filter((m) => m.id !== id).map((m) => (
-                        <label key={m.id} className="flex items-center gap-2 text-sm px-1 py-0.5">
-                          <Checkbox
-                            disabled={!overviewEdit.editing || !isAdmin}
-                            checked={overviewForm.reporting_manager_ids.includes(m.id)}
-                            onCheckedChange={() =>
-                              setOverviewForm((f) => ({
-                                ...f,
-                                reporting_manager_ids: f.reporting_manager_ids.includes(m.id)
-                                  ? f.reporting_manager_ids.filter((x) => x !== m.id)
-                                  : [...f.reporting_manager_ids, m.id],
-                              }))
-                            }
-                          />
-                          {m.full_name || m.email}
-                        </label>
-                      ))}
+                  {
+                    <div className="md:col-span-2">
+                      <div className="flex items-center justify-between gap-2">
+                        <Label className="text-xs">Role &amp; Reporting To {!isAdmin && <span className="text-muted-foreground">(admin only)</span>}</Label>
+                        {isAdmin && !roleGroupEdit.editing && (
+                          <Button type="button" size="icon" variant="ghost" className="h-5 w-5" onClick={roleGroupEdit.startEdit} aria-label="Edit Role and Reporting To">
+                            <Pencil className="h-3 w-3" />
+                          </Button>
+                        )}
+                      </div>
+                      <fieldset disabled={!isAdmin || !roleGroupEdit.editing} className="grid gap-3 md:grid-cols-2 mt-1 disabled:opacity-60">
+                        <div>
+                          <Label className="text-xs">Role</Label>
+                          <Select
+                            value={overviewForm.role}
+                            onValueChange={(v) => setOverviewForm((f) => ({ ...f, role: v, reporting_manager_ids: v === "admin" ? [] : f.reporting_manager_ids }))}
+                          >
+                            <SelectTrigger><SelectValue /></SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value="admin">Admin</SelectItem>
+                              <SelectItem value="manager">Manager / Reporting Boss</SelectItem>
+                              <SelectItem value="employee">Employee</SelectItem>
+                            </SelectContent>
+                          </Select>
+                        </div>
+                        <div>
+                          <Label className="text-xs">Reporting To</Label>
+                          {overviewForm.role === "admin" ? (
+                            <p className="text-xs text-muted-foreground rounded-md border p-2">Admins have no reporting manager.</p>
+                          ) : (
+                            <div className="rounded-md border p-2 max-h-32 overflow-y-auto space-y-1">
+                              {managers.filter((m) => m.id !== id).length === 0 ? (
+                                <p className="text-xs text-muted-foreground px-1">No managers/admins available</p>
+                              ) : managers.filter((m) => m.id !== id).map((m) => (
+                                <label key={m.id} className="flex items-center gap-2 text-sm px-1 py-0.5">
+                                  <Checkbox
+                                    checked={overviewForm.reporting_manager_ids.includes(m.id)}
+                                    onCheckedChange={() =>
+                                      setOverviewForm((f) => ({
+                                        ...f,
+                                        reporting_manager_ids: f.reporting_manager_ids.includes(m.id)
+                                          ? f.reporting_manager_ids.filter((x) => x !== m.id)
+                                          : [...f.reporting_manager_ids, m.id],
+                                      }))
+                                    }
+                                  />
+                                  {m.full_name || m.email}
+                                </label>
+                              ))}
+                            </div>
+                          )}
+                        </div>
+                      </fieldset>
+                      {roleGroupEdit.editing && (
+                        <div className="flex gap-1.5 mt-2">
+                          <Button type="button" size="sm" onClick={async () => { if (await saveOverview()) roleGroupEdit.stopEditing(); }}>
+                            {savingOverview ? "Saving..." : "Save"}
+                          </Button>
+                          <Button type="button" size="sm" variant="outline" onClick={roleGroupEdit.cancelEdit}>Cancel</Button>
+                        </div>
+                      )}
                     </div>
-                  </div>
-                  <div>
-                    <Label>Service Status</Label>
-                    <Select value={overviewForm.service_status} onValueChange={(v) => setOverviewForm((f) => ({ ...f, service_status: v }))} disabled={!overviewEdit.editing}>
+                  }
+                  <FieldEdit
+                    label="Service Status"
+                    editing={overviewFieldEdit.isEditing("service_status")} saving={overviewFieldEdit.isSaving("service_status")}
+                    onStart={() => overviewFieldEdit.startEdit("service_status")} onSave={() => overviewFieldEdit.saveEdit("service_status")} onCancel={() => overviewFieldEdit.cancelEdit("service_status")}
+                    display={fmt(profile.service_status)}
+                  >
+                    <Select value={overviewForm.service_status} onValueChange={(v) => setOverviewForm((f) => ({ ...f, service_status: v }))}>
                       <SelectTrigger><SelectValue /></SelectTrigger>
                       <SelectContent>{SERVICE_STATUS.map((s) => <SelectItem key={s} value={s}>{s}</SelectItem>)}</SelectContent>
                     </Select>
-                  </div>
-                  <div>
-                    <Label>Employee Status</Label>
-                    <Select value={overviewForm.employee_status} onValueChange={(v) => setOverviewForm((f) => ({ ...f, employee_status: v }))} disabled={!overviewEdit.editing}>
+                  </FieldEdit>
+                  <FieldEdit
+                    label="Employee Status"
+                    editing={overviewFieldEdit.isEditing("employee_status")} saving={overviewFieldEdit.isSaving("employee_status")}
+                    onStart={() => overviewFieldEdit.startEdit("employee_status")} onSave={() => overviewFieldEdit.saveEdit("employee_status")} onCancel={() => overviewFieldEdit.cancelEdit("employee_status")}
+                    display={fmt(profile.employee_status)}
+                  >
+                    <Select value={overviewForm.employee_status} onValueChange={(v) => setOverviewForm((f) => ({ ...f, employee_status: v }))}>
                       <SelectTrigger><SelectValue /></SelectTrigger>
                       <SelectContent>{EMPLOYEE_STATUS.map((s) => <SelectItem key={s} value={s}>{s}</SelectItem>)}</SelectContent>
                     </Select>
-                  </div>
-                  <div><Label>Joining Date</Label><Input type="date" value={overviewForm.joining_date} onChange={(e) => setOverviewForm((f) => ({ ...f, joining_date: e.target.value }))} /></div>
-                  <div><Label>Promotion Date</Label><Input type="date" value={overviewForm.promotion_date} onChange={(e) => setOverviewForm((f) => ({ ...f, promotion_date: e.target.value }))} /></div>
-                  <div><Label>Resign Date</Label><Input type="date" value={overviewForm.resign_date} onChange={(e) => setOverviewForm((f) => ({ ...f, resign_date: e.target.value }))} /></div>
-                  <div><Label>Daily OT Cap (hrs)</Label><Input type="number" step="0.5" value={overviewForm.daily_ot_cap} onChange={(e) => setOverviewForm((f) => ({ ...f, daily_ot_cap: e.target.value }))} /></div>
-                  <div><Label>Monthly OT Cap (hrs)</Label><Input type="number" step="1" value={overviewForm.monthly_ot_cap} onChange={(e) => setOverviewForm((f) => ({ ...f, monthly_ot_cap: e.target.value }))} /></div>
+                  </FieldEdit>
+                  <FieldEdit
+                    label="Joining Date"
+                    editing={overviewFieldEdit.isEditing("joining_date")} saving={overviewFieldEdit.isSaving("joining_date")}
+                    onStart={() => overviewFieldEdit.startEdit("joining_date")} onSave={() => overviewFieldEdit.saveEdit("joining_date")} onCancel={() => overviewFieldEdit.cancelEdit("joining_date")}
+                    display={fmtDate(profile.joining_date)}
+                  >
+                    <Input type="date" value={overviewForm.joining_date} onChange={(e) => setOverviewForm((f) => ({ ...f, joining_date: e.target.value }))} />
+                  </FieldEdit>
+                  <FieldEdit
+                    label="Promotion Date"
+                    editing={overviewFieldEdit.isEditing("promotion_date")} saving={overviewFieldEdit.isSaving("promotion_date")}
+                    onStart={() => overviewFieldEdit.startEdit("promotion_date")} onSave={() => overviewFieldEdit.saveEdit("promotion_date")} onCancel={() => overviewFieldEdit.cancelEdit("promotion_date")}
+                    display={fmtDate(profile.promotion_date)}
+                  >
+                    <Input type="date" value={overviewForm.promotion_date} onChange={(e) => setOverviewForm((f) => ({ ...f, promotion_date: e.target.value }))} />
+                  </FieldEdit>
+                  <FieldEdit
+                    label="Resign Date"
+                    editing={overviewFieldEdit.isEditing("resign_date")} saving={overviewFieldEdit.isSaving("resign_date")}
+                    onStart={() => overviewFieldEdit.startEdit("resign_date")} onSave={() => overviewFieldEdit.saveEdit("resign_date")} onCancel={() => overviewFieldEdit.cancelEdit("resign_date")}
+                    display={fmtDate(profile.resign_date)}
+                  >
+                    <Input type="date" value={overviewForm.resign_date} onChange={(e) => setOverviewForm((f) => ({ ...f, resign_date: e.target.value }))} />
+                  </FieldEdit>
+                  <FieldEdit
+                    label="Daily OT Cap (hrs)"
+                    editing={overviewFieldEdit.isEditing("daily_ot_cap")} saving={overviewFieldEdit.isSaving("daily_ot_cap")}
+                    onStart={() => overviewFieldEdit.startEdit("daily_ot_cap")} onSave={() => overviewFieldEdit.saveEdit("daily_ot_cap")} onCancel={() => overviewFieldEdit.cancelEdit("daily_ot_cap")}
+                    display={fmt(profile.daily_ot_cap != null ? String(profile.daily_ot_cap) : null)}
+                  >
+                    <Input type="number" step="0.5" value={overviewForm.daily_ot_cap} onChange={(e) => setOverviewForm((f) => ({ ...f, daily_ot_cap: e.target.value }))} />
+                  </FieldEdit>
+                  <FieldEdit
+                    label="Monthly OT Cap (hrs)"
+                    editing={overviewFieldEdit.isEditing("monthly_ot_cap")} saving={overviewFieldEdit.isSaving("monthly_ot_cap")}
+                    onStart={() => overviewFieldEdit.startEdit("monthly_ot_cap")} onSave={() => overviewFieldEdit.saveEdit("monthly_ot_cap")} onCancel={() => overviewFieldEdit.cancelEdit("monthly_ot_cap")}
+                    display={fmt(profile.monthly_ot_cap != null ? String(profile.monthly_ot_cap) : null)}
+                  >
+                    <Input type="number" step="1" value={overviewForm.monthly_ot_cap} onChange={(e) => setOverviewForm((f) => ({ ...f, monthly_ot_cap: e.target.value }))} />
+                  </FieldEdit>
                 </div>
 
-                <div className="rounded-md border p-3 bg-muted/30">
-                  <Label className="text-sm font-semibold flex items-center gap-2"><Clock3 className="h-4 w-4" /> Office Hours &amp; Work Schedule</Label>
-                  <p className="text-xs text-muted-foreground mt-1 mb-3">
-                    Attendance, late arrival, due time, overtime and leave are all calculated against these values.
-                  </p>
+                <div className="rounded-md border p-3 bg-muted/30 space-y-3">
+                  <div>
+                    <Label className="text-sm font-semibold flex items-center gap-2"><Clock3 className="h-4 w-4" /> Office Hours &amp; Work Schedule</Label>
+                    <p className="text-xs text-muted-foreground mt-1">
+                      Attendance, late arrival, due time, overtime and leave are all calculated against these values.
+                    </p>
+                  </div>
                   <div className="grid gap-3 md:grid-cols-2">
-                    <div>
-                      <Label>Office Start</Label>
+                    <FieldEdit
+                      label="Office Start"
+                      editing={overviewFieldEdit.isEditing("office_start_time")} saving={overviewFieldEdit.isSaving("office_start_time")}
+                      onStart={() => overviewFieldEdit.startEdit("office_start_time")} onSave={() => overviewFieldEdit.saveEdit("office_start_time")} onCancel={() => overviewFieldEdit.cancelEdit("office_start_time")}
+                      display={fmt(profile.office_start_time)}
+                    >
                       <Input type="time" value={overviewForm.office_start_time} onChange={(e) => setOverviewForm((f) => ({ ...f, office_start_time: e.target.value }))} />
-                    </div>
-                    <div>
-                      <Label>Office End</Label>
+                    </FieldEdit>
+                    <FieldEdit
+                      label="Office End"
+                      editing={overviewFieldEdit.isEditing("office_end_time")} saving={overviewFieldEdit.isSaving("office_end_time")}
+                      onStart={() => overviewFieldEdit.startEdit("office_end_time")} onSave={() => overviewFieldEdit.saveEdit("office_end_time")} onCancel={() => overviewFieldEdit.cancelEdit("office_end_time")}
+                      display={fmt(profile.office_end_time)}
+                    >
                       <Input type="time" value={overviewForm.office_end_time} onChange={(e) => setOverviewForm((f) => ({ ...f, office_end_time: e.target.value }))} />
-                    </div>
-                    <div>
-                      <Label>Standard Shift Hours</Label>
+                    </FieldEdit>
+                    <FieldEdit
+                      label="Standard Shift Hours"
+                      editing={overviewFieldEdit.isEditing("standard_daily_hours")} saving={overviewFieldEdit.isSaving("standard_daily_hours")}
+                      onStart={() => overviewFieldEdit.startEdit("standard_daily_hours")} onSave={() => overviewFieldEdit.saveEdit("standard_daily_hours")} onCancel={() => overviewFieldEdit.cancelEdit("standard_daily_hours")}
+                      display={fmt(profile.standard_daily_hours != null ? String(profile.standard_daily_hours) : null)}
+                    >
                       <Input type="number" step="0.5" min="0.5" max="24" value={overviewForm.standard_daily_hours} onChange={(e) => setOverviewForm((f) => ({ ...f, standard_daily_hours: e.target.value }))} />
-                    </div>
-                    <div>
-                      <Label>Daily Break Allowance (minutes)</Label>
+                    </FieldEdit>
+                    <FieldEdit
+                      label="Daily Break Allowance (minutes)"
+                      editing={overviewFieldEdit.isEditing("unpaid_break_minutes")} saving={overviewFieldEdit.isSaving("unpaid_break_minutes")}
+                      onStart={() => overviewFieldEdit.startEdit("unpaid_break_minutes")} onSave={() => overviewFieldEdit.saveEdit("unpaid_break_minutes")} onCancel={() => overviewFieldEdit.cancelEdit("unpaid_break_minutes")}
+                      display={fmt(profile.unpaid_break_minutes != null ? String(profile.unpaid_break_minutes) : null)}
+                    >
                       <Input type="number" step="5" min="0" value={overviewForm.unpaid_break_minutes} onChange={(e) => setOverviewForm((f) => ({ ...f, unpaid_break_minutes: e.target.value }))} />
-                    </div>
-                    <div>
-                      <Label>Late Grace (minutes)</Label>
+                    </FieldEdit>
+                    <FieldEdit
+                      label="Late Grace (minutes)"
+                      editing={overviewFieldEdit.isEditing("late_grace_minutes")} saving={overviewFieldEdit.isSaving("late_grace_minutes")}
+                      onStart={() => overviewFieldEdit.startEdit("late_grace_minutes")} onSave={() => overviewFieldEdit.saveEdit("late_grace_minutes")} onCancel={() => overviewFieldEdit.cancelEdit("late_grace_minutes")}
+                      display={fmt(profile.late_grace_minutes != null ? String(profile.late_grace_minutes) : null)}
+                    >
                       <Input type="number" step="1" min="0" value={overviewForm.late_grace_minutes} onChange={(e) => setOverviewForm((f) => ({ ...f, late_grace_minutes: e.target.value }))} />
-                    </div>
+                    </FieldEdit>
                     <div className="md:col-span-2">
-                      <Label>Working Days <span className="text-xs text-muted-foreground">(unchecked days count as weekend)</span></Label>
-                      <div className="flex flex-wrap gap-3 mt-1">
-                        {DOW.map((d) => (
-                          <label key={d.v} className="flex items-center gap-1.5 text-sm">
-                            <Checkbox
-                              disabled={!overviewEdit.editing}
-                              checked={overviewForm.working_days.includes(d.v)}
-                              onCheckedChange={() =>
-                                setOverviewForm((f) => ({
-                                  ...f,
-                                  working_days: f.working_days.includes(d.v)
-                                    ? f.working_days.filter((x) => x !== d.v)
-                                    : [...f.working_days, d.v].sort((a, b) => a - b),
-                                }))
-                              }
-                            />
-                            {d.label}
-                          </label>
-                        ))}
-                      </div>
+                      <FieldEdit
+                        label="Working Days (unchecked days count as weekend)"
+                        editing={overviewFieldEdit.isEditing("working_days")} saving={overviewFieldEdit.isSaving("working_days")}
+                        onStart={() => overviewFieldEdit.startEdit("working_days")} onSave={() => overviewFieldEdit.saveEdit("working_days")} onCancel={() => overviewFieldEdit.cancelEdit("working_days")}
+                        display={DOW.filter((d) => (profile.working_days || []).includes(d.v)).map((d) => d.label).join(", ") || "—"}
+                      >
+                        <div className="flex flex-wrap gap-3 mt-1">
+                          {DOW.map((d) => (
+                            <label key={d.v} className="flex items-center gap-1.5 text-sm">
+                              <Checkbox
+                                checked={overviewForm.working_days.includes(d.v)}
+                                onCheckedChange={() =>
+                                  setOverviewForm((f) => ({
+                                    ...f,
+                                    working_days: f.working_days.includes(d.v)
+                                      ? f.working_days.filter((x) => x !== d.v)
+                                      : [...f.working_days, d.v].sort((a, b) => a - b),
+                                  }))
+                                }
+                              />
+                              {d.label}
+                            </label>
+                          ))}
+                        </div>
+                      </FieldEdit>
                     </div>
                   </div>
                 </div>
-                </fieldset>
               </CardContent>
             </Card>
           )}
@@ -904,7 +1107,7 @@ const EmployeeProfile = () => {
               <CardContent className="flex flex-wrap items-center gap-2">
                 <AlertDialog>
                   <AlertDialogTrigger asChild>
-                    <Button size="sm" variant="outline" disabled={!overviewEdit.editing}>
+                    <Button size="sm" variant="outline" disabled={!overviewAnyEditing}>
                       <KeyRound className="h-4 w-4 mr-1" /> Reset Password
                     </Button>
                   </AlertDialogTrigger>
@@ -924,7 +1127,7 @@ const EmployeeProfile = () => {
                 </AlertDialog>
                 <AlertDialog>
                   <AlertDialogTrigger asChild>
-                    <Button size="sm" variant="outline" disabled={!overviewEdit.editing}>
+                    <Button size="sm" variant="outline" disabled={!overviewAnyEditing}>
                       <Trash2 className="h-4 w-4 mr-1 text-destructive" /> Delete
                     </Button>
                   </AlertDialogTrigger>

@@ -48,10 +48,18 @@ export function useFieldEdit<T extends Record<string, unknown>>(
     Array.from(editing).forEach((key) => cancelEdit(key));
   }, [editing, cancelEdit]);
 
+  /** Clear every key's editing flag without restoring values — for a caller
+   * that already persisted the current values itself (e.g. one combined
+   * save call covering several keys at once) and just needs the UI to drop
+   * back to read-only. */
+  const stopAll = useCallback(() => {
+    setEditing(new Set());
+  }, []);
+
   return {
     isEditing: (key: keyof T) => editing.has(key),
     isSaving: (key: keyof T) => savingKey === key,
-    startEdit, cancelEdit, saveEdit, saveAll, cancelAll,
+    startEdit, cancelEdit, saveEdit, saveAll, cancelAll, stopAll,
     hasEditing: editing.size > 0,
     editingCount: editing.size,
   };
