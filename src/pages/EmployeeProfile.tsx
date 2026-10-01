@@ -305,6 +305,13 @@ const EmployeeProfile = () => {
   // ---- Contract Documents — no local form, just an edit-lock around upload/delete ----
   const [documentsEditing, setDocumentsEditing] = useState(false);
   const [accountActionsUnlocked, setAccountActionsUnlocked] = useState(false);
+  // Wing+Designation and Role+Reporting To each save through the same shared
+  // saveOverview() call as every independent field, so their own "Saving…"
+  // text needs its own flag — otherwise saving one field would flip every
+  // group's button to "Saving…" too, since they'd all be reading the one
+  // shared savingOverview flag.
+  const [savingWingGroup, setSavingWingGroup] = useState(false);
+  const [savingRoleGroup, setSavingRoleGroup] = useState(false);
 
   const [activeTab, setActiveTab] = useState("overview");
 
@@ -849,8 +856,11 @@ const EmployeeProfile = () => {
                           </div>
                         </div>
                         <div className="flex gap-1.5 mt-2">
-                          <Button type="button" size="sm" onClick={async () => { if (await saveOverview()) wingGroupEdit.stopEditing(); }}>
-                            {savingOverview ? "Saving..." : "Save"}
+                          <Button type="button" size="sm" disabled={savingWingGroup} onClick={async () => {
+                            setSavingWingGroup(true);
+                            try { if (await saveOverview()) wingGroupEdit.stopEditing(); } finally { setSavingWingGroup(false); }
+                          }}>
+                            {savingWingGroup ? "Saving..." : "Save"}
                           </Button>
                           <Button type="button" size="sm" variant="outline" onClick={wingGroupEdit.cancelEdit}>Cancel</Button>
                         </div>
@@ -921,8 +931,11 @@ const EmployeeProfile = () => {
                             </div>
                           </div>
                           <div className="flex gap-1.5 mt-2">
-                            <Button type="button" size="sm" onClick={async () => { if (await saveOverview()) roleGroupEdit.stopEditing(); }}>
-                              {savingOverview ? "Saving..." : "Save"}
+                            <Button type="button" size="sm" disabled={savingRoleGroup} onClick={async () => {
+                              setSavingRoleGroup(true);
+                              try { if (await saveOverview()) roleGroupEdit.stopEditing(); } finally { setSavingRoleGroup(false); }
+                            }}>
+                              {savingRoleGroup ? "Saving..." : "Save"}
                             </Button>
                             <Button type="button" size="sm" variant="outline" onClick={roleGroupEdit.cancelEdit}>Cancel</Button>
                           </div>
