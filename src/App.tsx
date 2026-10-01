@@ -79,7 +79,7 @@ const AppRoutes = () => (
     <Route path="/leave" element={<ProtectedRoute><LeaveManagement /></ProtectedRoute>} />
     <Route path="/projects" element={<ProtectedRoute><Projects /></ProtectedRoute>} />
     <Route path="/projects/:id" element={<ProtectedRoute><ErrorBoundary fallbackTitle="Couldn't open this project"><ProjectBoard /></ErrorBoundary></ProtectedRoute>} />
-    <Route path="/payroll" element={<ProtectedRoute><RoleGate allow={["admin"]}><Payroll /></RoleGate></ProtectedRoute>} />
+    <Route path="/payroll" element={<ProtectedRoute><Payroll /></ProtectedRoute>} />
     <Route path="/salary-increments" element={<ProtectedRoute><RoleGate allow={["admin"]}><SalaryIncrements /></RoleGate></ProtectedRoute>} />
     <Route path="/loans" element={<ProtectedRoute><RoleGate allow={["admin"]}><Loans /></RoleGate></ProtectedRoute>} />
     <Route path="/expenses" element={<ProtectedRoute><Expenses /></ProtectedRoute>} />

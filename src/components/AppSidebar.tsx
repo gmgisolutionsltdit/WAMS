@@ -22,6 +22,7 @@ const employeeItems = [
   { title: "Requests", url: "/ot-requests", icon: FileText },
   { title: "Reports", url: "/reports", icon: BarChart3 },
   { title: "Team Member Details", url: "/team-member-details", icon: IdCard },
+  { title: "Payroll", url: "/payroll", icon: Wallet },
   { title: "Expenses", url: "/expenses", icon: Receipt },
   { title: "Notice Board", url: "/notices", icon: Megaphone },
   { title: "SOP", url: "/sop", icon: BookOpenCheck },
@@ -130,14 +131,6 @@ export function AppSidebar() {
             <SidebarGroupLabel>{!collapsed && "HR"}</SidebarGroupLabel>
             <SidebarGroupContent>
               <SidebarMenu>
-                <SidebarMenuItem>
-                  <SidebarMenuButton asChild isActive={isActive("/payroll")}>
-                    <NavLink to="/payroll" end className="hover:bg-muted/50" activeClassName="bg-muted text-primary font-medium">
-                      <Wallet className="mr-2 h-4 w-4" />
-                      {!collapsed && <span>Payroll</span>}
-                    </NavLink>
-                  </SidebarMenuButton>
-                </SidebarMenuItem>
                 <SidebarMenuItem>
                   <SidebarMenuButton asChild isActive={isActive("/loans")}>
                     <NavLink to="/loans" end className="hover:bg-muted/50" activeClassName="bg-muted text-primary font-medium">
