@@ -398,7 +398,7 @@ const EmployeeProfile = () => {
 
   const goBack = () => {
     if (!confirmDiscardIfNeeded()) return;
-    window.history.length > 1 ? navigate(-1) : navigate("/employees");
+    if (window.history.length > 1) navigate(-1); else navigate("/employees");
   };
 
   const handlePhotoSelect = async (file: File) => {
