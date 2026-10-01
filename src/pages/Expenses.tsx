@@ -16,14 +16,25 @@ import { toast } from "sonner";
 import { format } from "date-fns";
 import { notifyManagersAndAdmins, notifyEmployee } from "@/lib/notifications";
 
-const CATEGORIES = ["Travel", "Meals", "Office Supplies", "Software", "Training", "Client Entertainment", "Other"];
+const FALLBACK_CATEGORIES = ["Travel", "Meals", "Office Supplies", "Software", "Training", "Client Entertainment", "Other"];
+
+const DIRECTIONS = [
+  { value: "company_pays_employee", label: "Company Pays Employee" },
+  { value: "employee_owes_company", label: "Employee Owes Company" },
+];
 
 const Expenses = () => {
   const { user, role } = useAuth();
+  const isAdmin = role === "admin";
   const canApprove = role === "admin" || role === "manager";
   const [claims, setClaims] = useState<any[]>([]);
+  const [categories, setCategories] = useState<string[]>(FALLBACK_CATEGORIES);
+  const [newCategory, setNewCategory] = useState("");
   const [open, setOpen] = useState(false);
-  const [form, setForm] = useState({ category: "Travel", amount: "", claim_date: format(new Date(), "yyyy-MM-dd"), description: "", receipt_url: "" });
+  const [form, setForm] = useState({
+    category: "Travel", amount: "", claim_date: format(new Date(), "yyyy-MM-dd"), description: "", receipt_url: "",
+    direction: "company_pays_employee",
+  });
   const [uploading, setUploading] = useState(false);
 
   const fetchClaims = async () => {
@@ -32,7 +43,22 @@ const Expenses = () => {
     setClaims(data || []);
   };
 
-  useEffect(() => { fetchClaims(); }, []);
+  const fetchCategories = async () => {
+    const { data } = await supabase.from("expense_types").select("name").order("created_at", { ascending: true });
+    if (data && data.length > 0) setCategories(data.map((d) => d.name));
+  };
+
+  useEffect(() => { fetchClaims(); fetchCategories(); }, []);
+
+  const addCategory = async () => {
+    const name = newCategory.trim();
+    if (!name) return;
+    const { error } = await supabase.from("expense_types").insert({ name });
+    if (error) { toast.error(error.message); return; }
+    toast.success("Expense type added");
+    setNewCategory("");
+    fetchCategories();
+  };
 
   const uploadReceipt = async (file: File) => {
     if (!user) return;
@@ -48,18 +74,21 @@ const Expenses = () => {
 
   const submit = async () => {
     if (!form.amount) return toast.error("Amount required");
+    const amount = Number(form.amount);
     const { data: inserted, error } = await supabase.from("expense_claims").insert({
       user_id: user?.id,
       category: form.category,
-      amount: Number(form.amount),
+      amount,
       claim_date: form.claim_date,
       description: form.description,
       receipt_url: form.receipt_url || null,
+      direction: form.direction,
+      recoverable_total: form.direction === "employee_owes_company" ? amount : null,
     }).select().single();
     if (error) return toast.error(error.message);
     toast.success("Expense submitted");
     setOpen(false);
-    setForm({ category: "Travel", amount: "", claim_date: format(new Date(), "yyyy-MM-dd"), description: "", receipt_url: "" });
+    setForm({ category: "Travel", amount: "", claim_date: format(new Date(), "yyyy-MM-dd"), description: "", receipt_url: "", direction: "company_pays_employee" });
     await notifyManagersAndAdmins(
       "Expense Claim Submitted",
       `${user?.email} submitted a ${form.category} claim for ${form.amount}.`,
@@ -86,11 +115,20 @@ const Expenses = () => {
     fetchClaims();
   };
 
+  const markPaid = async (id: string) => {
+    const { error } = await supabase.from("expense_claims").update({
+      payment_status: "paid", paid_date: format(new Date(), "yyyy-MM-dd"),
+    }).eq("id", id);
+    if (error) return toast.error(error.message);
+    toast.success("Marked paid");
+    fetchClaims();
+  };
+
   const myClaims = claims.filter(c => c.user_id === user?.id);
   const pendingApprovals = claims.filter(c => c.status === "pending" && c.user_id !== user?.id);
   const allOthers = claims.filter(c => c.user_id !== user?.id);
 
-  const totals = CATEGORIES.map(cat => ({
+  const totals = categories.map(cat => ({
     cat,
     total: claims.filter(c => c.category === cat && c.status === "approved").reduce((s,c)=>s+Number(c.amount), 0)
   })).filter(t => t.total > 0);
@@ -110,7 +148,13 @@ const Expenses = () => {
               <div><Label>Category</Label>
                 <Select value={form.category} onValueChange={(v)=>setForm({...form, category: v})}>
                   <SelectTrigger><SelectValue /></SelectTrigger>
-                  <SelectContent>{CATEGORIES.map(c => <SelectItem key={c} value={c}>{c}</SelectItem>)}</SelectContent>
+                  <SelectContent>{categories.map(c => <SelectItem key={c} value={c}>{c}</SelectItem>)}</SelectContent>
+                </Select>
+              </div>
+              <div><Label>Direction</Label>
+                <Select value={form.direction} onValueChange={(v)=>setForm({...form, direction: v})}>
+                  <SelectTrigger><SelectValue /></SelectTrigger>
+                  <SelectContent>{DIRECTIONS.map(d => <SelectItem key={d.value} value={d.value}>{d.label}</SelectItem>)}</SelectContent>
                 </Select>
               </div>
               <div className="grid grid-cols-2 gap-3">
@@ -129,6 +173,13 @@ const Expenses = () => {
         </Dialog>
       </div>
 
+      {isAdmin && (
+        <div className="flex items-center gap-2">
+          <Input className="max-w-[220px]" placeholder="New expense type" value={newCategory} onChange={(e) => setNewCategory(e.target.value)} />
+          <Button size="sm" variant="outline" onClick={addCategory}>Add Expense Type</Button>
+        </div>
+      )}
+
       {totals.length > 0 && (
         <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
           {totals.map(t => (
@@ -145,16 +196,16 @@ const Expenses = () => {
         </TabsList>
 
         <TabsContent value="mine">
-          <ClaimTable claims={myClaims} showEmployee={false} />
+          <ClaimTable claims={myClaims} showEmployee={false} isAdmin={isAdmin} onTogglePaid={markPaid} />
         </TabsContent>
         {canApprove && (
           <TabsContent value="pending">
-            <ClaimTable claims={pendingApprovals} showEmployee onApprove={(id)=>decide(id,"approved")} onReject={(id)=>decide(id,"rejected")} />
+            <ClaimTable claims={pendingApprovals} showEmployee onApprove={(id)=>decide(id,"approved")} onReject={(id)=>decide(id,"rejected")} isAdmin={isAdmin} onTogglePaid={markPaid} />
           </TabsContent>
         )}
         {canApprove && (
           <TabsContent value="all">
-            <ClaimTable claims={allOthers} showEmployee />
+            <ClaimTable claims={allOthers} showEmployee isAdmin={isAdmin} onTogglePaid={markPaid} />
           </TabsContent>
         )}
       </Tabs>
@@ -162,24 +213,36 @@ const Expenses = () => {
   );
 };
 
-const ClaimTable = ({ claims, showEmployee, onApprove, onReject }: any) => (
+const ClaimTable = ({ claims, showEmployee, onApprove, onReject, onTogglePaid, isAdmin }: any) => (
   <Card>
     <CardContent className="pt-6">
       <Table>
         <TableHeader>
           <TableRow>
             {showEmployee && <TableHead>Employee</TableHead>}
-            <TableHead>Date</TableHead><TableHead>Category</TableHead><TableHead>Amount</TableHead><TableHead>Description</TableHead><TableHead>Receipt</TableHead><TableHead>Status</TableHead>
+            <TableHead>Date</TableHead><TableHead>Category</TableHead><TableHead>Direction</TableHead><TableHead>Amount</TableHead><TableHead>Description</TableHead><TableHead>Receipt</TableHead><TableHead>Status</TableHead>
             {(onApprove || onReject) && <TableHead></TableHead>}
           </TableRow>
         </TableHeader>
         <TableBody>
-          {claims.length === 0 ? <TableRow><TableCell colSpan={showEmployee ? 8 : 7} className="text-center text-muted-foreground">No claims</TableCell></TableRow> :
+          {claims.length === 0 ? <TableRow><TableCell colSpan={showEmployee ? 9 : 8} className="text-center text-muted-foreground">No claims</TableCell></TableRow> :
             claims.map((c: any) => (
               <TableRow key={c.id}>
                 {showEmployee && <TableCell>{c.profiles?.full_name || c.profiles?.email || "—"}</TableCell>}
                 <TableCell>{format(new Date(c.claim_date), "MMM d, yyyy")}</TableCell>
                 <TableCell><Badge variant="outline">{c.category}</Badge></TableCell>
+                <TableCell>
+                  {c.direction === "employee_owes_company" ? (
+                    <Badge variant="outline">Employee Owes</Badge>
+                  ) : (
+                    <div className="flex items-center gap-1">
+                      <Badge className={c.payment_status === "paid" ? "bg-success text-white" : ""} variant={c.payment_status === "paid" ? undefined : "outline"}>{c.payment_status === "paid" ? "Paid" : "Not Paid"}</Badge>
+                      {isAdmin && c.payment_status !== "paid" && (
+                        <Button size="sm" variant="ghost" onClick={() => onTogglePaid?.(c.id)}>Mark Paid</Button>
+                      )}
+                    </div>
+                  )}
+                </TableCell>
                 <TableCell className="font-semibold">{Number(c.amount).toLocaleString()}</TableCell>
                 <TableCell className="max-w-[240px] truncate text-xs text-muted-foreground">{c.description || "—"}</TableCell>
                 <TableCell>{c.receipt_url ? <a href={c.receipt_url} target="_blank" rel="noreferrer" className="text-primary"><FileText className="h-4 w-4 inline" /></a> : "—"}</TableCell>

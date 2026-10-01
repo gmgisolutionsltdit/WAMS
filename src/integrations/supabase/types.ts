@@ -341,8 +341,14 @@ export type Database = {
           created_at: string
           currency: string
           description: string | null
+          direction: string
           id: string
+          paid_date: string | null
+          payment_status: string
           receipt_url: string | null
+          recoverable_total: number | null
+          recovered_amount: number
+          recovery_status: string
           status: string
           updated_at: string
           user_id: string
@@ -357,8 +363,14 @@ export type Database = {
           created_at?: string
           currency?: string
           description?: string | null
+          direction?: string
           id?: string
+          paid_date?: string | null
+          payment_status?: string
           receipt_url?: string | null
+          recoverable_total?: number | null
+          recovered_amount?: number
+          recovery_status?: string
           status?: string
           updated_at?: string
           user_id: string
@@ -373,11 +385,262 @@ export type Database = {
           created_at?: string
           currency?: string
           description?: string | null
+          direction?: string
           id?: string
+          paid_date?: string | null
+          payment_status?: string
           receipt_url?: string | null
+          recoverable_total?: number | null
+          recovered_amount?: number
+          recovery_status?: string
           status?: string
           updated_at?: string
           user_id?: string
+        }
+        Relationships: []
+      }
+      expense_types: {
+        Row: {
+          created_at: string
+          id: string
+          name: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          name: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          name?: string
+        }
+        Relationships: []
+      }
+      expense_recovery_actions: {
+        Row: {
+          action_type: string
+          admin_id: string
+          amount: number
+          created_at: string
+          expense_claim_id: string
+          id: string
+          month: string
+          note: string | null
+          remaining_after: number
+          user_id: string
+        }
+        Insert: {
+          action_type: string
+          admin_id: string
+          amount?: number
+          created_at?: string
+          expense_claim_id: string
+          id?: string
+          month: string
+          note?: string | null
+          remaining_after?: number
+          user_id: string
+        }
+        Update: {
+          action_type?: string
+          admin_id?: string
+          amount?: number
+          created_at?: string
+          expense_claim_id?: string
+          id?: string
+          month?: string
+          note?: string | null
+          remaining_after?: number
+          user_id?: string
+        }
+        Relationships: []
+      }
+      payroll_ot_adjustments: {
+        Row: {
+          admin_id: string
+          amount: number
+          attendance_date: string
+          carried_to_month: string | null
+          created_at: string
+          decision: string
+          id: string
+          minutes: number
+          month: string
+          note: string | null
+          ot_multiplier: number
+          rate_per_minute: number
+          user_id: string
+        }
+        Insert: {
+          admin_id: string
+          amount?: number
+          attendance_date: string
+          carried_to_month?: string | null
+          created_at?: string
+          decision: string
+          id?: string
+          minutes: number
+          month: string
+          note?: string | null
+          ot_multiplier?: number
+          rate_per_minute: number
+          user_id: string
+        }
+        Update: {
+          admin_id?: string
+          amount?: number
+          attendance_date?: string
+          carried_to_month?: string | null
+          created_at?: string
+          decision?: string
+          id?: string
+          minutes?: number
+          month?: string
+          note?: string | null
+          ot_multiplier?: number
+          rate_per_minute?: number
+          user_id?: string
+        }
+        Relationships: []
+      }
+      payroll_due_adjustments: {
+        Row: {
+          admin_id: string
+          amount: number
+          attendance_date: string
+          carried_to_month: string | null
+          created_at: string
+          decision: string
+          due_multiplier: number
+          id: string
+          installment_group: string | null
+          leave_days: number | null
+          leave_type_id: string | null
+          minutes: number
+          month: string
+          note: string | null
+          rate_per_minute: number
+          user_id: string
+        }
+        Insert: {
+          admin_id: string
+          amount?: number
+          attendance_date: string
+          carried_to_month?: string | null
+          created_at?: string
+          decision: string
+          due_multiplier?: number
+          id?: string
+          installment_group?: string | null
+          leave_days?: number | null
+          leave_type_id?: string | null
+          minutes: number
+          month: string
+          note?: string | null
+          rate_per_minute: number
+          user_id: string
+        }
+        Update: {
+          admin_id?: string
+          amount?: number
+          attendance_date?: string
+          carried_to_month?: string | null
+          created_at?: string
+          decision?: string
+          due_multiplier?: number
+          id?: string
+          installment_group?: string | null
+          leave_days?: number | null
+          leave_type_id?: string | null
+          minutes?: number
+          month?: string
+          note?: string | null
+          rate_per_minute?: number
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "payroll_due_adjustments_leave_type_id_fkey"
+            columns: ["leave_type_id"]
+            isOneToOne: false
+            referencedRelation: "leave_types"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      payroll_offsets: {
+        Row: {
+          admin_id: string
+          created_at: string
+          due_adjustment_id: string
+          id: string
+          minutes: number
+          month: string
+          ot_adjustment_id: string
+          user_id: string
+        }
+        Insert: {
+          admin_id: string
+          created_at?: string
+          due_adjustment_id: string
+          id?: string
+          minutes: number
+          month: string
+          ot_adjustment_id: string
+          user_id: string
+        }
+        Update: {
+          admin_id?: string
+          created_at?: string
+          due_adjustment_id?: string
+          id?: string
+          minutes?: number
+          month?: string
+          ot_adjustment_id?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "payroll_offsets_ot_adjustment_id_fkey"
+            columns: ["ot_adjustment_id"]
+            isOneToOne: false
+            referencedRelation: "payroll_ot_adjustments"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "payroll_offsets_due_adjustment_id_fkey"
+            columns: ["due_adjustment_id"]
+            isOneToOne: false
+            referencedRelation: "payroll_due_adjustments"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      hr_warnings: {
+        Row: {
+          admin_id: string
+          created_at: string
+          id: string
+          note: string
+          user_id: string
+          warning_date: string
+        }
+        Insert: {
+          admin_id: string
+          created_at?: string
+          id?: string
+          note: string
+          user_id: string
+          warning_date?: string
+        }
+        Update: {
+          admin_id?: string
+          created_at?: string
+          id?: string
+          note?: string
+          user_id?: string
+          warning_date?: string
         }
         Relationships: []
       }

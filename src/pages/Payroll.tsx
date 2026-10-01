@@ -24,6 +24,7 @@ import {
 import { PayrollProcessor } from "@/components/hrms/PayrollProcessor";
 import { PayslipCard } from "@/components/hrms/PayslipCard";
 import { LoanLedger } from "@/components/hrms/LoanLedger";
+import { PayrollAdjustments } from "@/components/PayrollAdjustments";
 
 type PayrollRecord = PayrollComputation & { id: string; status: string; generated_at: string };
 
@@ -33,7 +34,8 @@ const DEFAULT_YEAR = now.getFullYear();
 
 export default function Payroll() {
   const { user, role } = useAuth();
-  const canAccess = role === "admin";
+  const isAdmin = role === "admin";
+  const canAccess = isAdmin;
 
   const [year, setYear] = useState<number>(DEFAULT_YEAR);
   const [month, setMonth] = useState<number>(DEFAULT_MONTH);
@@ -148,14 +150,12 @@ export default function Payroll() {
     }
   };
 
-  if (!canAccess) {
-    return (
-      <div className="p-6 text-sm text-muted-foreground">You do not have access to Payroll.</div>
-    );
-  }
-
   return (
     <div className="space-y-6">
+      <PayrollAdjustments isAdmin={isAdmin} />
+
+      {canAccess && (
+      <>
       <PayrollProcessor />
       <div className="grid gap-4 lg:grid-cols-2">
         <PayslipCard />
@@ -334,6 +334,8 @@ export default function Payroll() {
           )}
         </DialogContent>
       </Dialog>
+      </>
+      )}
     </div>
   );
 }
