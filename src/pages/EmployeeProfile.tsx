@@ -793,63 +793,70 @@ const EmployeeProfile = () => {
                         </Button>
                       )}
                     </div>
-                    <fieldset disabled={!wingGroupEdit.editing} className="grid gap-3 md:grid-cols-2 mt-1 disabled:opacity-60">
-                      <div>
-                        <Label className="text-xs">Wing</Label>
-                        <Select
-                          value={overviewForm.wing_id || "none"}
-                          onValueChange={(v) => {
-                            const wingId = v === "none" ? "" : v;
-                            const selectedWing = wings.find((w) => w.id === wingId);
-                            const validTitles = wingDesignations.filter((d) => d.wing_id === wingId).map((d) => d.title);
-                            setOverviewForm((f) => ({
-                              ...f,
-                              wing_id: wingId,
-                              company_wing: selectedWing?.name || f.company_wing,
-                              // Only clear Designation when the new wing has its own
-                              // defined list and the current value isn't in it — a
-                              // wing with no defined designations yet (true for all
-                              // of them today) leaves Designation as free text below,
-                              // untouched.
-                              designation: validTitles.length === 0 || validTitles.includes(f.designation) ? f.designation : "",
-                            }));
-                          }}
-                        >
-                          <SelectTrigger><SelectValue placeholder="Select wing" /></SelectTrigger>
-                          <SelectContent>
-                            <SelectItem value="none">Unassigned</SelectItem>
-                            {activeWings.map((w) => <SelectItem key={w.id} value={w.id}>{w.name}</SelectItem>)}
-                          </SelectContent>
-                        </Select>
-                      </div>
-                      <div>
-                        <Label className="text-xs">Designation</Label>
-                        {(() => {
-                          const designationOptions = wingDesignations.filter((d) => d.wing_id === overviewForm.wing_id);
-                          return designationOptions.length > 0 ? (
+                    {wingGroupEdit.editing ? (
+                      <>
+                        <div className="grid gap-3 md:grid-cols-2 mt-1">
+                          <div>
+                            <Label className="text-xs">Wing</Label>
                             <Select
-                              value={overviewForm.designation || ""}
-                              onValueChange={(v) => setOverviewForm((f) => ({ ...f, designation: v }))}
+                              value={overviewForm.wing_id || "none"}
+                              onValueChange={(v) => {
+                                const wingId = v === "none" ? "" : v;
+                                const selectedWing = wings.find((w) => w.id === wingId);
+                                const validTitles = wingDesignations.filter((d) => d.wing_id === wingId).map((d) => d.title);
+                                setOverviewForm((f) => ({
+                                  ...f,
+                                  wing_id: wingId,
+                                  company_wing: selectedWing?.name || f.company_wing,
+                                  // Only clear Designation when the new wing has its own
+                                  // defined list and the current value isn't in it — a
+                                  // wing with no defined designations yet (true for all
+                                  // of them today) leaves Designation as free text below,
+                                  // untouched.
+                                  designation: validTitles.length === 0 || validTitles.includes(f.designation) ? f.designation : "",
+                                }));
+                              }}
                             >
-                              <SelectTrigger><SelectValue placeholder="Select designation" /></SelectTrigger>
+                              <SelectTrigger><SelectValue placeholder="Select wing" /></SelectTrigger>
                               <SelectContent>
-                                {designationOptions.map((d) => (
-                                  <SelectItem key={d.id} value={d.title}>{d.title}</SelectItem>
-                                ))}
+                                <SelectItem value="none">Unassigned</SelectItem>
+                                {activeWings.map((w) => <SelectItem key={w.id} value={w.id}>{w.name}</SelectItem>)}
                               </SelectContent>
                             </Select>
-                          ) : (
-                            <Input value={overviewForm.designation} onChange={(e) => setOverviewForm((f) => ({ ...f, designation: e.target.value }))} />
-                          );
-                        })()}
-                      </div>
-                    </fieldset>
-                    {wingGroupEdit.editing && (
-                      <div className="flex gap-1.5 mt-2">
-                        <Button type="button" size="sm" onClick={async () => { if (await saveOverview()) wingGroupEdit.stopEditing(); }}>
-                          {savingOverview ? "Saving..." : "Save"}
-                        </Button>
-                        <Button type="button" size="sm" variant="outline" onClick={wingGroupEdit.cancelEdit}>Cancel</Button>
+                          </div>
+                          <div>
+                            <Label className="text-xs">Designation</Label>
+                            {(() => {
+                              const designationOptions = wingDesignations.filter((d) => d.wing_id === overviewForm.wing_id);
+                              return designationOptions.length > 0 ? (
+                                <Select
+                                  value={overviewForm.designation || ""}
+                                  onValueChange={(v) => setOverviewForm((f) => ({ ...f, designation: v }))}
+                                >
+                                  <SelectTrigger><SelectValue placeholder="Select designation" /></SelectTrigger>
+                                  <SelectContent>
+                                    {designationOptions.map((d) => (
+                                      <SelectItem key={d.id} value={d.title}>{d.title}</SelectItem>
+                                    ))}
+                                  </SelectContent>
+                                </Select>
+                              ) : (
+                                <Input value={overviewForm.designation} onChange={(e) => setOverviewForm((f) => ({ ...f, designation: e.target.value }))} />
+                              );
+                            })()}
+                          </div>
+                        </div>
+                        <div className="flex gap-1.5 mt-2">
+                          <Button type="button" size="sm" onClick={async () => { if (await saveOverview()) wingGroupEdit.stopEditing(); }}>
+                            {savingOverview ? "Saving..." : "Save"}
+                          </Button>
+                          <Button type="button" size="sm" variant="outline" onClick={wingGroupEdit.cancelEdit}>Cancel</Button>
+                        </div>
+                      </>
+                    ) : (
+                      <div className="grid gap-3 md:grid-cols-2 mt-1">
+                        <div className="text-sm font-medium py-2 min-h-[2.25rem] flex items-center">{fmt(wings.find((w) => w.id === overviewForm.wing_id)?.name || profile.company_wing)}</div>
+                        <div className="text-sm font-medium py-2 min-h-[2.25rem] flex items-center">{fmt(profile.designation)}</div>
                       </div>
                     )}
                   </div>
@@ -866,55 +873,64 @@ const EmployeeProfile = () => {
                           </Button>
                         )}
                       </div>
-                      <fieldset disabled={!isAdmin || !roleGroupEdit.editing} className="grid gap-3 md:grid-cols-2 mt-1 disabled:opacity-60">
-                        <div>
-                          <Label className="text-xs">Role</Label>
-                          <Select
-                            value={overviewForm.role}
-                            onValueChange={(v) => setOverviewForm((f) => ({ ...f, role: v, reporting_manager_ids: v === "admin" ? [] : f.reporting_manager_ids }))}
-                          >
-                            <SelectTrigger><SelectValue /></SelectTrigger>
-                            <SelectContent>
-                              <SelectItem value="admin">Admin</SelectItem>
-                              <SelectItem value="manager">Manager / Reporting Boss</SelectItem>
-                              <SelectItem value="employee">Employee</SelectItem>
-                            </SelectContent>
-                          </Select>
-                        </div>
-                        <div>
-                          <Label className="text-xs">Reporting To</Label>
-                          {overviewForm.role === "admin" ? (
-                            <p className="text-xs text-muted-foreground rounded-md border p-2">Admins have no reporting manager.</p>
-                          ) : (
-                            <div className="rounded-md border p-2 max-h-32 overflow-y-auto space-y-1">
-                              {managers.filter((m) => m.id !== id).length === 0 ? (
-                                <p className="text-xs text-muted-foreground px-1">No managers/admins available</p>
-                              ) : managers.filter((m) => m.id !== id).map((m) => (
-                                <label key={m.id} className="flex items-center gap-2 text-sm px-1 py-0.5">
-                                  <Checkbox
-                                    checked={overviewForm.reporting_manager_ids.includes(m.id)}
-                                    onCheckedChange={() =>
-                                      setOverviewForm((f) => ({
-                                        ...f,
-                                        reporting_manager_ids: f.reporting_manager_ids.includes(m.id)
-                                          ? f.reporting_manager_ids.filter((x) => x !== m.id)
-                                          : [...f.reporting_manager_ids, m.id],
-                                      }))
-                                    }
-                                  />
-                                  {m.full_name || m.email}
-                                </label>
-                              ))}
+                      {isAdmin && roleGroupEdit.editing ? (
+                        <>
+                          <div className="grid gap-3 md:grid-cols-2 mt-1">
+                            <div>
+                              <Label className="text-xs">Role</Label>
+                              <Select
+                                value={overviewForm.role}
+                                onValueChange={(v) => setOverviewForm((f) => ({ ...f, role: v, reporting_manager_ids: v === "admin" ? [] : f.reporting_manager_ids }))}
+                              >
+                                <SelectTrigger><SelectValue /></SelectTrigger>
+                                <SelectContent>
+                                  <SelectItem value="admin">Admin</SelectItem>
+                                  <SelectItem value="manager">Manager / Reporting Boss</SelectItem>
+                                  <SelectItem value="employee">Employee</SelectItem>
+                                </SelectContent>
+                              </Select>
                             </div>
-                          )}
-                        </div>
-                      </fieldset>
-                      {roleGroupEdit.editing && (
-                        <div className="flex gap-1.5 mt-2">
-                          <Button type="button" size="sm" onClick={async () => { if (await saveOverview()) roleGroupEdit.stopEditing(); }}>
-                            {savingOverview ? "Saving..." : "Save"}
-                          </Button>
-                          <Button type="button" size="sm" variant="outline" onClick={roleGroupEdit.cancelEdit}>Cancel</Button>
+                            <div>
+                              <Label className="text-xs">Reporting To</Label>
+                              {overviewForm.role === "admin" ? (
+                                <p className="text-xs text-muted-foreground rounded-md border p-2">Admins have no reporting manager.</p>
+                              ) : (
+                                <div className="rounded-md border p-2 max-h-32 overflow-y-auto space-y-1">
+                                  {managers.filter((m) => m.id !== id).length === 0 ? (
+                                    <p className="text-xs text-muted-foreground px-1">No managers/admins available</p>
+                                  ) : managers.filter((m) => m.id !== id).map((m) => (
+                                    <label key={m.id} className="flex items-center gap-2 text-sm px-1 py-0.5">
+                                      <Checkbox
+                                        checked={overviewForm.reporting_manager_ids.includes(m.id)}
+                                        onCheckedChange={() =>
+                                          setOverviewForm((f) => ({
+                                            ...f,
+                                            reporting_manager_ids: f.reporting_manager_ids.includes(m.id)
+                                              ? f.reporting_manager_ids.filter((x) => x !== m.id)
+                                              : [...f.reporting_manager_ids, m.id],
+                                          }))
+                                        }
+                                      />
+                                      {m.full_name || m.email}
+                                    </label>
+                                  ))}
+                                </div>
+                              )}
+                            </div>
+                          </div>
+                          <div className="flex gap-1.5 mt-2">
+                            <Button type="button" size="sm" onClick={async () => { if (await saveOverview()) roleGroupEdit.stopEditing(); }}>
+                              {savingOverview ? "Saving..." : "Save"}
+                            </Button>
+                            <Button type="button" size="sm" variant="outline" onClick={roleGroupEdit.cancelEdit}>Cancel</Button>
+                          </div>
+                        </>
+                      ) : (
+                        <div className="grid gap-3 md:grid-cols-2 mt-1">
+                          <div className="text-sm font-medium py-2 min-h-[2.25rem] flex items-center capitalize">{fmt(role)}</div>
+                          <div className="text-sm font-medium py-2 min-h-[2.25rem] flex items-center">
+                            {manager ? <Link to={`/employees/${manager.id}`} className="text-primary hover:underline">{manager.name}</Link> : "—"}
+                          </div>
                         </div>
                       )}
                     </div>
