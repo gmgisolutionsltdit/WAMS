@@ -34,6 +34,24 @@ import { invokeAdminUserManagement, edgeErrorMessage } from "@/lib/adminUsers";
 import EmployeeDocumentsTab from "@/components/EmployeeDocumentsTab";
 import { DEFAULT_GRACE_MINUTES, DEFAULT_OFFICE_END, DEFAULT_OFFICE_START } from "@/lib/officeTime";
 import { DEFAULT_WORKING_DAYS } from "@/lib/workSchedule";
+import { useSectionEdit } from "@/hooks/useSectionEdit";
+
+type SectionEditState = { editing: boolean; hasChanges: boolean; startEdit: () => void; cancelEdit: () => void };
+
+const EditSaveCancel = ({
+  section, saving, onSave,
+}: { section: SectionEditState; saving: boolean; onSave: () => void }) => (
+  section.editing ? (
+    <div className="flex items-center gap-2">
+      <Button size="sm" onClick={onSave} disabled={saving}>{saving ? "Saving..." : "Save"}</Button>
+      <Button size="sm" variant="outline" onClick={section.cancelEdit} disabled={saving}>Cancel</Button>
+    </div>
+  ) : (
+    <Button size="sm" variant="outline" onClick={section.startEdit}>
+      <Pencil className="h-4 w-4 mr-1" /> Edit
+    </Button>
+  )
+);
 
 const SERVICE_STATUS = ["Permanent", "Contractual", "Intern", "Short-Term", "Consultant"];
 const EMPLOYEE_STATUS = ["Active", "Inactive", "Resigned"];
@@ -254,6 +272,45 @@ const EmployeeProfile = () => {
   const [leaveTypes, setLeaveTypes] = useState<LeaveType[]>([]);
   const [savingLeave, setSavingLeave] = useState(false);
 
+  // ---- Contract Documents — no local form, just an edit-lock around upload/delete ----
+  const [documentsEditing, setDocumentsEditing] = useState(false);
+
+  const [activeTab, setActiveTab] = useState("overview");
+
+  const overviewEdit = useSectionEdit(overviewForm, setOverviewForm);
+  const personalEdit = useSectionEdit(personalForm, setPersonalForm);
+  const financialEdit = useSectionEdit(compForm, setCompForm);
+  const projectsEdit = useSectionEdit(selectedProjectIds, setSelectedProjectIds);
+  const teamEdit = useSectionEdit(leaveTypes, setLeaveTypes);
+
+  const hasUnsavedChanges = () =>
+    overviewEdit.hasChanges || personalEdit.hasChanges || financialEdit.hasChanges
+    || projectsEdit.hasChanges || teamEdit.hasChanges || documentsEditing;
+
+  const discardAllEdits = () => {
+    if (overviewEdit.editing) overviewEdit.cancelEdit();
+    if (personalEdit.editing) personalEdit.cancelEdit();
+    if (financialEdit.editing) financialEdit.cancelEdit();
+    if (projectsEdit.editing) projectsEdit.cancelEdit();
+    if (teamEdit.editing) teamEdit.cancelEdit();
+    setDocumentsEditing(false);
+  };
+
+  const confirmDiscardIfNeeded = () => {
+    if (!hasUnsavedChanges()) return true;
+    if (window.confirm("Discard changes?")) {
+      discardAllEdits();
+      return true;
+    }
+    return false;
+  };
+
+  const handleTabChange = (next: string) => {
+    if (next === activeTab) return;
+    if (!confirmDiscardIfNeeded()) return;
+    setActiveTab(next);
+  };
+
   const fetchProfile = useCallback(async () => {
     if (!id) return;
     setLoading(true);
@@ -339,7 +396,10 @@ const EmployeeProfile = () => {
 
   const activeWings = wings.filter((w) => w.active);
 
-  const goBack = () => (window.history.length > 1 ? navigate(-1) : navigate("/employees"));
+  const goBack = () => {
+    if (!confirmDiscardIfNeeded()) return;
+    window.history.length > 1 ? navigate(-1) : navigate("/employees");
+  };
 
   const handlePhotoSelect = async (file: File) => {
     if (!id) return;
@@ -363,8 +423,8 @@ const EmployeeProfile = () => {
     }
   };
 
-  const saveOverview = async () => {
-    if (!id || !overviewForm.full_name.trim()) { toast.error("Name is required"); return; }
+  const saveOverview = async (): Promise<boolean> => {
+    if (!id || !overviewForm.full_name.trim()) { toast.error("Name is required"); return false; }
     setSavingOverview(true);
     try {
       const selectedWing = wings.find((w) => w.id === overviewForm.wing_id);
@@ -395,7 +455,7 @@ const EmployeeProfile = () => {
         profilePayload.reporting_manager_ids = overviewForm.reporting_manager_ids;
       }
       const { error } = await supabase.from("profiles").update(profilePayload).eq("id", id);
-      if (error) { toast.error(error.message); return; }
+      if (error) { toast.error(error.message); return false; }
       if (isAdmin) {
         const { data: existing } = await supabase.from("user_roles").select("id").eq("user_id", id).maybeSingle();
         if (existing) await supabase.from("user_roles").update({ role: overviewForm.role as any }).eq("user_id", id);
@@ -403,13 +463,14 @@ const EmployeeProfile = () => {
       }
       toast.success("Profile updated");
       setReloadKey((k) => k + 1);
+      return true;
     } finally {
       setSavingOverview(false);
     }
   };
 
-  const saveCompensation = async () => {
-    if (!id) return;
+  const saveCompensation = async (): Promise<boolean> => {
+    if (!id) return false;
     setSavingCompensation(true);
     try {
       const { error } = await supabase.from("profiles").update({
@@ -417,16 +478,17 @@ const EmployeeProfile = () => {
         hourly_overtime_rate: parseFloat(compForm.hourly_overtime_rate) || 0,
         pf_contribution_pct: parseFloat(compForm.pf_contribution_pct) || 0,
       }).eq("id", id);
-      if (error) { toast.error(error.message); return; }
+      if (error) { toast.error(error.message); return false; }
       toast.success("Compensation updated");
       setReloadKey((k) => k + 1);
+      return true;
     } finally {
       setSavingCompensation(false);
     }
   };
 
-  const saveProjectAssignment = async () => {
-    if (!id) return;
+  const saveProjectAssignment = async (): Promise<boolean> => {
+    if (!id) return false;
     setSavingProjects(true);
     try {
       const added = selectedProjectIds.filter((pid) => !memberProjectIds.includes(pid));
@@ -435,7 +497,7 @@ const EmployeeProfile = () => {
         const { error } = await supabase
           .from("project_members")
           .upsert(added.map((project_id) => ({ project_id, user_id: id })), { onConflict: "project_id,user_id" });
-        if (error) { toast.error(`Project assignment failed: ${error.message}`); return; }
+        if (error) { toast.error(`Project assignment failed: ${error.message}`); return false; }
       }
       if (removed.length) {
         const { error } = await supabase
@@ -443,10 +505,11 @@ const EmployeeProfile = () => {
           .delete()
           .eq("user_id", id)
           .in("project_id", removed);
-        if (error) { toast.error(`Project removal failed: ${error.message}`); return; }
+        if (error) { toast.error(`Project removal failed: ${error.message}`); return false; }
       }
       setMemberProjectIds(selectedProjectIds);
       toast.success("Project assignment updated");
+      return true;
     } finally {
       setSavingProjects(false);
     }
@@ -456,7 +519,7 @@ const EmployeeProfile = () => {
     setLeaveTypes((prev) => prev.map((lt) => (lt.id === ltId ? { ...lt, ...patch } : lt)));
   };
 
-  const saveLeaveDefaults = async () => {
+  const saveLeaveDefaults = async (): Promise<boolean> => {
     setSavingLeave(true);
     const updates = leaveTypes.map((lt) =>
       supabase.from("leave_types").update({
@@ -469,15 +532,16 @@ const EmployeeProfile = () => {
     );
     const results = await Promise.all(updates);
     const firstErr = results.find((r) => r.error);
-    if (firstErr?.error) toast.error(firstErr.error.message);
-    else toast.success("Leave defaults updated");
     setSavingLeave(false);
+    if (firstErr?.error) { toast.error(firstErr.error.message); return false; }
+    toast.success("Leave defaults updated");
+    return true;
   };
 
   const canEditPersonalInfo = isSelf || isAdmin;
 
-  const savePersonalInfo = async () => {
-    if (!id || !canEditPersonalInfo) return;
+  const savePersonalInfo = async (): Promise<boolean> => {
+    if (!id || !canEditPersonalInfo) return false;
     setSavingPersonal(true);
     const payload: Record<string, unknown> = {};
     PERSONAL_INFO_FIELDS.forEach(({ key, type }) => {
@@ -485,12 +549,11 @@ const EmployeeProfile = () => {
       payload[key] = type === "number" ? (v === "" || v == null ? null : Number(v)) : (v || null);
     });
     const { error } = await supabase.from("profiles").update(payload as never).eq("id", id);
-    if (error) toast.error(error.message);
-    else {
-      toast.success("Personal information saved");
-      setProfile((p) => (p ? { ...p, ...payload } as Profile : p));
-    }
     setSavingPersonal(false);
+    if (error) { toast.error(error.message); return false; }
+    toast.success("Personal information saved");
+    setProfile((p) => (p ? { ...p, ...payload } as Profile : p));
+    return true;
   };
 
   const handleResetPassword = async () => {
@@ -605,7 +668,7 @@ const EmployeeProfile = () => {
         </CardContent>
       </Card>
 
-      <Tabs defaultValue="overview" className="w-full">
+      <Tabs value={activeTab} onValueChange={handleTabChange} className="w-full">
         <TabsList className="grid grid-cols-2 sm:grid-cols-6 w-full sm:w-auto">
           <TabsTrigger value="overview">Overview</TabsTrigger>
           <TabsTrigger value="personal">Personal Info</TabsTrigger>
@@ -620,10 +683,20 @@ const EmployeeProfile = () => {
           {canManageThisEmployee && (
             <Card>
               <CardHeader>
-                <CardTitle className="text-base flex items-center gap-2"><Pencil className="h-4 w-4" /> Edit Profile</CardTitle>
-                <CardDescription>Basic info, role &amp; reporting, and work schedule.</CardDescription>
+                <div className="flex items-start justify-between gap-2 flex-wrap">
+                  <div>
+                    <CardTitle className="text-base flex items-center gap-2"><Pencil className="h-4 w-4" /> Edit Profile</CardTitle>
+                    <CardDescription>Basic info, role &amp; reporting, and work schedule.</CardDescription>
+                  </div>
+                  <EditSaveCancel
+                    section={overviewEdit}
+                    saving={savingOverview}
+                    onSave={async () => { if (await saveOverview()) overviewEdit.stopEditing(); }}
+                  />
+                </div>
               </CardHeader>
               <CardContent className="space-y-5">
+                <fieldset disabled={!overviewEdit.editing} className="space-y-5 disabled:opacity-60">
                 <div className="flex items-center gap-4">
                   <Avatar className="h-16 w-16">
                     <AvatarImage src={overviewForm.photo_url || undefined} />
@@ -637,7 +710,7 @@ const EmployeeProfile = () => {
                       className="hidden"
                       onChange={(e) => { const f = e.target.files?.[0]; if (f) handlePhotoSelect(f); }}
                     />
-                    <Button size="sm" variant="outline" disabled={uploadingPhoto}
+                    <Button size="sm" variant="outline" disabled={!overviewEdit.editing || uploadingPhoto}
                       onClick={() => document.getElementById("profile-photo-input")?.click()}>
                       <Camera className="mr-1 h-4 w-4" />
                       {uploadingPhoto ? "Uploading…" : "Upload Photo"}
@@ -654,7 +727,7 @@ const EmployeeProfile = () => {
                   <div><Label>Designation</Label><Input value={overviewForm.designation} onChange={(e) => setOverviewForm((f) => ({ ...f, designation: e.target.value }))} /></div>
                   <div>
                     <Label>Wing</Label>
-                    <Select value={overviewForm.wing_id || "none"} onValueChange={(v) => setOverviewForm((f) => ({ ...f, wing_id: v === "none" ? "" : v }))}>
+                    <Select value={overviewForm.wing_id || "none"} onValueChange={(v) => setOverviewForm((f) => ({ ...f, wing_id: v === "none" ? "" : v }))} disabled={!overviewEdit.editing}>
                       <SelectTrigger><SelectValue placeholder="Select wing" /></SelectTrigger>
                       <SelectContent>
                         <SelectItem value="none">Unassigned</SelectItem>
@@ -667,7 +740,7 @@ const EmployeeProfile = () => {
                 <div className="grid gap-3 md:grid-cols-2">
                   <div>
                     <Label>Role</Label>
-                    <Select value={overviewForm.role} onValueChange={(v) => setOverviewForm((f) => ({ ...f, role: v }))} disabled={!isAdmin}>
+                    <Select value={overviewForm.role} onValueChange={(v) => setOverviewForm((f) => ({ ...f, role: v }))} disabled={!overviewEdit.editing || !isAdmin}>
                       <SelectTrigger><SelectValue /></SelectTrigger>
                       <SelectContent>
                         <SelectItem value="admin">Admin</SelectItem>
@@ -684,7 +757,7 @@ const EmployeeProfile = () => {
                       ) : managers.filter((m) => m.id !== id).map((m) => (
                         <label key={m.id} className="flex items-center gap-2 text-sm px-1 py-0.5">
                           <Checkbox
-                            disabled={!isAdmin}
+                            disabled={!overviewEdit.editing || !isAdmin}
                             checked={overviewForm.reporting_manager_ids.includes(m.id)}
                             onCheckedChange={() =>
                               setOverviewForm((f) => ({
@@ -702,14 +775,14 @@ const EmployeeProfile = () => {
                   </div>
                   <div>
                     <Label>Service Status</Label>
-                    <Select value={overviewForm.service_status} onValueChange={(v) => setOverviewForm((f) => ({ ...f, service_status: v }))}>
+                    <Select value={overviewForm.service_status} onValueChange={(v) => setOverviewForm((f) => ({ ...f, service_status: v }))} disabled={!overviewEdit.editing}>
                       <SelectTrigger><SelectValue /></SelectTrigger>
                       <SelectContent>{SERVICE_STATUS.map((s) => <SelectItem key={s} value={s}>{s}</SelectItem>)}</SelectContent>
                     </Select>
                   </div>
                   <div>
                     <Label>Employee Status</Label>
-                    <Select value={overviewForm.employee_status} onValueChange={(v) => setOverviewForm((f) => ({ ...f, employee_status: v }))}>
+                    <Select value={overviewForm.employee_status} onValueChange={(v) => setOverviewForm((f) => ({ ...f, employee_status: v }))} disabled={!overviewEdit.editing}>
                       <SelectTrigger><SelectValue /></SelectTrigger>
                       <SelectContent>{EMPLOYEE_STATUS.map((s) => <SelectItem key={s} value={s}>{s}</SelectItem>)}</SelectContent>
                     </Select>
@@ -753,6 +826,7 @@ const EmployeeProfile = () => {
                         {DOW.map((d) => (
                           <label key={d.v} className="flex items-center gap-1.5 text-sm">
                             <Checkbox
+                              disabled={!overviewEdit.editing}
                               checked={overviewForm.working_days.includes(d.v)}
                               onCheckedChange={() =>
                                 setOverviewForm((f) => ({
@@ -770,10 +844,7 @@ const EmployeeProfile = () => {
                     </div>
                   </div>
                 </div>
-
-                <Button onClick={saveOverview} disabled={savingOverview}>
-                  {savingOverview ? "Saving..." : "Save Changes"}
-                </Button>
+                </fieldset>
               </CardContent>
             </Card>
           )}
@@ -821,7 +892,7 @@ const EmployeeProfile = () => {
               <CardContent className="flex flex-wrap items-center gap-2">
                 <AlertDialog>
                   <AlertDialogTrigger asChild>
-                    <Button size="sm" variant="outline">
+                    <Button size="sm" variant="outline" disabled={!overviewEdit.editing}>
                       <KeyRound className="h-4 w-4 mr-1" /> Reset Password
                     </Button>
                   </AlertDialogTrigger>
@@ -841,7 +912,7 @@ const EmployeeProfile = () => {
                 </AlertDialog>
                 <AlertDialog>
                   <AlertDialogTrigger asChild>
-                    <Button size="sm" variant="outline">
+                    <Button size="sm" variant="outline" disabled={!overviewEdit.editing}>
                       <Trash2 className="h-4 w-4 mr-1 text-destructive" /> Delete
                     </Button>
                   </AlertDialogTrigger>
@@ -871,16 +942,27 @@ const EmployeeProfile = () => {
         <TabsContent value="personal" className="mt-4">
           <Card>
             <CardHeader>
-              <CardTitle className="text-base flex items-center gap-2"><ClipboardList className="h-4 w-4" /> Personal Information</CardTitle>
-              <CardDescription>
-                {canEditPersonalInfo
-                  ? "Used for HR records. Personal Email, Official Gmail, Official OneDrive and Phone Number also appear in Team Member Details."
-                  : "Filled in by the account holder or an admin. Read-only here."}
-              </CardDescription>
+              <div className="flex items-start justify-between gap-2 flex-wrap">
+                <div>
+                  <CardTitle className="text-base flex items-center gap-2"><ClipboardList className="h-4 w-4" /> Personal Information</CardTitle>
+                  <CardDescription>
+                    {canEditPersonalInfo
+                      ? "Used for HR records. Personal Email, Official Gmail, Official OneDrive and Phone Number also appear in Team Member Details."
+                      : "Filled in by the account holder or an admin. Read-only here."}
+                  </CardDescription>
+                </div>
+                {canEditPersonalInfo && (
+                  <EditSaveCancel
+                    section={personalEdit}
+                    saving={savingPersonal}
+                    onSave={async () => { if (await savePersonalInfo()) personalEdit.stopEditing(); }}
+                  />
+                )}
+              </div>
             </CardHeader>
             <CardContent>
               {canEditPersonalInfo ? (
-                <div className="grid gap-4 md:grid-cols-2">
+                <fieldset disabled={!personalEdit.editing} className="grid gap-4 md:grid-cols-2 disabled:opacity-60">
                   {PERSONAL_INFO_FIELDS.map(({ key, label, type }) => (
                     <div key={key} className={type === "textarea" ? "md:col-span-2 space-y-1" : "space-y-1"}>
                       <Label className="text-xs">{label}</Label>
@@ -899,12 +981,7 @@ const EmployeeProfile = () => {
                       )}
                     </div>
                   ))}
-                  <div className="md:col-span-2">
-                    <Button onClick={savePersonalInfo} disabled={savingPersonal}>
-                      {savingPersonal ? "Saving..." : "Save Personal Information"}
-                    </Button>
-                  </div>
-                </div>
+                </fieldset>
               ) : (
                 <div className="grid gap-4 md:grid-cols-2">
                   {PERSONAL_INFO_FIELDS.map(({ key, label }) => (
@@ -936,14 +1013,21 @@ const EmployeeProfile = () => {
           {canEditPayroll && (
             <Card>
               <CardHeader>
-                <div className="flex items-center justify-between">
+                <div className="flex items-center justify-between flex-wrap gap-2">
                   <CardTitle className="text-base">Compensation</CardTitle>
-                  <Badge variant="outline" className="text-[10px]">Admin only</Badge>
+                  <div className="flex items-center gap-2">
+                    <Badge variant="outline" className="text-[10px]">Admin only</Badge>
+                    <EditSaveCancel
+                      section={financialEdit}
+                      saving={savingCompensation}
+                      onSave={async () => { if (await saveCompensation()) financialEdit.stopEditing(); }}
+                    />
+                  </div>
                 </div>
                 <CardDescription>Update base salary on promotion or revision. Changes take effect on the next payroll generation.</CardDescription>
               </CardHeader>
               <CardContent className="space-y-3">
-                <div className="grid grid-cols-3 gap-3">
+                <fieldset disabled={!financialEdit.editing} className="grid grid-cols-3 gap-3 disabled:opacity-60">
                   <div>
                     <Label>Base Salary (monthly)</Label>
                     <Input type="number" step="0.01" min="0" value={compForm.base_salary}
@@ -959,10 +1043,7 @@ const EmployeeProfile = () => {
                     <Input type="number" step="0.01" min="0" max="100" value={compForm.pf_contribution_pct}
                       onChange={(e) => setCompForm((f) => ({ ...f, pf_contribution_pct: e.target.value }))} />
                   </div>
-                </div>
-                <Button onClick={saveCompensation} disabled={savingCompensation}>
-                  {savingCompensation ? "Saving..." : "Save Compensation"}
-                </Button>
+                </fieldset>
               </CardContent>
             </Card>
           )}
@@ -1018,8 +1099,17 @@ const EmployeeProfile = () => {
           {isAdmin && (
             <Card>
               <CardHeader>
-                <CardTitle className="text-base">Assigned Projects</CardTitle>
-                <CardDescription>Which projects this employee is a member of.</CardDescription>
+                <div className="flex items-start justify-between gap-2 flex-wrap">
+                  <div>
+                    <CardTitle className="text-base">Assigned Projects</CardTitle>
+                    <CardDescription>Which projects this employee is a member of.</CardDescription>
+                  </div>
+                  <EditSaveCancel
+                    section={projectsEdit}
+                    saving={savingProjects}
+                    onSave={async () => { if (await saveProjectAssignment()) projectsEdit.stopEditing(); }}
+                  />
+                </div>
               </CardHeader>
               <CardContent className="space-y-3">
                 {projects.length === 0 ? (
@@ -1027,7 +1117,7 @@ const EmployeeProfile = () => {
                     No active projects yet — create one on the Projects page to assign it here.
                   </p>
                 ) : (
-                  <div className="flex flex-wrap gap-2 rounded-md border p-2 max-h-32 overflow-y-auto">
+                  <fieldset disabled={!projectsEdit.editing} className="flex flex-wrap gap-2 rounded-md border p-2 max-h-32 overflow-y-auto disabled:opacity-60">
                     {projects.map((p) => {
                       const checked = selectedProjectIds.includes(p.id);
                       return (
@@ -1047,11 +1137,8 @@ const EmployeeProfile = () => {
                         </label>
                       );
                     })}
-                  </div>
+                  </fieldset>
                 )}
-                <Button size="sm" onClick={saveProjectAssignment} disabled={savingProjects}>
-                  {savingProjects ? "Saving..." : "Save Project Assignment"}
-                </Button>
               </CardContent>
             </Card>
           )}
@@ -1134,11 +1221,20 @@ const EmployeeProfile = () => {
           {isAdmin && (
             <Card>
               <CardHeader>
-                <CardTitle className="text-base">Leave Defaults</CardTitle>
-                <CardDescription>Applies to every employee for each leave type — not just this one.</CardDescription>
+                <div className="flex items-start justify-between gap-2 flex-wrap">
+                  <div>
+                    <CardTitle className="text-base">Leave Defaults</CardTitle>
+                    <CardDescription>Applies to every employee for each leave type — not just this one.</CardDescription>
+                  </div>
+                  <EditSaveCancel
+                    section={teamEdit}
+                    saving={savingLeave}
+                    onSave={async () => { if (await saveLeaveDefaults()) teamEdit.stopEditing(); }}
+                  />
+                </div>
               </CardHeader>
               <CardContent className="space-y-3">
-                <div className="grid gap-3">
+                <fieldset disabled={!teamEdit.editing} className="grid gap-3 disabled:opacity-60">
                   {leaveTypes.map((lt) => (
                     <div key={lt.id} className="grid grid-cols-1 md:grid-cols-12 gap-3 items-center rounded-lg border p-3 bg-card">
                       <div className="md:col-span-5 flex items-center gap-3">
@@ -1169,18 +1265,29 @@ const EmployeeProfile = () => {
                       </div>
                     </div>
                   ))}
-                </div>
-                <Button onClick={saveLeaveDefaults} disabled={savingLeave}>
-                  {savingLeave ? "Saving..." : "Save Leave Defaults"}
-                </Button>
+                </fieldset>
               </CardContent>
             </Card>
           )}
         </TabsContent>
 
         {/* CONTRACT DOCUMENTS */}
-        <TabsContent value="documents" className="mt-4">
-          <EmployeeDocumentsTab userId={id!} canManage={isSelf || isAdmin} />
+        <TabsContent value="documents" className="mt-4 space-y-4">
+          {(isSelf || isAdmin) && (
+            <div className="flex justify-end">
+              {documentsEditing ? (
+                <div className="flex items-center gap-2">
+                  <Button size="sm" onClick={() => setDocumentsEditing(false)}>Save</Button>
+                  <Button size="sm" variant="outline" onClick={() => setDocumentsEditing(false)}>Cancel</Button>
+                </div>
+              ) : (
+                <Button size="sm" variant="outline" onClick={() => setDocumentsEditing(true)}>
+                  <Pencil className="h-4 w-4 mr-1" /> Edit
+                </Button>
+              )}
+            </div>
+          )}
+          <EmployeeDocumentsTab userId={id!} canManage={isSelf || isAdmin} editing={documentsEditing} />
         </TabsContent>
       </Tabs>
 
