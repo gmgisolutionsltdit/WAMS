@@ -35,6 +35,37 @@ import EmployeeDocumentsTab from "@/components/EmployeeDocumentsTab";
 import { DEFAULT_GRACE_MINUTES, DEFAULT_OFFICE_END, DEFAULT_OFFICE_START } from "@/lib/officeTime";
 import { DEFAULT_WORKING_DAYS } from "@/lib/workSchedule";
 import { useSectionEdit } from "@/hooks/useSectionEdit";
+import { useFieldEdit } from "@/hooks/useFieldEdit";
+
+const FieldEdit = ({
+  label, editing, saving, disabled, onStart, onSave, onCancel, children, display,
+}: {
+  label: string; editing: boolean; saving: boolean; disabled?: boolean;
+  onStart: () => void; onSave: () => void; onCancel: () => void;
+  children: React.ReactNode; display: React.ReactNode;
+}) => (
+  <div className="space-y-1">
+    <div className="flex items-center justify-between gap-2">
+      <Label className="text-xs">{label}</Label>
+      {!disabled && !editing && (
+        <Button type="button" size="icon" variant="ghost" className="h-5 w-5" onClick={onStart} aria-label={`Edit ${label}`}>
+          <Pencil className="h-3 w-3" />
+        </Button>
+      )}
+    </div>
+    {editing ? (
+      <div className="space-y-1.5">
+        {children}
+        <div className="flex gap-1.5">
+          <Button type="button" size="sm" onClick={onSave} disabled={saving}>{saving ? "Saving..." : "Save"}</Button>
+          <Button type="button" size="sm" variant="outline" onClick={onCancel} disabled={saving}>Cancel</Button>
+        </div>
+      </div>
+    ) : (
+      <div className="text-sm font-medium py-2 min-h-[2.25rem] flex items-center">{display}</div>
+    )}
+  </div>
+);
 
 type SectionEditState = { editing: boolean; hasChanges: boolean; startEdit: () => void; cancelEdit: () => void };
 
@@ -228,7 +259,6 @@ const EmployeeProfile = () => {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [personalForm, setPersonalForm] = useState<Partial<Profile>>({});
-  const [savingPersonal, setSavingPersonal] = useState(false);
   const [reloadKey, setReloadKey] = useState(0);
 
   const isSelf = !!user && user.id === id;
@@ -259,7 +289,6 @@ const EmployeeProfile = () => {
   });
 
   // ---- Editable "Financial" (Compensation) fields — admin only ----
-  const [savingCompensation, setSavingCompensation] = useState(false);
   const [compForm, setCompForm] = useState({ base_salary: "0", hourly_overtime_rate: "0", pf_contribution_pct: "0" });
 
   // ---- Editable "Projects & Tasks" assignment — admin only ----
@@ -278,19 +307,38 @@ const EmployeeProfile = () => {
   const [activeTab, setActiveTab] = useState("overview");
 
   const overviewEdit = useSectionEdit(overviewForm, setOverviewForm);
-  const personalEdit = useSectionEdit(personalForm, setPersonalForm);
-  const financialEdit = useSectionEdit(compForm, setCompForm);
   const projectsEdit = useSectionEdit(selectedProjectIds, setSelectedProjectIds);
   const teamEdit = useSectionEdit(leaveTypes, setLeaveTypes);
 
+  const personalFieldEdit = useFieldEdit(personalForm, setPersonalForm, async (key, current) => {
+    if (!id || !(isSelf || isAdmin)) return false;
+    const field = PERSONAL_INFO_FIELDS.find((f) => f.key === key);
+    const raw = current[key];
+    const val = field?.type === "number" ? (raw === "" || raw == null ? null : Number(raw)) : (raw || null);
+    const { error } = await supabase.from("profiles").update({ [key as string]: val } as never).eq("id", id);
+    if (error) { toast.error(error.message); return false; }
+    toast.success(`${field?.label || String(key)} saved`);
+    setProfile((p) => (p ? ({ ...p, [key]: val } as Profile) : p));
+    return true;
+  });
+
+  const financialFieldEdit = useFieldEdit(compForm, setCompForm, async (key, current) => {
+    if (!id || !canEditPayroll) return false;
+    const val = parseFloat(String(current[key])) || 0;
+    const { error } = await supabase.from("profiles").update({ [key as string]: val } as never).eq("id", id);
+    if (error) { toast.error(error.message); return false; }
+    toast.success("Compensation updated");
+    return true;
+  });
+
   const hasUnsavedChanges = () =>
-    overviewEdit.hasChanges || personalEdit.hasChanges || financialEdit.hasChanges
+    overviewEdit.hasChanges || personalFieldEdit.hasEditing || financialFieldEdit.hasEditing
     || projectsEdit.hasChanges || teamEdit.hasChanges || documentsEditing;
 
   const discardAllEdits = () => {
     if (overviewEdit.editing) overviewEdit.cancelEdit();
-    if (personalEdit.editing) personalEdit.cancelEdit();
-    if (financialEdit.editing) financialEdit.cancelEdit();
+    personalFieldEdit.cancelAll();
+    financialFieldEdit.cancelAll();
     if (projectsEdit.editing) projectsEdit.cancelEdit();
     if (teamEdit.editing) teamEdit.cancelEdit();
     setDocumentsEditing(false);
@@ -469,24 +517,6 @@ const EmployeeProfile = () => {
     }
   };
 
-  const saveCompensation = async (): Promise<boolean> => {
-    if (!id) return false;
-    setSavingCompensation(true);
-    try {
-      const { error } = await supabase.from("profiles").update({
-        base_salary: parseFloat(compForm.base_salary) || 0,
-        hourly_overtime_rate: parseFloat(compForm.hourly_overtime_rate) || 0,
-        pf_contribution_pct: parseFloat(compForm.pf_contribution_pct) || 0,
-      }).eq("id", id);
-      if (error) { toast.error(error.message); return false; }
-      toast.success("Compensation updated");
-      setReloadKey((k) => k + 1);
-      return true;
-    } finally {
-      setSavingCompensation(false);
-    }
-  };
-
   const saveProjectAssignment = async (): Promise<boolean> => {
     if (!id) return false;
     setSavingProjects(true);
@@ -535,24 +565,6 @@ const EmployeeProfile = () => {
     setSavingLeave(false);
     if (firstErr?.error) { toast.error(firstErr.error.message); return false; }
     toast.success("Leave defaults updated");
-    return true;
-  };
-
-  const canEditPersonalInfo = isSelf || isAdmin;
-
-  const savePersonalInfo = async (): Promise<boolean> => {
-    if (!id || !canEditPersonalInfo) return false;
-    setSavingPersonal(true);
-    const payload: Record<string, unknown> = {};
-    PERSONAL_INFO_FIELDS.forEach(({ key, type }) => {
-      const v = personalForm[key];
-      payload[key] = type === "number" ? (v === "" || v == null ? null : Number(v)) : (v || null);
-    });
-    const { error } = await supabase.from("profiles").update(payload as never).eq("id", id);
-    setSavingPersonal(false);
-    if (error) { toast.error(error.message); return false; }
-    toast.success("Personal information saved");
-    setProfile((p) => (p ? { ...p, ...payload } as Profile : p));
     return true;
   };
 
@@ -946,26 +958,32 @@ const EmployeeProfile = () => {
                 <div>
                   <CardTitle className="text-base flex items-center gap-2"><ClipboardList className="h-4 w-4" /> Personal Information</CardTitle>
                   <CardDescription>
-                    {canEditPersonalInfo
-                      ? "Used for HR records. Personal Email, Official Gmail, Official OneDrive and Phone Number also appear in Team Member Details."
+                    {(isSelf || isAdmin)
+                      ? "Each field has its own pencil to edit. Personal Email, Official Gmail, Official OneDrive and Phone Number also appear in Team Member Details."
                       : "Filled in by the account holder or an admin. Read-only here."}
                   </CardDescription>
                 </div>
-                {canEditPersonalInfo && (
-                  <EditSaveCancel
-                    section={personalEdit}
-                    saving={savingPersonal}
-                    onSave={async () => { if (await savePersonalInfo()) personalEdit.stopEditing(); }}
-                  />
+                {(isSelf || isAdmin) && (
+                  <Button size="sm" onClick={personalFieldEdit.saveAll} disabled={!personalFieldEdit.hasEditing}>
+                    Save All
+                  </Button>
                 )}
               </div>
             </CardHeader>
             <CardContent>
-              {canEditPersonalInfo ? (
-                <fieldset disabled={!personalEdit.editing} className="grid gap-4 md:grid-cols-2 disabled:opacity-60">
-                  {PERSONAL_INFO_FIELDS.map(({ key, label, type }) => (
-                    <div key={key} className={type === "textarea" ? "md:col-span-2 space-y-1" : "space-y-1"}>
-                      <Label className="text-xs">{label}</Label>
+              <div className="grid gap-4 md:grid-cols-2">
+                {PERSONAL_INFO_FIELDS.map(({ key, label, type }) => (
+                  <div key={key} className={type === "textarea" ? "md:col-span-2" : undefined}>
+                    <FieldEdit
+                      label={label}
+                      editing={(isSelf || isAdmin) && personalFieldEdit.isEditing(key)}
+                      saving={personalFieldEdit.isSaving(key)}
+                      disabled={!(isSelf || isAdmin)}
+                      onStart={() => personalFieldEdit.startEdit(key)}
+                      onSave={() => personalFieldEdit.saveEdit(key)}
+                      onCancel={() => personalFieldEdit.cancelEdit(key)}
+                      display={fmt(profile[key] != null ? String(profile[key]) : null)}
+                    >
                       {type === "textarea" ? (
                         <Textarea
                           rows={2}
@@ -979,16 +997,10 @@ const EmployeeProfile = () => {
                           onChange={(e) => setPersonalForm((f) => ({ ...f, [key]: e.target.value }))}
                         />
                       )}
-                    </div>
-                  ))}
-                </fieldset>
-              ) : (
-                <div className="grid gap-4 md:grid-cols-2">
-                  {PERSONAL_INFO_FIELDS.map(({ key, label }) => (
-                    <Row key={key} icon={ClipboardList} label={label} value={fmt(profile[key] != null ? String(profile[key]) : null)} />
-                  ))}
-                </div>
-              )}
+                    </FieldEdit>
+                  </div>
+                ))}
+              </div>
             </CardContent>
           </Card>
         </TabsContent>
@@ -1017,33 +1029,52 @@ const EmployeeProfile = () => {
                   <CardTitle className="text-base">Compensation</CardTitle>
                   <div className="flex items-center gap-2">
                     <Badge variant="outline" className="text-[10px]">Admin only</Badge>
-                    <EditSaveCancel
-                      section={financialEdit}
-                      saving={savingCompensation}
-                      onSave={async () => { if (await saveCompensation()) financialEdit.stopEditing(); }}
-                    />
+                    <Button size="sm" onClick={financialFieldEdit.saveAll} disabled={!financialFieldEdit.hasEditing}>
+                      Save All
+                    </Button>
                   </div>
                 </div>
                 <CardDescription>Update base salary on promotion or revision. Changes take effect on the next payroll generation.</CardDescription>
               </CardHeader>
               <CardContent className="space-y-3">
-                <fieldset disabled={!financialEdit.editing} className="grid grid-cols-3 gap-3 disabled:opacity-60">
-                  <div>
-                    <Label>Base Salary (monthly)</Label>
+                <div className="grid grid-cols-3 gap-3">
+                  <FieldEdit
+                    label="Base Salary (monthly)"
+                    editing={financialFieldEdit.isEditing("base_salary")}
+                    saving={financialFieldEdit.isSaving("base_salary")}
+                    onStart={() => financialFieldEdit.startEdit("base_salary")}
+                    onSave={() => financialFieldEdit.saveEdit("base_salary")}
+                    onCancel={() => financialFieldEdit.cancelEdit("base_salary")}
+                    display={fmtMoney(profile.base_salary)}
+                  >
                     <Input type="number" step="0.01" min="0" value={compForm.base_salary}
                       onChange={(e) => setCompForm((f) => ({ ...f, base_salary: e.target.value }))} />
-                  </div>
-                  <div>
-                    <Label>Hourly OT Rate</Label>
+                  </FieldEdit>
+                  <FieldEdit
+                    label="Hourly OT Rate"
+                    editing={financialFieldEdit.isEditing("hourly_overtime_rate")}
+                    saving={financialFieldEdit.isSaving("hourly_overtime_rate")}
+                    onStart={() => financialFieldEdit.startEdit("hourly_overtime_rate")}
+                    onSave={() => financialFieldEdit.saveEdit("hourly_overtime_rate")}
+                    onCancel={() => financialFieldEdit.cancelEdit("hourly_overtime_rate")}
+                    display={fmtMoney(profile.hourly_overtime_rate)}
+                  >
                     <Input type="number" step="0.01" min="0" value={compForm.hourly_overtime_rate}
                       onChange={(e) => setCompForm((f) => ({ ...f, hourly_overtime_rate: e.target.value }))} />
-                  </div>
-                  <div>
-                    <Label>PF Contribution (%)</Label>
+                  </FieldEdit>
+                  <FieldEdit
+                    label="PF Contribution (%)"
+                    editing={financialFieldEdit.isEditing("pf_contribution_pct")}
+                    saving={financialFieldEdit.isSaving("pf_contribution_pct")}
+                    onStart={() => financialFieldEdit.startEdit("pf_contribution_pct")}
+                    onSave={() => financialFieldEdit.saveEdit("pf_contribution_pct")}
+                    onCancel={() => financialFieldEdit.cancelEdit("pf_contribution_pct")}
+                    display={profile.pf_contribution_pct != null ? `${profile.pf_contribution_pct}%` : "—"}
+                  >
                     <Input type="number" step="0.01" min="0" max="100" value={compForm.pf_contribution_pct}
                       onChange={(e) => setCompForm((f) => ({ ...f, pf_contribution_pct: e.target.value }))} />
-                  </div>
-                </fieldset>
+                  </FieldEdit>
+                </div>
               </CardContent>
             </Card>
           )}
