@@ -928,8 +928,28 @@ const EmployeeProfile = () => {
                       ) : (
                         <div className="grid gap-3 md:grid-cols-2 mt-1">
                           <div className="text-sm font-medium py-2 min-h-[2.25rem] flex items-center capitalize">{fmt(role)}</div>
-                          <div className="text-sm font-medium py-2 min-h-[2.25rem] flex items-center">
-                            {manager ? <Link to={`/employees/${manager.id}`} className="text-primary hover:underline">{manager.name}</Link> : "—"}
+                          <div>
+                            <Label className="text-xs">Reporting To</Label>
+                            {role === "admin" ? (
+                              <p className="text-xs text-muted-foreground rounded-md border p-2">Admins have no reporting manager.</p>
+                            ) : (
+                              <div className="rounded-md border p-2 max-h-32 overflow-y-auto space-y-1">
+                                {managers.filter((m) => m.id !== id).length === 0 ? (
+                                  <p className="text-xs text-muted-foreground px-1">No managers/admins available</p>
+                                ) : managers.filter((m) => m.id !== id).map((m) => (
+                                  <label key={m.id} className="flex items-center gap-2 text-sm px-1 py-0.5">
+                                    <Checkbox
+                                      checked={(profile.reporting_manager_ids?.length
+                                        ? profile.reporting_manager_ids
+                                        : (profile.reporting_manager_id ? [profile.reporting_manager_id] : [])
+                                      ).includes(m.id)}
+                                      disabled
+                                    />
+                                    {m.full_name || m.email}
+                                  </label>
+                                ))}
+                              </div>
+                            )}
                           </div>
                         </div>
                       )}
