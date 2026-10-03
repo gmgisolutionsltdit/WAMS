@@ -420,8 +420,27 @@ const EmployeeProfile = () => {
     }
   };
 
+  // Block marking an employee Resigned while they still owe an outstanding
+  // Personal Advance (remaining_balance > 0) or have an unsettled Expense
+  // Advance (pending/approved, not yet settled or converted) — the balance
+  // must be cleared first.
+  const checkOutstandingAdvance = async (): Promise<boolean> => {
+    if (!id) return false;
+    const [{ data: pa }, { data: ea }] = await Promise.all([
+      supabase.from("personal_advances").select("id").eq("user_id", id).eq("status", "approved").gt("remaining_balance", 0).limit(1),
+      supabase.from("expense_advances").select("id").eq("user_id", id).in("status", ["pending", "approved"]).limit(1),
+    ]);
+    return !!(pa && pa.length > 0) || !!(ea && ea.length > 0);
+  };
+
   const saveOverview = async (): Promise<boolean> => {
     if (!id || !overviewForm.full_name.trim()) { toast.error("Name is required"); return false; }
+    if (overviewForm.employee_status === "Resigned" && profile?.employee_status !== "Resigned") {
+      if (await checkOutstandingAdvance()) {
+        toast.error("Cannot mark as Resigned: this employee has an outstanding Personal or Expense Advance. Settle it under Payment first.");
+        return false;
+      }
+    }
     setSavingOverview(true);
     try {
       const selectedWing = wings.find((w) => w.id === overviewForm.wing_id);
@@ -532,6 +551,10 @@ const EmployeeProfile = () => {
 
   const handleDelete = async () => {
     if (!id) return;
+    if (await checkOutstandingAdvance()) {
+      toast.error("Cannot delete: this employee has an outstanding Personal or Expense Advance. Settle it under Payment first.");
+      return;
+    }
     setDeleting(true);
     try {
       const { data, error } = await invokeAdminUserManagement({
