@@ -51,16 +51,7 @@ const Payment = () => {
 
   const [personalAdvances, setPersonalAdvances] = useState<any[]>([]);
   const [expenseAdvances, setExpenseAdvances] = useState<any[]>([]);
-  const [open, setOpen] = useState(false);
-  const [requestKind, setRequestKind] = useState<AdvanceKind>("personal");
   const [uploading, setUploading] = useState(false);
-
-  const [personalForm, setPersonalForm] = useState({
-    amount: "", reason: "", installments: "1", monthly_deduction: "",
-  });
-  const [expenseForm, setExpenseForm] = useState({
-    amount: "", purpose: "", settle_by: "",
-  });
 
   const [settleDialogId, setSettleDialogId] = useState<string | null>(null);
   const [settleReceipts, setSettleReceipts] = useState<{ amount: string; url: string }[]>([{ amount: "", url: "" }]);
@@ -150,88 +141,6 @@ const Payment = () => {
   const mine = unified.filter((u) => u.raw.user_id === user?.id);
   const pendingApprovals = unified.filter((u) => u.raw.status === "pending" && u.raw.user_id !== user?.id);
   const teamHistory = unified.filter((u) => u.raw.user_id !== user?.id);
-
-  const hasActivePersonal = personalAdvances.some((r) => r.user_id === user?.id && ["pending", "approved"].includes(r.status));
-  const hasActiveExpense = expenseAdvances.some((r) => r.user_id === user?.id && ["pending", "approved"].includes(r.status));
-
-  const resetRequestForm = () => {
-    setPersonalForm({ amount: "", reason: "", installments: "1", monthly_deduction: "" });
-    setExpenseForm({ amount: "", purpose: "", settle_by: "" });
-    setRequestKind("personal");
-  };
-
-  const onPersonalFieldChange = (patch: Partial<typeof personalForm>) => {
-    setPersonalForm((f) => {
-      const next = { ...f, ...patch };
-      const amt = Number(next.amount);
-      const inst = Number(next.installments);
-      if (amt > 0 && inst > 0 && ("amount" in patch || "installments" in patch)) {
-        next.monthly_deduction = (amt / inst).toFixed(2);
-      }
-      return next;
-    });
-  };
-
-  const submitRequest = async () => {
-    if (!user) return;
-    if (requestKind === "personal") {
-      const amount = Number(personalForm.amount);
-      const installments = Number(personalForm.installments);
-      const monthlyDeduction = Number(personalForm.monthly_deduction);
-      if (!amount || amount <= 0) return toast.error("Amount must be greater than 0");
-      if (!installments || installments <= 0) return toast.error("Installments must be greater than 0");
-      if (!monthlyDeduction || monthlyDeduction <= 0) return toast.error("Monthly deduction must be greater than 0");
-      if (hasActivePersonal) return toast.error("You already have an active Personal Advance request.");
-      const { data: inserted, error } = await supabase.from("personal_advances").insert({
-        user_id: user.id,
-        amount,
-        reason: personalForm.reason || null,
-        installments,
-        monthly_deduction: monthlyDeduction,
-        remaining_balance: amount,
-      }).select().single();
-      if (error) {
-        if ((error as any).code === "23505") return toast.error("You already have an active Personal Advance request.");
-        return toast.error(error.message);
-      }
-      toast.success("Personal Advance requested");
-      setOpen(false);
-      resetRequestForm();
-      await notifyManagersAndAdmins(
-        "Personal Advance Requested",
-        `${user.email} requested a Personal Advance of ${amount}.`,
-        inserted?.id,
-        { route: "/payment", type: "personal_advance", requesterId: user.id },
-      );
-      fetchAll();
-    } else {
-      const amount = Number(expenseForm.amount);
-      if (!amount || amount <= 0) return toast.error("Amount must be greater than 0");
-      if (!expenseForm.settle_by) return toast.error("Settle By date is required");
-      if (expenseForm.settle_by <= todayISO()) return toast.error("Settle By must be a future date");
-      if (hasActiveExpense) return toast.error("You already have an active Expense Advance request.");
-      const { data: inserted, error } = await supabase.from("expense_advances").insert({
-        user_id: user.id,
-        amount,
-        purpose: expenseForm.purpose || null,
-        settle_by: expenseForm.settle_by,
-      }).select().single();
-      if (error) {
-        if ((error as any).code === "23505") return toast.error("You already have an active Expense Advance request.");
-        return toast.error(error.message);
-      }
-      toast.success("Expense Advance requested");
-      setOpen(false);
-      resetRequestForm();
-      await notifyManagersAndAdmins(
-        "Expense Advance Requested",
-        `${user.email} requested an Expense Advance of ${amount}.`,
-        inserted?.id,
-        { route: "/payment", type: "expense_advance", requesterId: user.id },
-      );
-      fetchAll();
-    }
-  };
 
   const decide = async (item: UnifiedAdvance, status: "approved" | "rejected") => {
     if (!user) return;
@@ -450,43 +359,6 @@ const Payment = () => {
           <h1 className="text-2xl font-display font-bold">Payment</h1>
           <p className="text-sm text-muted-foreground">Request and manage Personal and Expense Advances.</p>
         </div>
-        <Dialog open={open} onOpenChange={(o) => { setOpen(o); if (!o) resetRequestForm(); }}>
-          <DialogTrigger asChild><Button><Plus className="h-4 w-4 mr-1" />New Request</Button></DialogTrigger>
-          <DialogContent>
-            <DialogHeader><DialogTitle>New Payment Request</DialogTitle></DialogHeader>
-            <div className="space-y-3">
-              <div>
-                <Label>Type</Label>
-                <Select value={requestKind} onValueChange={(v) => setRequestKind(v as AdvanceKind)}>
-                  <SelectTrigger><SelectValue /></SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="personal">Personal Advance</SelectItem>
-                    <SelectItem value="expense">Expense Advance</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-              {requestKind === "personal" ? (
-                <>
-                  <div className="grid grid-cols-2 gap-3">
-                    <div><Label>Amount</Label><Input type="number" value={personalForm.amount} onChange={(e) => onPersonalFieldChange({ amount: e.target.value })} /></div>
-                    <div><Label>Installments</Label><Input type="number" value={personalForm.installments} onChange={(e) => onPersonalFieldChange({ installments: e.target.value })} /></div>
-                  </div>
-                  <div><Label>Monthly Deduction</Label><Input type="number" value={personalForm.monthly_deduction} onChange={(e) => setPersonalForm((f) => ({ ...f, monthly_deduction: e.target.value }))} /></div>
-                  <div><Label>Reason</Label><Textarea value={personalForm.reason} onChange={(e) => setPersonalForm((f) => ({ ...f, reason: e.target.value }))} /></div>
-                </>
-              ) : (
-                <>
-                  <div className="grid grid-cols-2 gap-3">
-                    <div><Label>Amount</Label><Input type="number" value={expenseForm.amount} onChange={(e) => setExpenseForm((f) => ({ ...f, amount: e.target.value }))} /></div>
-                    <div><Label>Settle By</Label><Input type="date" value={expenseForm.settle_by} onChange={(e) => setExpenseForm((f) => ({ ...f, settle_by: e.target.value }))} /></div>
-                  </div>
-                  <div><Label>Purpose</Label><Textarea value={expenseForm.purpose} onChange={(e) => setExpenseForm((f) => ({ ...f, purpose: e.target.value }))} /></div>
-                </>
-              )}
-            </div>
-            <DialogFooter><Button onClick={submitRequest}>Submit</Button></DialogFooter>
-          </DialogContent>
-        </Dialog>
       </div>
 
       <Tabs defaultValue="mine">
