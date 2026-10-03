@@ -456,6 +456,255 @@ export type Database = {
         }
         Relationships: []
       }
+      personal_advances: {
+        Row: {
+          admin_flag: boolean
+          admin_flag_note: string | null
+          amount: number
+          approved_at: string | null
+          approved_by: string | null
+          approver_note: string | null
+          converted_from_expense_advance_id: string | null
+          created_at: string
+          id: string
+          installments: number
+          monthly_deduction: number
+          reason: string | null
+          remaining_balance: number
+          status: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          admin_flag?: boolean
+          admin_flag_note?: string | null
+          amount: number
+          approved_at?: string | null
+          approved_by?: string | null
+          approver_note?: string | null
+          converted_from_expense_advance_id?: string | null
+          created_at?: string
+          id?: string
+          installments: number
+          monthly_deduction: number
+          reason?: string | null
+          remaining_balance: number
+          status?: string
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          admin_flag?: boolean
+          admin_flag_note?: string | null
+          amount?: number
+          approved_at?: string | null
+          approved_by?: string | null
+          approver_note?: string | null
+          converted_from_expense_advance_id?: string | null
+          created_at?: string
+          id?: string
+          installments?: number
+          monthly_deduction?: number
+          reason?: string | null
+          remaining_balance?: number
+          status?: string
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "personal_advances_converted_from_fkey"
+            columns: ["converted_from_expense_advance_id"]
+            isOneToOne: false
+            referencedRelation: "expense_advances"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "personal_advances_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      personal_advance_actions: {
+        Row: {
+          action_type: string
+          amount: number
+          created_at: string
+          created_by: string | null
+          id: string
+          month: string | null
+          note: string | null
+          personal_advance_id: string
+          remaining_after: number | null
+          user_id: string
+        }
+        Insert: {
+          action_type: string
+          amount?: number
+          created_at?: string
+          created_by?: string | null
+          id?: string
+          month?: string | null
+          note?: string | null
+          personal_advance_id: string
+          remaining_after?: number | null
+          user_id: string
+        }
+        Update: {
+          action_type?: string
+          amount?: number
+          created_at?: string
+          created_by?: string | null
+          id?: string
+          month?: string | null
+          note?: string | null
+          personal_advance_id?: string
+          remaining_after?: number | null
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "personal_advance_actions_personal_advance_id_fkey"
+            columns: ["personal_advance_id"]
+            isOneToOne: false
+            referencedRelation: "personal_advances"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "personal_advance_actions_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      expense_advances: {
+        Row: {
+          amount: number
+          approved_at: string | null
+          approved_by: string | null
+          approver_note: string | null
+          converted_to_personal_advance_id: string | null
+          created_at: string
+          id: string
+          purpose: string | null
+          receipts: Json
+          settle_by: string
+          settled_at: string | null
+          settlement_amount: number | null
+          settlement_direction: string | null
+          spent_total: number | null
+          status: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          amount: number
+          approved_at?: string | null
+          approved_by?: string | null
+          approver_note?: string | null
+          converted_to_personal_advance_id?: string | null
+          created_at?: string
+          id?: string
+          purpose?: string | null
+          receipts?: Json
+          settle_by: string
+          settled_at?: string | null
+          settlement_amount?: number | null
+          settlement_direction?: string | null
+          spent_total?: number | null
+          status?: string
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          amount?: number
+          approved_at?: string | null
+          approved_by?: string | null
+          approver_note?: string | null
+          converted_to_personal_advance_id?: string | null
+          created_at?: string
+          id?: string
+          purpose?: string | null
+          receipts?: Json
+          settle_by?: string
+          settled_at?: string | null
+          settlement_amount?: number | null
+          settlement_direction?: string | null
+          spent_total?: number | null
+          status?: string
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "expense_advances_converted_to_personal_advance_id_fkey"
+            columns: ["converted_to_personal_advance_id"]
+            isOneToOne: false
+            referencedRelation: "personal_advances"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "expense_advances_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      expense_advance_actions: {
+        Row: {
+          action_type: string
+          amount: number
+          created_at: string
+          created_by: string | null
+          expense_advance_id: string
+          id: string
+          note: string | null
+          user_id: string
+        }
+        Insert: {
+          action_type: string
+          amount?: number
+          created_at?: string
+          created_by?: string | null
+          expense_advance_id: string
+          id?: string
+          note?: string | null
+          user_id: string
+        }
+        Update: {
+          action_type?: string
+          amount?: number
+          created_at?: string
+          created_by?: string | null
+          expense_advance_id?: string
+          id?: string
+          note?: string | null
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "expense_advance_actions_expense_advance_id_fkey"
+            columns: ["expense_advance_id"]
+            isOneToOne: false
+            referencedRelation: "expense_advances"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "expense_advance_actions_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       payroll_ot_adjustments: {
         Row: {
           admin_id: string
