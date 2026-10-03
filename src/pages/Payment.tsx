@@ -450,43 +450,6 @@ const Payment = () => {
           <h1 className="text-2xl font-display font-bold">Payment</h1>
           <p className="text-sm text-muted-foreground">Request and manage Personal and Expense Advances.</p>
         </div>
-        <Dialog open={open} onOpenChange={(o) => { setOpen(o); if (!o) resetRequestForm(); }}>
-          <DialogTrigger asChild><Button><Plus className="h-4 w-4 mr-1" />New Request</Button></DialogTrigger>
-          <DialogContent>
-            <DialogHeader><DialogTitle>New Payment Request</DialogTitle></DialogHeader>
-            <div className="space-y-3">
-              <div>
-                <Label>Type</Label>
-                <Select value={requestKind} onValueChange={(v) => setRequestKind(v as AdvanceKind)}>
-                  <SelectTrigger><SelectValue /></SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="personal">Personal Advance</SelectItem>
-                    <SelectItem value="expense">Expense Advance</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-              {requestKind === "personal" ? (
-                <>
-                  <div className="grid grid-cols-2 gap-3">
-                    <div><Label>Amount</Label><Input type="number" value={personalForm.amount} onChange={(e) => onPersonalFieldChange({ amount: e.target.value })} /></div>
-                    <div><Label>Installments</Label><Input type="number" value={personalForm.installments} onChange={(e) => onPersonalFieldChange({ installments: e.target.value })} /></div>
-                  </div>
-                  <div><Label>Monthly Deduction</Label><Input type="number" value={personalForm.monthly_deduction} onChange={(e) => setPersonalForm((f) => ({ ...f, monthly_deduction: e.target.value }))} /></div>
-                  <div><Label>Reason</Label><Textarea value={personalForm.reason} onChange={(e) => setPersonalForm((f) => ({ ...f, reason: e.target.value }))} /></div>
-                </>
-              ) : (
-                <>
-                  <div className="grid grid-cols-2 gap-3">
-                    <div><Label>Amount</Label><Input type="number" value={expenseForm.amount} onChange={(e) => setExpenseForm((f) => ({ ...f, amount: e.target.value }))} /></div>
-                    <div><Label>Settle By</Label><Input type="date" value={expenseForm.settle_by} onChange={(e) => setExpenseForm((f) => ({ ...f, settle_by: e.target.value }))} /></div>
-                  </div>
-                  <div><Label>Purpose</Label><Textarea value={expenseForm.purpose} onChange={(e) => setExpenseForm((f) => ({ ...f, purpose: e.target.value }))} /></div>
-                </>
-              )}
-            </div>
-            <DialogFooter><Button onClick={submitRequest}>Submit</Button></DialogFooter>
-          </DialogContent>
-        </Dialog>
       </div>
 
       <Tabs defaultValue="mine">
@@ -498,7 +461,46 @@ const Payment = () => {
           <TabsTrigger value="expense-claims">Expense Claims</TabsTrigger>
         </TabsList>
 
-        <TabsContent value="mine">
+        <TabsContent value="mine" className="space-y-4">
+          <div className="flex justify-end">
+            <Dialog open={open} onOpenChange={(o) => { setOpen(o); if (!o) resetRequestForm(); }}>
+              <DialogTrigger asChild><Button><Plus className="h-4 w-4 mr-1" />New Request</Button></DialogTrigger>
+              <DialogContent>
+                <DialogHeader><DialogTitle>New Payment Request</DialogTitle></DialogHeader>
+                <div className="space-y-3">
+                  <div>
+                    <Label>Type</Label>
+                    <Select value={requestKind} onValueChange={(v) => setRequestKind(v as AdvanceKind)}>
+                      <SelectTrigger><SelectValue /></SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="personal">Personal Advance</SelectItem>
+                        <SelectItem value="expense">Expense Advance</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  {requestKind === "personal" ? (
+                    <>
+                      <div className="grid grid-cols-2 gap-3">
+                        <div><Label>Amount</Label><Input type="number" value={personalForm.amount} onChange={(e) => onPersonalFieldChange({ amount: e.target.value })} /></div>
+                        <div><Label>Installments</Label><Input type="number" value={personalForm.installments} onChange={(e) => onPersonalFieldChange({ installments: e.target.value })} /></div>
+                      </div>
+                      <div><Label>Monthly Deduction</Label><Input type="number" value={personalForm.monthly_deduction} onChange={(e) => setPersonalForm((f) => ({ ...f, monthly_deduction: e.target.value }))} /></div>
+                      <div><Label>Reason</Label><Textarea value={personalForm.reason} onChange={(e) => setPersonalForm((f) => ({ ...f, reason: e.target.value }))} /></div>
+                    </>
+                  ) : (
+                    <>
+                      <div className="grid grid-cols-2 gap-3">
+                        <div><Label>Amount</Label><Input type="number" value={expenseForm.amount} onChange={(e) => setExpenseForm((f) => ({ ...f, amount: e.target.value }))} /></div>
+                        <div><Label>Settle By</Label><Input type="date" value={expenseForm.settle_by} onChange={(e) => setExpenseForm((f) => ({ ...f, settle_by: e.target.value }))} /></div>
+                      </div>
+                      <div><Label>Purpose</Label><Textarea value={expenseForm.purpose} onChange={(e) => setExpenseForm((f) => ({ ...f, purpose: e.target.value }))} /></div>
+                    </>
+                  )}
+                </div>
+                <DialogFooter><Button onClick={submitRequest}>Submit</Button></DialogFooter>
+              </DialogContent>
+            </Dialog>
+          </div>
           <Card>
             <CardContent className="pt-6">
               <Table>
