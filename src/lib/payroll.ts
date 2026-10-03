@@ -81,7 +81,13 @@ export async function fetchIncentivesTotal(
   return (data || []).reduce((s, r) => s + Number(r.amount || 0), 0);
 }
 
-/** Sum this month's Personal Advance payroll-deduction ledger entries for a user. 0 when no advance exists. */
+/**
+ * Sum this month's Personal Advance payroll-deduction ledger entries for a
+ * user. 0 when no advance exists — and also 0 (rather than throwing) if the
+ * table doesn't exist yet, since the frontend deploy and the migration that
+ * creates this table are two independent, unordered CI jobs: a payslip must
+ * never break just because the migration hasn't landed yet.
+ */
 export async function fetchAdvanceDeductionTotal(
   userId: string,
   year: number,
@@ -94,7 +100,10 @@ export async function fetchAdvanceDeductionTotal(
     .eq("user_id", userId)
     .eq("month", monthStartISO)
     .eq("action_type", "payroll_deduction");
-  if (error) throw error;
+  if (error) {
+    console.warn("fetchAdvanceDeductionTotal: treating as 0", error.message);
+    return 0;
+  }
   return (data || []).reduce((s, r) => s + Number(r.amount || 0), 0);
 }
 
