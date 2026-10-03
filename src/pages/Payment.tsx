@@ -1,21 +1,34 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogFooter } from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger, DialogFooter } from "@/components/ui/dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Plus, Check, X, FileText, AlertTriangle } from "lucide-react";
+import { Plus, Check, X, FileText, AlertTriangle, Loader2, Wallet, Download, Calculator } from "lucide-react";
 import { toast } from "sonner";
+import { toast as toastHook } from "@/hooks/use-toast";
 import { format } from "date-fns";
 import { notifyManagersAndAdmins, notifyEmployee } from "@/lib/notifications";
-import { computePayroll, type PayrollProfile } from "@/lib/payroll";
+import {
+  MONTHS,
+  fmtMoney,
+  computePayroll,
+  computeGratuity,
+  downloadPayslipPDF,
+  type PayrollProfile,
+  type PayrollComputation,
+} from "@/lib/payroll";
+import { PayrollProcessor } from "@/components/hrms/PayrollProcessor";
+import { PayslipCard } from "@/components/hrms/PayslipCard";
+import { LoanLedger } from "@/components/hrms/LoanLedger";
+import { PayrollAdjustments } from "@/components/PayrollAdjustments";
 
 type AdvanceKind = "personal" | "expense";
 
@@ -481,6 +494,8 @@ const Payment = () => {
           <TabsTrigger value="mine">My Payments</TabsTrigger>
           {canApprove && <TabsTrigger value="pending">Pending Approval ({pendingApprovals.length})</TabsTrigger>}
           {canApprove && <TabsTrigger value="history">Team History</TabsTrigger>}
+          <TabsTrigger value="payroll">Payroll</TabsTrigger>
+          <TabsTrigger value="expense-claims">Expense Claims</TabsTrigger>
         </TabsList>
 
         <TabsContent value="mine">
@@ -562,6 +577,14 @@ const Payment = () => {
             </Card>
           </TabsContent>
         )}
+
+        <TabsContent value="payroll">
+          <PayrollTab />
+        </TabsContent>
+
+        <TabsContent value="expense-claims">
+          <ExpenseClaimsTab />
+        </TabsContent>
       </Tabs>
 
       {/* Settle Expense Advance dialog */}
@@ -611,3 +634,750 @@ const Payment = () => {
 };
 
 export default Payment;
+
+/* =======================================================================
+ * Payroll tab — moved from the former src/pages/Payroll.tsx (now deleted).
+ * Self-contained: reads its own auth/role so its internals never leak into
+ * (or collide with) Payment's own state/handlers.
+ * ===================================================================== */
+
+type PayrollRecord = PayrollComputation & { id: string; status: string; generated_at: string };
+
+const payrollNow = new Date();
+const DEFAULT_MONTH = payrollNow.getMonth() + 1;
+const DEFAULT_YEAR = payrollNow.getFullYear();
+
+function PayrollTab() {
+  const { user, role } = useAuth();
+  const isAdmin = role === "admin";
+  const canAccess = isAdmin;
+
+  const [year, setYear] = useState<number>(DEFAULT_YEAR);
+  const [month, setMonth] = useState<number>(DEFAULT_MONTH);
+  const [currency, setCurrency] = useState<string>("BDT");
+  const [profiles, setProfiles] = useState<PayrollProfile[]>([]);
+  const [records, setRecords] = useState<PayrollRecord[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [generating, setGenerating] = useState(false);
+  const [payslipFor, setPayslipFor] = useState<{ profile: PayrollProfile; record: PayrollRecord } | null>(null);
+
+  const fetchAll = useCallback(async () => {
+    setLoading(true);
+    try {
+      const [{ data: settings }, { data: profs, error: pErr }, { data: recs, error: rErr }] = await Promise.all([
+        supabase.from("settings").select("currency").limit(1).maybeSingle(),
+        supabase.from("profiles").select("id, full_name, email, designation, department, company_wing, joining_date, base_salary, hourly_overtime_rate, pf_contribution_pct, employee_status").order("full_name"),
+        supabase.from("payroll_records").select("*").eq("period_year", year).eq("period_month", month),
+      ]);
+      if (pErr) throw pErr;
+      if (rErr) throw rErr;
+      if (settings?.currency) setCurrency(settings.currency);
+      setProfiles((profs || []) as PayrollProfile[]);
+      setRecords((recs || []) as unknown as PayrollRecord[]);
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : "Failed to load payroll data";
+      toastHook({ title: "Load failed", description: msg, variant: "destructive" });
+    } finally {
+      setLoading(false);
+    }
+  }, [year, month]);
+
+  useEffect(() => { if (canAccess) fetchAll(); }, [fetchAll, canAccess]);
+
+  const recordByUser = useMemo(() => {
+    const m = new Map<string, PayrollRecord>();
+    records.forEach((r) => m.set(r.user_id, r));
+    return m;
+  }, [records]);
+
+  const totalPayout = useMemo(
+    () => records.reduce((s, r) => s + Number(r.net_pay || 0), 0),
+    [records],
+  );
+  const totalGross = useMemo(
+    () => records.reduce((s, r) => s + Number(r.gross_pay || 0), 0),
+    [records],
+  );
+  const totalPF = useMemo(
+    () => records.reduce((s, r) => s + Number(r.pf_employee || 0) + Number(r.pf_employer || 0), 0),
+    [records],
+  );
+  const activeProfiles = useMemo(
+    () => profiles.filter((p) => p.employee_status === "Active"),
+    [profiles],
+  );
+
+  const handleGenerateAll = async () => {
+    if (!user) return;
+    setGenerating(true);
+    try {
+      const eligible = activeProfiles.filter((p) => Number(p.base_salary) > 0);
+      if (eligible.length === 0) {
+        toastHook({ title: "Nothing to process", description: "No active employees have a base salary set." });
+        return;
+      }
+      let created = 0; let skipped = 0;
+      for (const profile of eligible) {
+        if (recordByUser.has(profile.id)) { skipped++; continue; }
+        const calc = await computePayroll(profile, year, month, currency);
+        const { error } = await supabase.from("payroll_records").insert({
+          ...calc,
+          generated_by: user.id,
+          status: "processed",
+        });
+        if (error) throw error;
+        created++;
+      }
+      toastHook({
+        title: "Payroll generated",
+        description: `${created} created, ${skipped} already existed for ${MONTHS[month - 1]} ${year}.`,
+      });
+      await fetchAll();
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : "Failed to generate payroll";
+      toastHook({ title: "Generation failed", description: msg, variant: "destructive" });
+    } finally {
+      setGenerating(false);
+    }
+  };
+
+  const handleGenerateOne = async (profile: PayrollProfile) => {
+    if (!user) return;
+    if (Number(profile.base_salary) <= 0) {
+      toastHook({ title: "Missing salary", description: `Set base salary for ${profile.full_name || profile.email} first.`, variant: "destructive" });
+      return;
+    }
+    try {
+      const calc = await computePayroll(profile, year, month, currency);
+      const existing = recordByUser.get(profile.id);
+      if (existing) {
+        const { error } = await supabase.from("payroll_records").update({ ...calc, generated_by: user.id, status: "processed" }).eq("id", existing.id);
+        if (error) throw error;
+      } else {
+        const { error } = await supabase.from("payroll_records").insert({ ...calc, generated_by: user.id, status: "processed" });
+        if (error) throw error;
+      }
+      toastHook({ title: "Payroll updated", description: `${profile.full_name || profile.email} processed.` });
+      await fetchAll();
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : "Failed";
+      toastHook({ title: "Failed", description: msg, variant: "destructive" });
+    }
+  };
+
+  return (
+    <div className="space-y-6">
+      <PayrollAdjustments isAdmin={isAdmin} />
+
+      {canAccess && (
+      <>
+      <PayrollProcessor />
+      <div className="grid gap-4 lg:grid-cols-2">
+        <PayslipCard />
+        <LoanLedger />
+      </div>
+      <div className="flex flex-wrap items-end justify-between gap-3">
+        <div>
+          <h1 className="text-2xl font-bold flex items-center gap-2"><Wallet className="h-6 w-6" /> Payroll & Incentives</h1>
+          <p className="text-sm text-muted-foreground">Process monthly salaries, manage incentives, and generate payslips.</p>
+        </div>
+        <div className="flex flex-wrap items-end gap-2">
+          <div>
+            <Label className="text-xs">Month</Label>
+            <Select value={String(month)} onValueChange={(v) => setMonth(Number(v))}>
+              <SelectTrigger className="w-[140px]"><SelectValue /></SelectTrigger>
+              <SelectContent>
+                {MONTHS.map((m, i) => (
+                  <SelectItem key={m} value={String(i + 1)}>{m}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+          <div>
+            <Label className="text-xs">Year</Label>
+            <Input type="number" className="w-[100px]" value={year} onChange={(e) => setYear(Number(e.target.value))} />
+          </div>
+          <div>
+            <Label className="text-xs">Currency</Label>
+            <Select value={currency} onValueChange={setCurrency}>
+              <SelectTrigger className="w-[100px]"><SelectValue /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value="BDT">BDT ৳</SelectItem>
+                <SelectItem value="USD">USD $</SelectItem>
+                <SelectItem value="EUR">EUR €</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+          <Button onClick={handleGenerateAll} disabled={generating || loading}>
+            {generating ? <Loader2 className="h-4 w-4 animate-spin" /> : <Plus className="h-4 w-4" />}
+            Generate Monthly Payroll
+          </Button>
+        </div>
+      </div>
+
+      {/* Dashboard */}
+      <div className="grid grid-cols-1 md:grid-cols-4 gap-3">
+        <Card>
+          <CardHeader className="pb-2"><CardDescription>Total Net Payout</CardDescription><CardTitle className="text-2xl">{fmtMoney(totalPayout, currency)}</CardTitle></CardHeader>
+          <CardContent className="text-xs text-muted-foreground">{records.length} processed records</CardContent>
+        </Card>
+        <Card>
+          <CardHeader className="pb-2"><CardDescription>Gross Pay</CardDescription><CardTitle className="text-2xl">{fmtMoney(totalGross, currency)}</CardTitle></CardHeader>
+          <CardContent className="text-xs text-muted-foreground">Before deductions</CardContent>
+        </Card>
+        <Card>
+          <CardHeader className="pb-2"><CardDescription>PF Contributions</CardDescription><CardTitle className="text-2xl">{fmtMoney(totalPF, currency)}</CardTitle></CardHeader>
+          <CardContent className="text-xs text-muted-foreground">Employee + Employer match</CardContent>
+        </Card>
+        <Card>
+          <CardHeader className="pb-2"><CardDescription>Active Employees</CardDescription><CardTitle className="text-2xl">{activeProfiles.length}</CardTitle></CardHeader>
+          <CardContent className="text-xs text-muted-foreground">{activeProfiles.filter(p => Number(p.base_salary) > 0).length} with salary set</CardContent>
+        </Card>
+      </div>
+
+      <Tabs defaultValue="payroll">
+        <TabsList>
+          <TabsTrigger value="payroll">Payroll Records</TabsTrigger>
+          <TabsTrigger value="incentives">Incentives</TabsTrigger>
+          <TabsTrigger value="gratuity">Gratuity Calculator</TabsTrigger>
+        </TabsList>
+
+        <TabsContent value="payroll">
+          <Card>
+            <CardHeader>
+              <CardTitle>{MONTHS[month - 1]} {year}</CardTitle>
+              <CardDescription>One row per active employee. OT hours come from approved overtime requests in this month.</CardDescription>
+            </CardHeader>
+            <CardContent>
+              {loading ? (
+                <div className="flex items-center justify-center py-12"><Loader2 className="h-5 w-5 animate-spin mr-2" /> Loading…</div>
+              ) : (
+                <div className="overflow-x-auto">
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead>Employee</TableHead>
+                        <TableHead className="text-right">Base</TableHead>
+                        <TableHead className="text-right">OT</TableHead>
+                        <TableHead className="text-right">Incentives</TableHead>
+                        <TableHead className="text-right">Gross</TableHead>
+                        <TableHead className="text-right">PF (Emp)</TableHead>
+                        <TableHead className="text-right">Net Pay</TableHead>
+                        <TableHead>Status</TableHead>
+                        <TableHead className="text-right">Actions</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {activeProfiles.map((p) => {
+                        const r = recordByUser.get(p.id);
+                        return (
+                          <TableRow key={p.id}>
+                            <TableCell>
+                              <div className="font-medium">{p.full_name || "—"}</div>
+                              <div className="text-xs text-muted-foreground">{p.designation || "—"} · {p.company_wing}</div>
+                            </TableCell>
+                            <TableCell className="text-right">{fmtMoney(r?.base_salary ?? p.base_salary, currency)}</TableCell>
+                            <TableCell className="text-right">
+                              {r ? `${r.ot_hours.toFixed(2)}h · ${fmtMoney(r.ot_amount, currency)}` : "—"}
+                            </TableCell>
+                            <TableCell className="text-right">{r ? fmtMoney(r.incentives_amount, currency) : "—"}</TableCell>
+                            <TableCell className="text-right">{r ? fmtMoney(r.gross_pay, currency) : "—"}</TableCell>
+                            <TableCell className="text-right">{r ? fmtMoney(r.pf_employee, currency) : "—"}</TableCell>
+                            <TableCell className="text-right font-semibold">{r ? fmtMoney(r.net_pay, currency) : "—"}</TableCell>
+                            <TableCell>{r ? <Badge>{r.status}</Badge> : <Badge variant="outline">Not generated</Badge>}</TableCell>
+                            <TableCell className="text-right">
+                              <div className="flex justify-end gap-1">
+                                <Button size="sm" variant="outline" onClick={() => handleGenerateOne(p)} title="Recalculate">
+                                  <Calculator className="h-3.5 w-3.5" />
+                                </Button>
+                                <Button size="sm" variant="outline" disabled={!r} onClick={() => r && setPayslipFor({ profile: p, record: r })}>
+                                  <FileText className="h-3.5 w-3.5" /> Slip
+                                </Button>
+                              </div>
+                            </TableCell>
+                          </TableRow>
+                        );
+                      })}
+                      {activeProfiles.length === 0 && (
+                        <TableRow><TableCell colSpan={9} className="text-center text-muted-foreground py-8">No active employees.</TableCell></TableRow>
+                      )}
+                    </TableBody>
+                  </Table>
+                </div>
+              )}
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        <TabsContent value="incentives">
+          <IncentivesPanel year={year} month={month} currency={currency} profiles={activeProfiles} />
+        </TabsContent>
+
+        <TabsContent value="gratuity">
+          <GratuityPanel profiles={profiles} currency={currency} />
+        </TabsContent>
+      </Tabs>
+
+      {/* Payslip Dialog */}
+      <Dialog open={!!payslipFor} onOpenChange={(o) => !o && setPayslipFor(null)}>
+        <DialogContent className="max-w-lg">
+          {payslipFor && (
+            <>
+              <DialogHeader>
+                <DialogTitle>Pay Slip — {MONTHS[payslipFor.record.period_month - 1]} {payslipFor.record.period_year}</DialogTitle>
+                <DialogDescription>{payslipFor.profile.full_name} · {payslipFor.profile.designation || "—"}</DialogDescription>
+              </DialogHeader>
+              <div className="space-y-1 text-sm">
+                <SlipRow k="Base Salary" v={fmtMoney(payslipFor.record.base_salary, currency)} />
+                <SlipRow k={`Overtime (${payslipFor.record.ot_hours.toFixed(2)} hrs)`} v={fmtMoney(payslipFor.record.ot_amount, currency)} />
+                <SlipRow k="Incentives" v={fmtMoney(payslipFor.record.incentives_amount, currency)} />
+                <div className="border-t my-2" />
+                <SlipRow k="Gross Pay" v={fmtMoney(payslipFor.record.gross_pay, currency)} bold />
+                <SlipRow k="PF (Employee)" v={`- ${fmtMoney(payslipFor.record.pf_employee, currency)}`} />
+                <SlipRow k="Other Deductions" v={`- ${fmtMoney(payslipFor.record.other_deductions, currency)}`} />
+                <div className="border-t my-2" />
+                <SlipRow k="NET PAY" v={fmtMoney(payslipFor.record.net_pay, currency)} bold large />
+                <p className="text-xs text-muted-foreground pt-2">PF (Employer match): {fmtMoney(payslipFor.record.pf_employer, currency)}</p>
+              </div>
+              <DialogFooter>
+                <Button variant="outline" onClick={() => setPayslipFor(null)}>Close</Button>
+                <Button onClick={() => downloadPayslipPDF({ profile: payslipFor.profile, record: payslipFor.record })}>
+                  <Download className="h-4 w-4" /> Download PDF
+                </Button>
+              </DialogFooter>
+            </>
+          )}
+        </DialogContent>
+      </Dialog>
+      </>
+      )}
+    </div>
+  );
+}
+
+function SlipRow({ k, v, bold, large }: { k: string; v: string; bold?: boolean; large?: boolean }) {
+  return (
+    <div className={`flex justify-between ${bold ? "font-semibold" : ""} ${large ? "text-base" : ""}`}>
+      <span>{k}</span><span>{v}</span>
+    </div>
+  );
+}
+
+/* ---------------- Incentives ---------------- */
+
+interface IncentiveRow {
+  id: string; user_id: string; period_year: number; period_month: number;
+  label: string; amount: number; note: string | null;
+}
+
+function IncentivesPanel({ year, month, currency, profiles }: { year: number; month: number; currency: string; profiles: PayrollProfile[] }) {
+  const { user } = useAuth();
+  const [items, setItems] = useState<IncentiveRow[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [open, setOpen] = useState(false);
+  const [form, setForm] = useState({ user_id: "", label: "Performance Bonus", amount: "", note: "" });
+
+  const load = useCallback(async () => {
+    setLoading(true);
+    const { data, error } = await supabase
+      .from("payroll_incentives")
+      .select("*").eq("period_year", year).eq("period_month", month)
+      .order("created_at", { ascending: false });
+    if (error) toastHook({ title: "Failed", description: error.message, variant: "destructive" });
+    else setItems((data || []) as IncentiveRow[]);
+    setLoading(false);
+  }, [year, month]);
+
+  useEffect(() => { load(); }, [load]);
+
+  const profileMap = useMemo(() => new Map(profiles.map((p) => [p.id, p])), [profiles]);
+
+  const handleAdd = async () => {
+    if (!user || !form.user_id || !form.amount) {
+      toastHook({ title: "Missing fields", description: "Pick an employee and enter an amount.", variant: "destructive" });
+      return;
+    }
+    const { error } = await supabase.from("payroll_incentives").insert({
+      user_id: form.user_id,
+      period_year: year, period_month: month,
+      label: form.label || "Bonus",
+      amount: Number(form.amount),
+      note: form.note || null,
+      created_by: user.id,
+    });
+    if (error) { toastHook({ title: "Failed", description: error.message, variant: "destructive" }); return; }
+    toastHook({ title: "Incentive added" });
+    setOpen(false);
+    setForm({ user_id: "", label: "Performance Bonus", amount: "", note: "" });
+    await load();
+  };
+
+  const handleDelete = async (id: string) => {
+    const { error } = await supabase.from("payroll_incentives").delete().eq("id", id);
+    if (error) { toastHook({ title: "Failed", description: error.message, variant: "destructive" }); return; }
+    await load();
+  };
+
+  return (
+    <Card>
+      <CardHeader className="flex flex-row items-center justify-between">
+        <div>
+          <CardTitle>Incentives — {MONTHS[month - 1]} {year}</CardTitle>
+          <CardDescription>Manual bonuses or performance pay added on top of base salary.</CardDescription>
+        </div>
+        <Dialog open={open} onOpenChange={setOpen}>
+          <DialogTrigger asChild><Button><Plus className="h-4 w-4" /> Add Incentive</Button></DialogTrigger>
+          <DialogContent>
+            <DialogHeader><DialogTitle>Add Incentive</DialogTitle></DialogHeader>
+            <div className="space-y-3">
+              <div>
+                <Label>Employee</Label>
+                <Select value={form.user_id} onValueChange={(v) => setForm({ ...form, user_id: v })}>
+                  <SelectTrigger><SelectValue placeholder="Select employee" /></SelectTrigger>
+                  <SelectContent>
+                    {profiles.map((p) => <SelectItem key={p.id} value={p.id}>{p.full_name || p.email}</SelectItem>)}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div>
+                <Label>Label</Label>
+                <Input value={form.label} onChange={(e) => setForm({ ...form, label: e.target.value })} />
+              </div>
+              <div>
+                <Label>Amount ({currency})</Label>
+                <Input type="number" value={form.amount} onChange={(e) => setForm({ ...form, amount: e.target.value })} />
+              </div>
+              <div>
+                <Label>Note (optional)</Label>
+                <Input value={form.note} onChange={(e) => setForm({ ...form, note: e.target.value })} />
+              </div>
+            </div>
+            <DialogFooter>
+              <Button variant="outline" onClick={() => setOpen(false)}>Cancel</Button>
+              <Button onClick={handleAdd}>Save</Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+      </CardHeader>
+      <CardContent>
+        {loading ? (
+          <div className="flex items-center py-8"><Loader2 className="h-4 w-4 animate-spin mr-2" /> Loading…</div>
+        ) : (
+          <Table>
+            <TableHeader>
+              <TableRow><TableHead>Employee</TableHead><TableHead>Label</TableHead><TableHead className="text-right">Amount</TableHead><TableHead>Note</TableHead><TableHead></TableHead></TableRow>
+            </TableHeader>
+            <TableBody>
+              {items.map((it) => {
+                const p = profileMap.get(it.user_id);
+                return (
+                  <TableRow key={it.id}>
+                    <TableCell>{p?.full_name || it.user_id.slice(0, 8)}</TableCell>
+                    <TableCell>{it.label}</TableCell>
+                    <TableCell className="text-right">{fmtMoney(it.amount, currency)}</TableCell>
+                    <TableCell className="text-muted-foreground text-sm">{it.note || "—"}</TableCell>
+                    <TableCell className="text-right"><Button size="sm" variant="ghost" onClick={() => handleDelete(it.id)}>Remove</Button></TableCell>
+                  </TableRow>
+                );
+              })}
+              {items.length === 0 && <TableRow><TableCell colSpan={5} className="text-center text-muted-foreground py-8">No incentives this month.</TableCell></TableRow>}
+            </TableBody>
+          </Table>
+        )}
+      </CardContent>
+    </Card>
+  );
+}
+
+/* ---------------- Gratuity ---------------- */
+
+function GratuityPanel({ profiles, currency }: { profiles: PayrollProfile[]; currency: string }) {
+  const [selectedId, setSelectedId] = useState<string>("");
+  const selected = profiles.find((p) => p.id === selectedId);
+  const result = selected ? computeGratuity(Number(selected.base_salary), selected.joining_date) : null;
+
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle>Gratuity Calculator</CardTitle>
+        <CardDescription>Formula: (Last Drawn Salary × 15 × Years of Service) / 26. Eligibility typically requires 5+ years.</CardDescription>
+      </CardHeader>
+      <CardContent className="space-y-4">
+        <div className="max-w-sm">
+          <Label>Employee</Label>
+          <Select value={selectedId} onValueChange={setSelectedId}>
+            <SelectTrigger><SelectValue placeholder="Select employee" /></SelectTrigger>
+            <SelectContent>
+              {profiles.map((p) => <SelectItem key={p.id} value={p.id}>{p.full_name || p.email}</SelectItem>)}
+            </SelectContent>
+          </Select>
+        </div>
+        {selected && result && (
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+            <Card><CardHeader className="pb-2"><CardDescription>Joining Date</CardDescription><CardTitle className="text-base">{selected.joining_date || "—"}</CardTitle></CardHeader></Card>
+            <Card><CardHeader className="pb-2"><CardDescription>Years of Service</CardDescription><CardTitle className="text-base">{result.years.toFixed(2)}</CardTitle></CardHeader></Card>
+            <Card><CardHeader className="pb-2"><CardDescription>Last Drawn Salary</CardDescription><CardTitle className="text-base">{fmtMoney(Number(selected.base_salary), currency)}</CardTitle></CardHeader></Card>
+            <Card><CardHeader className="pb-2"><CardDescription>Estimated Gratuity</CardDescription><CardTitle className="text-base">{fmtMoney(result.amount, currency)}</CardTitle></CardHeader>
+              <CardContent className="text-xs">{result.eligible ? <Badge>Eligible (5+ yrs)</Badge> : <Badge variant="outline">Not yet eligible</Badge>}</CardContent>
+            </Card>
+          </div>
+        )}
+      </CardContent>
+    </Card>
+  );
+}
+
+/* =======================================================================
+ * Expense Claims tab — moved from the former src/pages/Expenses.tsx (now
+ * deleted). Self-contained: reads its own auth/role so its internals never
+ * leak into (or collide with) Payment's own state/handlers.
+ * ===================================================================== */
+
+const FALLBACK_CATEGORIES = ["Travel", "Meals", "Office Supplies", "Software", "Training", "Client Entertainment", "Other"];
+
+const DIRECTIONS = [
+  { value: "company_pays_employee", label: "Company Pays Employee" },
+  { value: "employee_owes_company", label: "Employee Owes Company" },
+];
+
+function ExpenseClaimsTab() {
+  const { user, role } = useAuth();
+  const isAdmin = role === "admin";
+  const canApprove = role === "admin" || role === "manager";
+  const [claims, setClaims] = useState<any[]>([]);
+  const [categories, setCategories] = useState<string[]>(FALLBACK_CATEGORIES);
+  const [newCategory, setNewCategory] = useState("");
+  const [open, setOpen] = useState(false);
+  const [form, setForm] = useState({
+    category: "Travel", amount: "", claim_date: format(new Date(), "yyyy-MM-dd"), description: "", receipt_url: "",
+    direction: "company_pays_employee",
+  });
+  const [uploading, setUploading] = useState(false);
+
+  const fetchClaims = async () => {
+    const { data, error } = await supabase.from("expense_claims").select("*, profiles!expense_claims_user_id_fkey(full_name,email,photo_url)").order("created_at", { ascending: false });
+    if (error) { toast.error(error.message); return; }
+    setClaims(data || []);
+  };
+
+  const fetchCategories = async () => {
+    const { data } = await supabase.from("expense_types").select("name").order("created_at", { ascending: true });
+    if (data && data.length > 0) setCategories(data.map((d) => d.name));
+  };
+
+  useEffect(() => { fetchClaims(); fetchCategories(); }, []);
+
+  const addCategory = async () => {
+    const name = newCategory.trim();
+    if (!name) return;
+    const { error } = await supabase.from("expense_types").insert({ name });
+    if (error) { toast.error(error.message); return; }
+    toast.success("Expense type added");
+    setNewCategory("");
+    fetchCategories();
+  };
+
+  const uploadReceipt = async (file: File) => {
+    if (!user) return;
+    setUploading(true);
+    const ext = file.name.split(".").pop();
+    const path = `${user.id}/${Date.now()}.${ext}`;
+    const { error } = await supabase.storage.from("task-attachments").upload(path, file);
+    if (error) { toast.error(error.message); setUploading(false); return; }
+    const { data } = await supabase.storage.from("task-attachments").createSignedUrl(path, 60 * 60 * 24 * 365);
+    setForm(f => ({ ...f, receipt_url: data?.signedUrl || "" }));
+    setUploading(false);
+  };
+
+  const submit = async () => {
+    if (!form.amount) return toast.error("Amount required");
+    const amount = Number(form.amount);
+    const { data: inserted, error } = await supabase.from("expense_claims").insert({
+      user_id: user?.id,
+      category: form.category,
+      amount,
+      claim_date: form.claim_date,
+      description: form.description,
+      receipt_url: form.receipt_url || null,
+      direction: form.direction,
+      recoverable_total: form.direction === "employee_owes_company" ? amount : null,
+    }).select().single();
+    if (error) return toast.error(error.message);
+    toast.success("Expense submitted");
+    setOpen(false);
+    setForm({ category: "Travel", amount: "", claim_date: format(new Date(), "yyyy-MM-dd"), description: "", receipt_url: "", direction: "company_pays_employee" });
+    await notifyManagersAndAdmins(
+      "Expense Claim Submitted",
+      `${user?.email} submitted a ${form.category} claim for ${form.amount}.`,
+      inserted?.id,
+      { route: "/expenses", type: "expense_claim", requesterId: user?.id },
+    );
+    fetchClaims();
+  };
+
+  const decide = async (id: string, status: "approved" | "rejected") => {
+    const claim = claims.find((c) => c.id === id);
+    const { error } = await supabase.from("expense_claims").update({ status, approver_id: user?.id, approved_at: new Date().toISOString() }).eq("id", id);
+    if (error) return toast.error(error.message);
+    toast.success(`Claim ${status}`);
+    if (claim) {
+      await notifyEmployee(
+        claim.user_id,
+        `Expense Claim ${status.charAt(0).toUpperCase() + status.slice(1)}`,
+        `Your ${claim.category} claim for ${claim.amount} was ${status}.`,
+        id,
+        { route: "/expenses", type: "expense_claim_update" },
+      );
+    }
+    fetchClaims();
+  };
+
+  const markPaid = async (id: string) => {
+    const { error } = await supabase.from("expense_claims").update({
+      payment_status: "paid", paid_date: format(new Date(), "yyyy-MM-dd"),
+    }).eq("id", id);
+    if (error) return toast.error(error.message);
+    toast.success("Marked paid");
+    fetchClaims();
+  };
+
+  const myClaims = claims.filter(c => c.user_id === user?.id);
+  const pendingApprovals = claims.filter(c => c.status === "pending" && c.user_id !== user?.id);
+  const allOthers = claims.filter(c => c.user_id !== user?.id);
+
+  const totals = categories.map(cat => ({
+    cat,
+    total: claims.filter(c => c.category === cat && c.status === "approved").reduce((s,c)=>s+Number(c.amount), 0)
+  })).filter(t => t.total > 0);
+
+  return (
+    <div className="space-y-6">
+      <div className="flex justify-between items-center flex-wrap gap-4">
+        <div>
+          <h1 className="text-2xl font-display font-bold">Expense Claims</h1>
+          <p className="text-sm text-muted-foreground">Submit and track reimbursement requests.</p>
+        </div>
+        <Dialog open={open} onOpenChange={setOpen}>
+          <DialogTrigger asChild><Button><Plus className="h-4 w-4 mr-1" />New Claim</Button></DialogTrigger>
+          <DialogContent>
+            <DialogHeader><DialogTitle>Submit Expense Claim</DialogTitle></DialogHeader>
+            <div className="space-y-3">
+              <div><Label>Category</Label>
+                <Select value={form.category} onValueChange={(v)=>setForm({...form, category: v})}>
+                  <SelectTrigger><SelectValue /></SelectTrigger>
+                  <SelectContent>{categories.map(c => <SelectItem key={c} value={c}>{c}</SelectItem>)}</SelectContent>
+                </Select>
+              </div>
+              <div><Label>Direction</Label>
+                <Select value={form.direction} onValueChange={(v)=>setForm({...form, direction: v})}>
+                  <SelectTrigger><SelectValue /></SelectTrigger>
+                  <SelectContent>{DIRECTIONS.map(d => <SelectItem key={d.value} value={d.value}>{d.label}</SelectItem>)}</SelectContent>
+                </Select>
+              </div>
+              <div className="grid grid-cols-2 gap-3">
+                <div><Label>Amount</Label><Input type="number" value={form.amount} onChange={(e)=>setForm({...form, amount: e.target.value})} /></div>
+                <div><Label>Date</Label><Input type="date" value={form.claim_date} onChange={(e)=>setForm({...form, claim_date: e.target.value})} /></div>
+              </div>
+              <div><Label>Description</Label><Textarea value={form.description} onChange={(e)=>setForm({...form, description: e.target.value})} /></div>
+              <div>
+                <Label>Receipt</Label>
+                <Input type="file" accept="image/*,application/pdf" onChange={(e)=>e.target.files?.[0] && uploadReceipt(e.target.files[0])} disabled={uploading} />
+                {form.receipt_url && <a className="text-xs text-primary underline" href={form.receipt_url} target="_blank" rel="noreferrer">View attached</a>}
+              </div>
+            </div>
+            <DialogFooter><Button onClick={submit} disabled={uploading}>{uploading ? "Uploading..." : "Submit"}</Button></DialogFooter>
+          </DialogContent>
+        </Dialog>
+      </div>
+
+      {isAdmin && (
+        <div className="flex items-center gap-2">
+          <Input className="max-w-[220px]" placeholder="New expense type" value={newCategory} onChange={(e) => setNewCategory(e.target.value)} />
+          <Button size="sm" variant="outline" onClick={addCategory}>Add Expense Type</Button>
+        </div>
+      )}
+
+      {totals.length > 0 && (
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+          {totals.map(t => (
+            <Card key={t.cat}><CardHeader className="pb-2"><CardDescription>{t.cat}</CardDescription><CardTitle>{t.total.toLocaleString()}</CardTitle></CardHeader></Card>
+          ))}
+        </div>
+      )}
+
+      <Tabs defaultValue="mine">
+        <TabsList>
+          <TabsTrigger value="mine">My Claims</TabsTrigger>
+          {canApprove && <TabsTrigger value="pending">Pending Approval ({pendingApprovals.length})</TabsTrigger>}
+          {canApprove && <TabsTrigger value="all">Team History</TabsTrigger>}
+        </TabsList>
+
+        <TabsContent value="mine">
+          <ClaimTable claims={myClaims} showEmployee={false} isAdmin={isAdmin} onTogglePaid={markPaid} />
+        </TabsContent>
+        {canApprove && (
+          <TabsContent value="pending">
+            <ClaimTable claims={pendingApprovals} showEmployee onApprove={(id)=>decide(id,"approved")} onReject={(id)=>decide(id,"rejected")} isAdmin={isAdmin} onTogglePaid={markPaid} />
+          </TabsContent>
+        )}
+        {canApprove && (
+          <TabsContent value="all">
+            <ClaimTable claims={allOthers} showEmployee isAdmin={isAdmin} onTogglePaid={markPaid} />
+          </TabsContent>
+        )}
+      </Tabs>
+    </div>
+  );
+}
+
+const ClaimTable = ({ claims, showEmployee, onApprove, onReject, onTogglePaid, isAdmin }: any) => (
+  <Card>
+    <CardContent className="pt-6">
+      <Table>
+        <TableHeader>
+          <TableRow>
+            {showEmployee && <TableHead>Employee</TableHead>}
+            <TableHead>Date</TableHead><TableHead>Category</TableHead><TableHead>Direction</TableHead><TableHead>Amount</TableHead><TableHead>Description</TableHead><TableHead>Receipt</TableHead><TableHead>Status</TableHead>
+            {(onApprove || onReject) && <TableHead></TableHead>}
+          </TableRow>
+        </TableHeader>
+        <TableBody>
+          {claims.length === 0 ? <TableRow><TableCell colSpan={showEmployee ? 9 : 8} className="text-center text-muted-foreground">No claims</TableCell></TableRow> :
+            claims.map((c: any) => (
+              <TableRow key={c.id}>
+                {showEmployee && <TableCell>{c.profiles?.full_name || c.profiles?.email || "—"}</TableCell>}
+                <TableCell>{format(new Date(c.claim_date), "MMM d, yyyy")}</TableCell>
+                <TableCell><Badge variant="outline">{c.category}</Badge></TableCell>
+                <TableCell>
+                  {c.direction === "employee_owes_company" ? (
+                    <Badge variant="outline">Employee Owes</Badge>
+                  ) : (
+                    <div className="flex items-center gap-1">
+                      <Badge className={c.payment_status === "paid" ? "bg-success text-white" : ""} variant={c.payment_status === "paid" ? undefined : "outline"}>{c.payment_status === "paid" ? "Paid" : "Not Paid"}</Badge>
+                      {isAdmin && c.payment_status !== "paid" && (
+                        <Button size="sm" variant="ghost" onClick={() => onTogglePaid?.(c.id)}>Mark Paid</Button>
+                      )}
+                    </div>
+                  )}
+                </TableCell>
+                <TableCell className="font-semibold">{Number(c.amount).toLocaleString()}</TableCell>
+                <TableCell className="max-w-[240px] truncate text-xs text-muted-foreground">{c.description || "—"}</TableCell>
+                <TableCell>{c.receipt_url ? <a href={c.receipt_url} target="_blank" rel="noreferrer" className="text-primary"><FileText className="h-4 w-4 inline" /></a> : "—"}</TableCell>
+                <TableCell>
+                  <Badge className={c.status === "approved" ? "bg-success text-white" : c.status === "rejected" ? "bg-destructive text-white" : ""} variant={c.status === "pending" ? "outline" : undefined}>{c.status}</Badge>
+                </TableCell>
+                {(onApprove || onReject) && (
+                  <TableCell>
+                    <div className="flex gap-1">
+                      <Button size="icon" variant="outline" onClick={()=>onApprove?.(c.id)}><Check className="h-4 w-4 text-success" /></Button>
+                      <Button size="icon" variant="outline" onClick={()=>onReject?.(c.id)}><X className="h-4 w-4 text-destructive" /></Button>
+                    </div>
+                  </TableCell>
+                )}
+              </TableRow>
+            ))}
+        </TableBody>
+      </Table>
+    </CardContent>
+  </Card>
+);
