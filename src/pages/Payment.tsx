@@ -22,6 +22,7 @@ import {
   computePayroll,
   computeGratuity,
   downloadPayslipPDF,
+  applyDuePersonalAdvanceDeduction,
   type PayrollProfile,
   type PayrollComputation,
 } from "@/lib/payroll";
@@ -327,6 +328,11 @@ const Payment = () => {
     fetchAll();
   };
 
+  // Kept as a manual fallback for off-cycle corrections — Personal Advance
+  // deductions are now applied automatically whenever payroll is generated
+  // (see applyDuePersonalAdvanceDeduction, called from PayrollTab below).
+  // Both paths share that same function, so whichever runs first for a given
+  // month "wins" and the other becomes a no-op — never a double deduction.
   const recordDeduction = async (advance: any) => {
     if (!user) return;
     setRecording(true);
@@ -340,50 +346,24 @@ const Payment = () => {
       const now = new Date();
       const year = now.getFullYear();
       const month = now.getMonth() + 1;
-      const computation = await computePayroll(profileRow as PayrollProfile, year, month, "BDT");
-      const remainingBalance = Number(advance.remaining_balance);
-      const monthlyDeduction = Number(advance.monthly_deduction);
-      const netPayCap = Math.max(0, computation.net_pay);
-      const proposedBeforeCap = Math.min(monthlyDeduction, remainingBalance);
-      const actualDeduction = Math.min(monthlyDeduction, remainingBalance, netPayCap);
-      const monthStartISO = `${year}-${String(month).padStart(2, "0")}-01`;
-      const remainingAfter = remainingBalance - actualDeduction;
-
-      const { error: ledgerErr } = await supabase.from("personal_advance_actions").insert({
-        personal_advance_id: advance.id, user_id: advance.user_id, action_type: "payroll_deduction",
-        amount: actualDeduction, remaining_after: remainingAfter, month: monthStartISO, created_by: user.id,
-      });
-      if (ledgerErr) { toast.error(ledgerErr.message); return; }
-
-      const updatePayload: any = { remaining_balance: remainingAfter };
-      const willClose = remainingAfter <= 0;
-      if (willClose) updatePayload.status = "closed";
-
-      const shortfallFromNetPay = actualDeduction < monthlyDeduction && netPayCap < proposedBeforeCap;
-      if (shortfallFromNetPay) {
-        updatePayload.admin_flag = true;
-        updatePayload.admin_flag_note = `Deduction capped by net pay: wanted ${monthlyDeduction}, net pay only allowed ${netPayCap.toFixed(2)}.`;
+      const result = await applyDuePersonalAdvanceDeduction(profileRow as PayrollProfile, year, month, user.id);
+      if (result.status === "already_recorded") {
+        toast.error("This month's deduction was already recorded (possibly via payroll generation).");
+        return;
       }
-
-      const { error: updErr } = await supabase.from("personal_advances").update(updatePayload).eq("id", advance.id);
-      if (updErr) { toast.error(updErr.message); return; }
-
-      if (willClose) {
-        await supabase.from("personal_advance_actions").insert({
-          personal_advance_id: advance.id, user_id: advance.user_id, action_type: "closed",
-          amount: 0, remaining_after: 0, month: monthStartISO, created_by: user.id,
-        });
+      if (result.status === "no_active_advance") {
+        toast.error("No active Personal Advance found for this employee.");
+        return;
       }
-      if (shortfallFromNetPay) {
-        await supabase.from("personal_advance_actions").insert({
-          personal_advance_id: advance.id, user_id: advance.user_id, action_type: "admin_flag",
-          amount: 0, month: monthStartISO, note: updatePayload.admin_flag_note, created_by: user.id,
-        });
+      if (result.status === "nothing_due") {
+        toast.error("Nothing could be deducted — net pay for this month is 0 or less.");
+        return;
       }
-
-      toast.success(`Recorded deduction of ${actualDeduction.toFixed(2)}`);
+      toast.success(`Recorded deduction of ${result.amount.toFixed(2)}`);
       setDeductDialogId(null);
       fetchAll();
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Failed to record deduction");
     } finally {
       setRecording(false);
     }
@@ -721,6 +701,10 @@ function PayrollTab() {
       let created = 0; let skipped = 0;
       for (const profile of eligible) {
         if (recordByUser.has(profile.id)) { skipped++; continue; }
+        // Apply any due Personal Advance installment before computing payroll,
+        // so other_deductions/net_pay already reflect it — idempotent, so
+        // regenerating payroll for this month never double-deducts.
+        await applyDuePersonalAdvanceDeduction(profile, year, month, user.id);
         const calc = await computePayroll(profile, year, month, currency);
         const { error } = await supabase.from("payroll_records").insert({
           ...calc,
@@ -750,6 +734,7 @@ function PayrollTab() {
       return;
     }
     try {
+      await applyDuePersonalAdvanceDeduction(profile, year, month, user.id);
       const calc = await computePayroll(profile, year, month, currency);
       const existing = recordByUser.get(profile.id);
       if (existing) {

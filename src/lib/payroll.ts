@@ -107,6 +107,102 @@ export async function fetchAdvanceDeductionTotal(
   return (data || []).reduce((s, r) => s + Number(r.amount || 0), 0);
 }
 
+export type AdvanceDeductionResult =
+  | { status: "applied"; amount: number; closed: boolean; flagged: boolean }
+  | { status: "already_recorded" }
+  | { status: "no_active_advance" }
+  | { status: "nothing_due" };
+
+/**
+ * Apply this employee's due Personal Advance installment for a given month,
+ * if one exists and hasn't already been recorded. This is the single place
+ * that writes a 'payroll_deduction' row to personal_advance_actions — called
+ * automatically whenever payroll is generated/recalculated for an employee
+ * (so the deduction happens without a separate manual step), and reused by
+ * the manual "Record This Month's Deduction" admin action for off-cycle
+ * corrections. Idempotent: a second call for a month that already has a
+ * payroll_deduction row for this advance is a no-op, so generating or
+ * regenerating payroll for the same month never double-deducts, and running
+ * the manual action after payroll already applied it this month (or vice
+ * versa) is always safe.
+ */
+export async function applyDuePersonalAdvanceDeduction(
+  profile: PayrollProfile,
+  year: number,
+  month: number,
+  actorId: string,
+): Promise<AdvanceDeductionResult> {
+  const monthStartISO = `${year}-${String(month).padStart(2, "0")}-01`;
+
+  const { data: advances, error: advErr } = await supabase
+    .from("personal_advances")
+    .select("id, user_id, remaining_balance, monthly_deduction")
+    .eq("user_id", profile.id)
+    .eq("status", "approved")
+    .gt("remaining_balance", 0)
+    .limit(1);
+  if (advErr) throw advErr;
+  const advance = advances?.[0];
+  if (!advance) return { status: "no_active_advance" };
+
+  const { data: existing, error: existErr } = await supabase
+    .from("personal_advance_actions")
+    .select("id")
+    .eq("personal_advance_id", advance.id)
+    .eq("month", monthStartISO)
+    .eq("action_type", "payroll_deduction")
+    .limit(1);
+  if (existErr) throw existErr;
+  if (existing && existing.length > 0) return { status: "already_recorded" };
+
+  // computePayroll() reads other_deductions from this same ledger table for
+  // this user/month — since no payroll_deduction row exists yet (checked
+  // above), this net_pay figure is "before this deduction", which is exactly
+  // the cap we need.
+  const computation = await computePayroll(profile, year, month, "BDT");
+  const remainingBalance = Number(advance.remaining_balance);
+  const monthlyDeduction = Number(advance.monthly_deduction);
+  const netPayCap = Math.max(0, computation.net_pay);
+  const proposedBeforeCap = Math.min(monthlyDeduction, remainingBalance);
+  const actualDeduction = Math.min(monthlyDeduction, remainingBalance, netPayCap);
+  if (actualDeduction <= 0) return { status: "nothing_due" };
+
+  const remainingAfter = remainingBalance - actualDeduction;
+  const { error: ledgerErr } = await supabase.from("personal_advance_actions").insert({
+    personal_advance_id: advance.id, user_id: advance.user_id, action_type: "payroll_deduction",
+    amount: actualDeduction, remaining_after: remainingAfter, month: monthStartISO, created_by: actorId,
+  });
+  if (ledgerErr) throw ledgerErr;
+
+  const willClose = remainingAfter <= 0;
+  const shortfallFromNetPay = actualDeduction < monthlyDeduction && netPayCap < proposedBeforeCap;
+  const adminFlagNote = shortfallFromNetPay
+    ? `Deduction capped by net pay: wanted ${monthlyDeduction}, net pay only allowed ${netPayCap.toFixed(2)}.`
+    : undefined;
+
+  const { error: updErr } = await supabase.from("personal_advances").update({
+    remaining_balance: remainingAfter,
+    ...(willClose ? { status: "closed" } : {}),
+    ...(shortfallFromNetPay ? { admin_flag: true, admin_flag_note: adminFlagNote } : {}),
+  }).eq("id", advance.id);
+  if (updErr) throw updErr;
+
+  if (willClose) {
+    await supabase.from("personal_advance_actions").insert({
+      personal_advance_id: advance.id, user_id: advance.user_id, action_type: "closed",
+      amount: 0, remaining_after: 0, month: monthStartISO, created_by: actorId,
+    });
+  }
+  if (shortfallFromNetPay) {
+    await supabase.from("personal_advance_actions").insert({
+      personal_advance_id: advance.id, user_id: advance.user_id, action_type: "admin_flag",
+      amount: 0, month: monthStartISO, note: adminFlagNote, created_by: actorId,
+    });
+  }
+
+  return { status: "applied", amount: actualDeduction, closed: willClose, flagged: shortfallFromNetPay };
+}
+
 export async function computePayroll(
   profile: PayrollProfile,
   year: number,
