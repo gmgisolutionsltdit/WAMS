@@ -1170,6 +1170,8 @@ function ExpenseClaimsTab() {
   const [uploading, setUploading] = useState(false);
   const [filterMonth, setFilterMonth] = useState<string>("all");
   const [filterYear, setFilterYear] = useState<number>(new Date().getFullYear());
+  const [filterFromDate, setFilterFromDate] = useState<string>("");
+  const [filterToDate, setFilterToDate] = useState<string>("");
 
   const fetchClaims = async () => {
     const { data, error } = await supabase.from("expense_claims").select("*, profiles!expense_claims_user_id_fkey(full_name,email,photo_url)").order("created_at", { ascending: false });
@@ -1259,6 +1261,14 @@ function ExpenseClaimsTab() {
   };
 
   const filteredClaims = claims.filter((c) => {
+    // An explicit date range is more specific than Month/Year, so it takes
+    // over whenever either end is set — the two controls are not combined.
+    if (filterFromDate || filterToDate) {
+      if (!c.claim_date) return false;
+      if (filterFromDate && c.claim_date < filterFromDate) return false;
+      if (filterToDate && c.claim_date > filterToDate) return false;
+      return true;
+    }
     if (!c.claim_date) return filterMonth === "all";
     const d = new Date(`${c.claim_date}T00:00:00`);
     if (d.getFullYear() !== filterYear) return false;
@@ -1325,7 +1335,7 @@ function ExpenseClaimsTab() {
       <div className="flex flex-wrap items-end gap-2">
         <div>
           <Label className="text-xs">Month</Label>
-          <Select value={filterMonth} onValueChange={setFilterMonth}>
+          <Select value={filterMonth} onValueChange={setFilterMonth} disabled={!!(filterFromDate || filterToDate)}>
             <SelectTrigger className="w-[150px]"><SelectValue /></SelectTrigger>
             <SelectContent>
               <SelectItem value="all">All Months</SelectItem>
@@ -1335,8 +1345,19 @@ function ExpenseClaimsTab() {
         </div>
         <div>
           <Label className="text-xs">Year</Label>
-          <Input type="number" className="w-[100px]" value={filterYear} onChange={(e) => setFilterYear(Number(e.target.value) || filterYear)} />
+          <Input type="number" className="w-[100px]" value={filterYear} onChange={(e) => setFilterYear(Number(e.target.value) || filterYear)} disabled={!!(filterFromDate || filterToDate)} />
         </div>
+        <div>
+          <Label className="text-xs">From Date</Label>
+          <Input type="date" className="w-[160px]" value={filterFromDate} onChange={(e) => setFilterFromDate(e.target.value)} />
+        </div>
+        <div>
+          <Label className="text-xs">To Date</Label>
+          <Input type="date" className="w-[160px]" value={filterToDate} onChange={(e) => setFilterToDate(e.target.value)} />
+        </div>
+        {(filterFromDate || filterToDate) && (
+          <Button size="sm" variant="ghost" onClick={() => { setFilterFromDate(""); setFilterToDate(""); }}>Clear Dates</Button>
+        )}
       </div>
 
       {totals.length > 0 && (
