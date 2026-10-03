@@ -24,6 +24,8 @@ type Summary = {
   role: string;
   lateDays: number;
   lateMinutesTotal: number;
+  /** Extra work owed for a late arrival (0 once waived by Approve Start Time). */
+  latePenaltyMinutesTotal: number;
   shortDays: number;
   shortfallHoursTotal: number;
   otDays: number;
@@ -145,7 +147,7 @@ const ReportsSummary = () => {
           userId: id,
           name: p?.full_name || p?.email || "—",
           role: roleMap.get(id) || "employee",
-          lateDays: 0, lateMinutesTotal: 0,
+          lateDays: 0, lateMinutesTotal: 0, latePenaltyMinutesTotal: 0,
           shortDays: 0, shortfallHoursTotal: 0,
           otDays: 0, otHoursTotal: 0,
           netWorkingHours: 0,
@@ -182,14 +184,19 @@ const ReportsSummary = () => {
 
         // Late: compare against the stored, authoritative arrival once
         // reviewed; fall back to a live recompute for older unreviewed rows.
+        // penaltyMinutes is the extra work owed for the late arrival (0 once
+        // waived via Approve Start Time) — Due Time for a late day is the
+        // late minutes plus this penalty, same as Attendance.tsx's own
+        // Due Time column.
         const liveArrival = evaluateArrival(day.firstIn, schedule);
         const storedArrival = day.penaltyReviewed
-          ? { late: day.penaltyMinutes > 0, lateMinutes: day.lateMinutes }
+          ? { late: day.penaltyMinutes > 0, lateMinutes: day.lateMinutes, penaltyMinutes: day.penaltyMinutes }
           : liveArrival;
-        const arrival = nonWorking ? { late: false, lateMinutes: 0 } : storedArrival;
+        const arrival = nonWorking ? { late: false, lateMinutes: 0, penaltyMinutes: 0 } : storedArrival;
         if (arrival.late) {
           s.lateDays += 1;
           s.lateMinutesTotal += arrival.lateMinutes;
+          s.latePenaltyMinutesTotal += arrival.penaltyMinutes;
         }
 
         const required = netRequiredHours(schedule);
@@ -219,10 +226,12 @@ const ReportsSummary = () => {
         if (s) s.otDays = set.size;
       });
 
-      // Late arrivals shorten the working day actually put in — deduct the
-      // total late time from Net Working Hour.
+      // Late arrivals cost Due Time — late minutes plus the extra-work
+      // penalty they trigger (e.g. 11m late + the 2h40m penalty = 2h51m) —
+      // deduct that total from Net Working Hour, same figure as Attendance's
+      // own Due Time column.
       byUser.forEach((s) => {
-        s.netWorkingHours = Math.max(0, s.netWorkingHours - s.lateMinutesTotal / 60);
+        s.netWorkingHours = Math.max(0, s.netWorkingHours - (s.lateMinutesTotal + s.latePenaltyMinutesTotal) / 60);
       });
 
       setRows(Array.from(byUser.values()).sort((a, b) => a.name.localeCompare(b.name)));
