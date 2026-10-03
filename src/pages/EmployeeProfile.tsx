@@ -638,12 +638,13 @@ const EmployeeProfile = () => {
       </Card>
 
       <Tabs value={activeTab} onValueChange={handleTabChange} className="w-full">
-        <TabsList className="grid grid-cols-2 sm:grid-cols-6 w-full sm:w-auto">
+        <TabsList className="grid grid-cols-2 sm:grid-cols-7 w-full sm:w-auto">
           <TabsTrigger value="overview">Overview</TabsTrigger>
           <TabsTrigger value="personal">Personal Info</TabsTrigger>
           <TabsTrigger value="financial">Financial</TabsTrigger>
           <TabsTrigger value="tasks">Projects & Tasks</TabsTrigger>
           <TabsTrigger value="team">Team</TabsTrigger>
+          <TabsTrigger value="setup">Setup</TabsTrigger>
           <TabsTrigger value="documents">Contract Documents</TabsTrigger>
         </TabsList>
 
@@ -655,7 +656,7 @@ const EmployeeProfile = () => {
                 <div className="flex items-start justify-between gap-2 flex-wrap">
                   <div>
                     <CardTitle className="text-base flex items-center gap-2"><Pencil className="h-4 w-4" /> Edit Profile</CardTitle>
-                    <CardDescription>Basic info, role &amp; reporting, and work schedule.</CardDescription>
+                    <CardDescription>Basic info, role &amp; reporting. Work schedule is under the Setup tab.</CardDescription>
                   </div>
                 </div>
               </CardHeader>
@@ -868,59 +869,6 @@ const EmployeeProfile = () => {
                   <div>
                     <Label className="text-xs">Monthly OT Cap (hrs)</Label>
                     <Input type="number" step="1" value={overviewForm.monthly_ot_cap} onChange={(e) => setOverviewForm((f) => ({ ...f, monthly_ot_cap: e.target.value }))} />
-                  </div>
-                </div>
-
-                <div className="rounded-md border p-3 bg-muted/30 space-y-3">
-                  <div>
-                    <Label className="text-sm font-semibold flex items-center gap-2"><Clock3 className="h-4 w-4" /> Office Hours &amp; Work Schedule</Label>
-                    <p className="text-xs text-muted-foreground mt-1">
-                      Attendance, late arrival, due time, overtime and leave are all calculated against these values.
-                    </p>
-                  </div>
-                  <div className="grid gap-3 md:grid-cols-2">
-                    <div>
-                      <Label className="text-xs">Office Start</Label>
-                      <Input type="time" value={overviewForm.office_start_time} onChange={(e) => setOverviewForm((f) => ({ ...f, office_start_time: e.target.value }))} />
-                    </div>
-                    <div>
-                      <Label className="text-xs">Office End</Label>
-                      <Input type="time" value={overviewForm.office_end_time} onChange={(e) => setOverviewForm((f) => ({ ...f, office_end_time: e.target.value }))} />
-                    </div>
-                    <div>
-                      <Label className="text-xs">Standard Shift Hours</Label>
-                      <Input type="number" step="0.5" min="0.5" max="24" value={overviewForm.standard_daily_hours} onChange={(e) => setOverviewForm((f) => ({ ...f, standard_daily_hours: e.target.value }))} />
-                    </div>
-                    <div>
-                      <Label className="text-xs">Daily Break Allowance (minutes)</Label>
-                      <Input type="number" step="5" min="0" value={overviewForm.unpaid_break_minutes} onChange={(e) => setOverviewForm((f) => ({ ...f, unpaid_break_minutes: e.target.value }))} />
-                    </div>
-                    <div>
-                      <Label className="text-xs">Late Grace (minutes)</Label>
-                      <Input type="number" step="1" min="0" value={overviewForm.late_grace_minutes} onChange={(e) => setOverviewForm((f) => ({ ...f, late_grace_minutes: e.target.value }))} />
-                    </div>
-                    <div className="md:col-span-2">
-                      <Label className="text-xs">Working Days (unchecked days count as weekend)</Label>
-                      <div className="flex flex-wrap gap-3 mt-1">
-                        {DOW.map((d) => (
-                          <label key={d.v} className="flex items-center gap-1.5 text-sm">
-                            <Checkbox
-
-                              checked={overviewForm.working_days.includes(d.v)}
-                              onCheckedChange={() =>
-                                setOverviewForm((f) => ({
-                                  ...f,
-                                  working_days: f.working_days.includes(d.v)
-                                    ? f.working_days.filter((x) => x !== d.v)
-                                    : [...f.working_days, d.v].sort((a, b) => a - b),
-                                }))
-                              }
-                            />
-                            {d.label}
-                          </label>
-                        ))}
-                      </div>
-                    </div>
                   </div>
                 </div>
               </CardContent>
@@ -1276,6 +1224,66 @@ const EmployeeProfile = () => {
               )}
             </CardContent>
           </Card>
+        </TabsContent>
+
+        {/* SETUP */}
+        <TabsContent value="setup" className="mt-4 space-y-4">
+          {canManageThisEmployee && (
+            <Card>
+              <CardHeader>
+                <CardTitle className="text-base flex items-center gap-2"><Clock3 className="h-4 w-4" /> Office Hours &amp; Work Schedule</CardTitle>
+                <CardDescription>
+                  Attendance, late arrival, due time, overtime and leave are all calculated against these values.
+                </CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-3">
+                <div className="grid gap-3 md:grid-cols-2">
+                  <div>
+                    <Label className="text-xs">Office Start</Label>
+                    <Input type="time" value={overviewForm.office_start_time} onChange={(e) => setOverviewForm((f) => ({ ...f, office_start_time: e.target.value }))} />
+                  </div>
+                  <div>
+                    <Label className="text-xs">Office End</Label>
+                    <Input type="time" value={overviewForm.office_end_time} onChange={(e) => setOverviewForm((f) => ({ ...f, office_end_time: e.target.value }))} />
+                  </div>
+                  <div>
+                    <Label className="text-xs">Standard Shift Hours</Label>
+                    <Input type="number" step="0.5" min="0.5" max="24" value={overviewForm.standard_daily_hours} onChange={(e) => setOverviewForm((f) => ({ ...f, standard_daily_hours: e.target.value }))} />
+                  </div>
+                  <div>
+                    <Label className="text-xs">Daily Break Allowance (minutes)</Label>
+                    <Input type="number" step="5" min="0" value={overviewForm.unpaid_break_minutes} onChange={(e) => setOverviewForm((f) => ({ ...f, unpaid_break_minutes: e.target.value }))} />
+                  </div>
+                  <div>
+                    <Label className="text-xs">Late Grace (minutes)</Label>
+                    <Input type="number" step="1" min="0" value={overviewForm.late_grace_minutes} onChange={(e) => setOverviewForm((f) => ({ ...f, late_grace_minutes: e.target.value }))} />
+                  </div>
+                  <div className="md:col-span-2">
+                    <Label className="text-xs">Working Days (unchecked days count as weekend)</Label>
+                    <div className="flex flex-wrap gap-3 mt-1">
+                      {DOW.map((d) => (
+                        <label key={d.v} className="flex items-center gap-1.5 text-sm">
+                          <Checkbox
+
+                            checked={overviewForm.working_days.includes(d.v)}
+                            onCheckedChange={() =>
+                              setOverviewForm((f) => ({
+                                ...f,
+                                working_days: f.working_days.includes(d.v)
+                                  ? f.working_days.filter((x) => x !== d.v)
+                                  : [...f.working_days, d.v].sort((a, b) => a - b),
+                              }))
+                            }
+                          />
+                          {d.label}
+                        </label>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+          )}
 
           {isAdmin && (
             <Card>
