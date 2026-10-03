@@ -97,7 +97,6 @@ const ReportsSummary = () => {
   }, [targetIds.join(",")]);
 
   const effectiveRange = useMemo(() => {
-    const today = todayISO();
     if (monthFrom || monthTo) {
       const startMonth = monthFrom || monthTo;
       const endMonth = monthTo || monthFrom;
@@ -105,10 +104,9 @@ const ReportsSummary = () => {
       const [ye, me] = endMonth.split("-").map(Number);
       const start = new Date(ys, ms - 1, 1);
       const end = new Date(ye, me, 0);
-      const to = format(end, "yyyy-MM-dd");
-      return { from: format(start, "yyyy-MM-dd"), to: to > today ? today : to };
+      return { from: format(start, "yyyy-MM-dd"), to: format(end, "yyyy-MM-dd") };
     }
-    return { from: dateFrom, to: dateTo && dateTo > today ? today : dateTo };
+    return { from: dateFrom, to: dateTo };
   }, [monthFrom, monthTo, dateFrom, dateTo]);
 
   /**
@@ -273,19 +271,19 @@ const ReportsSummary = () => {
             )}
             <div className="space-y-2">
               <Label>Month From</Label>
-              <Input type="month" max={todayMonth()} value={monthFrom} onChange={(e) => { setMonthFrom(e.target.value); setDatesTouched(true); if (e.target.value) { setDateFrom(""); setDateTo(""); } }} />
+              <Input type="month" value={monthFrom} onChange={(e) => { setMonthFrom(e.target.value); setDatesTouched(true); if (e.target.value) { setDateFrom(""); setDateTo(""); } }} />
             </div>
             <div className="space-y-2">
               <Label>Month To</Label>
-              <Input type="month" max={todayMonth()} value={monthTo} onChange={(e) => { setMonthTo(e.target.value); setDatesTouched(true); if (e.target.value) { setDateFrom(""); setDateTo(""); } }} />
+              <Input type="month" value={monthTo} onChange={(e) => { setMonthTo(e.target.value); setDatesTouched(true); if (e.target.value) { setDateFrom(""); setDateTo(""); } }} />
             </div>
             <div className="space-y-2">
               <Label>From</Label>
-              <Input type="date" max={todayISO()} value={dateFrom} disabled={!!monthFrom || !!monthTo} onChange={(e) => { setDateFrom(e.target.value); setDatesTouched(true); }} />
+              <Input type="date" value={dateFrom} disabled={!!monthFrom || !!monthTo} onChange={(e) => { setDateFrom(e.target.value); setDatesTouched(true); }} />
             </div>
             <div className="space-y-2">
               <Label>To</Label>
-              <Input type="date" max={todayISO()} value={dateTo} disabled={!!monthFrom || !!monthTo} onChange={(e) => { setDateTo(e.target.value); setDatesTouched(true); }} />
+              <Input type="date" value={dateTo} disabled={!!monthFrom || !!monthTo} onChange={(e) => { setDateTo(e.target.value); setDatesTouched(true); }} />
             </div>
             <div className="flex gap-2">
               <Button onClick={fetchSummary} className="flex-1">Filter</Button>
