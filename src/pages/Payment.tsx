@@ -689,6 +689,31 @@ function PayrollTab() {
     [profiles],
   );
 
+  const exportPayrollReport = () => {
+    const header = ["Employee", "Email", "Designation", "Department", "Base Salary", "OT Hours", "OT Amount", "Incentives", "Gross Pay", "PF (Employee)", "PF (Employer)", "Other Deductions", "Net Pay", "Status"];
+    const rows = activeProfiles.map((p) => {
+      const r = recordByUser.get(p.id);
+      return [
+        p.full_name || "", p.email || "", p.designation || "", p.department || "",
+        p.base_salary, r?.ot_hours ?? "", r?.ot_amount ?? "", r?.incentives_amount ?? "",
+        r?.gross_pay ?? "", r?.pf_employee ?? "", r?.pf_employer ?? "", r?.other_deductions ?? "",
+        r?.net_pay ?? "", r ? r.status : "Not generated",
+      ];
+    });
+    const escape = (v: unknown) => {
+      const s = String(v ?? "");
+      return /[",\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
+    };
+    const csv = [header, ...rows].map((row) => row.map(escape).join(",")).join("\n");
+    const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `Payroll_Report_${MONTHS[month - 1]}_${year}.csv`;
+    a.click();
+    URL.revokeObjectURL(url);
+  };
+
   const handleGenerateAll = async () => {
     if (!user) return;
     setGenerating(true);
@@ -798,6 +823,9 @@ function PayrollTab() {
           <Button onClick={handleGenerateAll} disabled={generating || loading}>
             {generating ? <Loader2 className="h-4 w-4 animate-spin" /> : <Plus className="h-4 w-4" />}
             Generate Monthly Payroll
+          </Button>
+          <Button variant="outline" onClick={exportPayrollReport} disabled={loading || activeProfiles.length === 0}>
+            <Download className="h-4 w-4 mr-1" /> Export Report
           </Button>
         </div>
       </div>
