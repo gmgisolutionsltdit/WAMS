@@ -327,7 +327,6 @@ const Attendance = () => {
                 <TableHead className="w-8" />
                 <TableHead>Date</TableHead>
                 <TableHead>Status</TableHead>
-                <TableHead>Work From</TableHead>
                 <TableHead>Start</TableHead>
                 <TableHead>Approved Start Time</TableHead>
                 <TableHead>Close</TableHead>
@@ -343,7 +342,7 @@ const Attendance = () => {
             </TableHeader>
             <TableBody>
               {days.length === 0 ? (
-                <TableRow><TableCell colSpan={15} className="text-center text-muted-foreground">No attendance records</TableCell></TableRow>
+                <TableRow><TableCell colSpan={14} className="text-center text-muted-foreground">No attendance records</TableCell></TableRow>
               ) : days.map((day) => {
                 const worked = day.workedSeconds;
                 const closed = !day.open && !!day.lastOut;
@@ -424,9 +423,6 @@ const Attendance = () => {
                           <Badge variant="outline">On time</Badge>
                         )}
                       </TableCell>
-                      <TableCell className="whitespace-nowrap space-x-1">
-                        {day.workFrom?.length ? day.workFrom.map((w) => <Badge key={w} variant="outline">{w}</Badge>) : "—"}
-                      </TableCell>
                       <TableCell className="font-mono text-xs">{fmtClock(day.firstIn)}</TableCell>
                       <TableCell className="font-mono text-xs">
                         {day.approvedStartTime ? (
@@ -471,7 +467,7 @@ const Attendance = () => {
                     {isOpen && (
                       <TableRow className="bg-muted/40 hover:bg-muted/40">
                         <TableCell />
-                        <TableCell colSpan={13} className="p-0">
+                        <TableCell colSpan={12} className="p-0">
                           <div className="p-3">
                             <p className="text-xs font-medium text-muted-foreground mb-2">Individual sessions</p>
                             <Table>
@@ -480,6 +476,7 @@ const Attendance = () => {
                                   <TableHead>#</TableHead>
                                   <TableHead>Start</TableHead>
                                   <TableHead>Close</TableHead>
+                                  <TableHead>Work From</TableHead>
                                   <TableHead>Break</TableHead>
                                   <TableHead>Duration</TableHead>
                                   <TableHead>Source</TableHead>
@@ -493,6 +490,9 @@ const Attendance = () => {
                                     <TableCell className="font-mono text-xs">{fmtClock(s.clock_in)}</TableCell>
                                     <TableCell className="font-mono text-xs">
                                       {s.clock_out ? fmtClock(s.clock_out) : <Badge variant="secondary">Open</Badge>}
+                                    </TableCell>
+                                    <TableCell className="whitespace-nowrap space-x-1">
+                                      {s.work_from?.length ? s.work_from.map((w) => <Badge key={w} variant="outline">{w}</Badge>) : "—"}
                                     </TableCell>
                                     <TableCell className="font-mono text-xs">{fmtHMS((Number(s.break_minutes) || 0) * 60)}</TableCell>
                                     <TableCell className="font-mono text-xs">
