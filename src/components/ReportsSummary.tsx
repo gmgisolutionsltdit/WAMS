@@ -8,7 +8,7 @@ import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
-import { Clock, TimerOff, Timer, Gauge, Eye } from "lucide-react";
+import { Clock, TimerOff, Timer, Gauge, Eye, CalendarClock } from "lucide-react";
 import { format } from "date-fns";
 import { classifyDay, netRequiredHours, weekendDaysFor, type WorkSchedule } from "@/lib/workSchedule";
 import { evaluateArrival, humanMinutes, type OfficeTime } from "@/lib/officeTime";
@@ -29,6 +29,9 @@ type Summary = {
   otDays: number;
   otHoursTotal: number;
   netWorkingHours: number;
+  /** Worked on a weekend or public holiday (not an approved leave day). */
+  otOnLeaveDays: number;
+  otOnLeaveHoursTotal: number;
 };
 
 /** One day that would be reported differently under the corrected rules vs the old (buggy) ones. */
@@ -41,8 +44,6 @@ type ChangedDay = {
 };
 
 const round1 = (n: number) => Math.round(n * 10) / 10;
-const todayISO = () => format(new Date(), "yyyy-MM-dd");
-const todayMonth = () => format(new Date(), "yyyy-MM");
 
 const ReportsSummary = () => {
   const { user, role } = useAuth();
@@ -52,7 +53,6 @@ const ReportsSummary = () => {
   const [dateTo, setDateTo] = useState("");
   const [monthFrom, setMonthFrom] = useState("");
   const [monthTo, setMonthTo] = useState("");
-  const [datesTouched, setDatesTouched] = useState(false);
   const [employees, setEmployees] = useState<EmployeeOption[]>([]);
   const [employeeFilter, setEmployeeFilter] = useState("all");
   const [loading, setLoading] = useState(true);
@@ -76,25 +76,6 @@ const ReportsSummary = () => {
     () => (isAdmin ? (employeeFilter === "all" ? employees.map((e) => e.id) : [employeeFilter]) : (user ? [user.id] : [])),
     [isAdmin, employeeFilter, employees, user],
   );
-
-  // "Month From" defaults to the earliest attendance record among the
-  // currently targeted employee(s); "Month To" defaults to today. Only
-  // applied until the admin/employee picks a date explicitly.
-  useEffect(() => {
-    if (datesTouched || targetIds.length === 0) return;
-    (async () => {
-      const { data } = await supabase
-        .from("attendance_logs")
-        .select("date")
-        .in("user_id", targetIds)
-        .order("date", { ascending: true })
-        .limit(1);
-      const earliest = data?.[0]?.date;
-      setMonthFrom(earliest ? earliest.slice(0, 7) : todayMonth());
-      setMonthTo(todayMonth());
-    })();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [targetIds.join(",")]);
 
   const effectiveRange = useMemo(() => {
     if (monthFrom || monthTo) {
@@ -168,6 +149,7 @@ const ReportsSummary = () => {
           shortDays: 0, shortfallHoursTotal: 0,
           otDays: 0, otHoursTotal: 0,
           netWorkingHours: 0,
+          otOnLeaveDays: 0, otOnLeaveHoursTotal: 0,
         });
       });
 
@@ -190,6 +172,13 @@ const ReportsSummary = () => {
 
         const worked = day.workedSeconds / 3600;
         s.netWorkingHours += worked;
+
+        // Overtime on Leave: worked a weekend or public holiday — not an
+        // approved leave day — on days with any logged attendance.
+        if (dayKind.nonWorking && !onLeave && worked > 0) {
+          s.otOnLeaveDays += 1;
+          s.otOnLeaveHoursTotal += worked;
+        }
 
         // Late: compare against the stored, authoritative arrival once
         // reviewed; fall back to a live recompute for older unreviewed rows.
@@ -241,7 +230,7 @@ const ReportsSummary = () => {
 
   const clearFilters = () => {
     setDateFrom(""); setDateTo(""); setMonthFrom(""); setMonthTo("");
-    setEmployeeFilter("all"); setDatesTouched(false);
+    setEmployeeFilter("all");
   };
 
   const mine = rows.find((r) => r.userId === user?.id) || rows[0];
@@ -258,7 +247,7 @@ const ReportsSummary = () => {
             {isAdmin && (
               <div className="space-y-2">
                 <Label>Employee</Label>
-                <Select value={employeeFilter} onValueChange={(v) => { setEmployeeFilter(v); setDatesTouched(false); }}>
+                <Select value={employeeFilter} onValueChange={(v) => { setEmployeeFilter(v); }}>
                   <SelectTrigger><SelectValue /></SelectTrigger>
                   <SelectContent>
                     <SelectItem value="all">All employees</SelectItem>
@@ -271,19 +260,19 @@ const ReportsSummary = () => {
             )}
             <div className="space-y-2">
               <Label>Month From</Label>
-              <Input type="month" value={monthFrom} onChange={(e) => { setMonthFrom(e.target.value); setDatesTouched(true); if (e.target.value) { setDateFrom(""); setDateTo(""); } }} />
+              <Input type="month" value={monthFrom} onChange={(e) => { setMonthFrom(e.target.value); if (e.target.value) { setDateFrom(""); setDateTo(""); } }} />
             </div>
             <div className="space-y-2">
               <Label>Month To</Label>
-              <Input type="month" value={monthTo} onChange={(e) => { setMonthTo(e.target.value); setDatesTouched(true); if (e.target.value) { setDateFrom(""); setDateTo(""); } }} />
+              <Input type="month" value={monthTo} onChange={(e) => { setMonthTo(e.target.value); if (e.target.value) { setDateFrom(""); setDateTo(""); } }} />
             </div>
             <div className="space-y-2">
               <Label>From</Label>
-              <Input type="date" value={dateFrom} disabled={!!monthFrom || !!monthTo} onChange={(e) => { setDateFrom(e.target.value); setDatesTouched(true); }} />
+              <Input type="date" value={dateFrom} disabled={!!monthFrom || !!monthTo} onChange={(e) => { setDateFrom(e.target.value); }} />
             </div>
             <div className="space-y-2">
               <Label>To</Label>
-              <Input type="date" value={dateTo} disabled={!!monthFrom || !!monthTo} onChange={(e) => { setDateTo(e.target.value); setDatesTouched(true); }} />
+              <Input type="date" value={dateTo} disabled={!!monthFrom || !!monthTo} onChange={(e) => { setDateTo(e.target.value); }} />
             </div>
             <div className="flex gap-2">
               <Button onClick={fetchSummary} className="flex-1">Filter</Button>
@@ -307,12 +296,13 @@ const ReportsSummary = () => {
                       <TableHead>Total Shortfall</TableHead>
                       <TableHead>Approved OT Days</TableHead>
                       <TableHead>Total OT Hours</TableHead>
+                      <TableHead>Overtime on Leave</TableHead>
                       <TableHead>Net Working Hour</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
                     {rows.length === 0 ? (
-                      <TableRow><TableCell colSpan={9} className="text-center text-muted-foreground">No records</TableCell></TableRow>
+                      <TableRow><TableCell colSpan={10} className="text-center text-muted-foreground">No records</TableCell></TableRow>
                     ) : rows.map((r) => (
                       <TableRow key={r.userId}>
                         <TableCell className="font-medium">{r.name}</TableCell>
@@ -323,6 +313,7 @@ const ReportsSummary = () => {
                         <TableCell>{round1(r.shortfallHoursTotal)}h</TableCell>
                         <TableCell>{r.otDays}</TableCell>
                         <TableCell>{round1(r.otHoursTotal)}h</TableCell>
+                        <TableCell>{r.otOnLeaveDays} days · {round1(r.otOnLeaveHoursTotal)}h</TableCell>
                         <TableCell>{round1(r.netWorkingHours)}h</TableCell>
                       </TableRow>
                     ))}
@@ -397,6 +388,13 @@ const ReportsSummary = () => {
                 <CardContent>
                   <div className="text-2xl font-bold">{round1(mine?.netWorkingHours ?? 0)}h</div>
                   <p className="text-xs font-semibold text-primary mt-1">net hours worked in range</p>
+                </CardContent>
+              </Card>
+              <Card>
+                <CardHeader className="pb-2"><CardDescription className="flex items-center gap-2"><CalendarClock className="h-4 w-4" /> Overtime on Leave</CardDescription></CardHeader>
+                <CardContent>
+                  <div className="text-2xl font-bold">{mine?.otOnLeaveDays ?? 0} days</div>
+                  <p className="text-xs font-semibold text-primary mt-1">{round1(mine?.otOnLeaveHoursTotal ?? 0)}h worked on weekends/holidays</p>
                 </CardContent>
               </Card>
             </div>
