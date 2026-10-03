@@ -1,4 +1,4 @@
-import { Clock, LayoutDashboard, CalendarDays, FileText, CheckSquare, BarChart3, Settings, LogOut, Users, CalendarHeart, FolderKanban, Wallet, Megaphone, Receipt, Banknote, TrendingUp, BookOpenCheck, IdCard, UserCircle, HandCoins } from "lucide-react";
+import { Clock, LayoutDashboard, CalendarDays, FileText, CheckSquare, BarChart3, Settings, LogOut, Users, CalendarHeart, FolderKanban, Megaphone, Banknote, TrendingUp, BookOpenCheck, IdCard, UserCircle, HandCoins } from "lucide-react";
 import { NavLink } from "@/components/NavLink";
 import { useLocation } from "react-router-dom";
 import { useAuth } from "@/contexts/AuthContext";
@@ -22,8 +22,6 @@ const employeeItems = [
   { title: "Requests", url: "/ot-requests", icon: FileText },
   { title: "Reports", url: "/reports", icon: BarChart3 },
   { title: "Team Member Details", url: "/team-member-details", icon: IdCard },
-  { title: "Payroll", url: "/payroll", icon: Wallet },
-  { title: "Expenses", url: "/expenses", icon: Receipt },
   { title: "Payment", url: "/payment", icon: HandCoins },
   { title: "Notice Board", url: "/notices", icon: Megaphone },
   { title: "SOP", url: "/sop", icon: BookOpenCheck },

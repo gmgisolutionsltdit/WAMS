@@ -23,11 +23,9 @@ import Login from "./pages/Login";
 import ForgotPassword from "./pages/ForgotPassword";
 import ResetPassword from "./pages/ResetPassword";
 import NotFound from "./pages/NotFound";
-import Payroll from "./pages/Payroll";
 import SalaryIncrements from "./pages/SalaryIncrements";
 import EmployeeProfile from "./pages/EmployeeProfile";
 import Loans from "./pages/Loans";
-import Expenses from "./pages/Expenses";
 import Payment from "./pages/Payment";
 import NoticeBoard from "./pages/NoticeBoard";
 import SOP from "./pages/SOP";
@@ -80,10 +78,10 @@ const AppRoutes = () => (
     <Route path="/leave" element={<ProtectedRoute><LeaveManagement /></ProtectedRoute>} />
     <Route path="/projects" element={<ProtectedRoute><Projects /></ProtectedRoute>} />
     <Route path="/projects/:id" element={<ProtectedRoute><ErrorBoundary fallbackTitle="Couldn't open this project"><ProjectBoard /></ErrorBoundary></ProtectedRoute>} />
-    <Route path="/payroll" element={<ProtectedRoute><Payroll /></ProtectedRoute>} />
+    <Route path="/payroll" element={<Navigate to="/payment" replace />} />
     <Route path="/salary-increments" element={<ProtectedRoute><RoleGate allow={["admin"]}><SalaryIncrements /></RoleGate></ProtectedRoute>} />
     <Route path="/loans" element={<ProtectedRoute><RoleGate allow={["admin"]}><Loans /></RoleGate></ProtectedRoute>} />
-    <Route path="/expenses" element={<ProtectedRoute><Expenses /></ProtectedRoute>} />
+    <Route path="/expenses" element={<Navigate to="/payment" replace />} />
     <Route path="/payment" element={<ProtectedRoute><Payment /></ProtectedRoute>} />
     <Route path="/notices" element={<ProtectedRoute><NoticeBoard /></ProtectedRoute>} />
     <Route path="/sop" element={<ProtectedRoute><SOP /></ProtectedRoute>} />
