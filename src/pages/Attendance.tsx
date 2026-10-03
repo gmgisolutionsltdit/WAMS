@@ -24,7 +24,6 @@ import {
 import { Pencil, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 import { notifyManagersAndAdmins } from "@/lib/notifications";
-import { isWithin48h, canBypass48h } from "@/lib/dateRules";
 
 const localToday = () => format(new Date(), "yyyy-MM-dd");
 
@@ -96,7 +95,7 @@ const Attendance = () => {
     // RLS silently returns zero rows (no error) when the delete is blocked -
     // that used to look like a no-op "it isn't working" to the user.
     else if (!data || data.length === 0) {
-      toast.error("This session can no longer be deleted (older than 48 hours) — ask an admin to remove it.");
+      toast.error("This session could not be deleted — ask an admin to remove it.");
     } else {
       toast.success("Session deleted");
       fetchData();
@@ -521,17 +520,15 @@ const Attendance = () => {
                                             </Button>
                                           }
                                         />
-                                        {(canBypass48h(role) || isWithin48h(s.date)) && (
-                                          <Button
-                                            variant="ghost"
-                                            size="icon"
-                                            className="h-7 w-7 text-destructive hover:text-destructive"
-                                            aria-label="Delete this session"
-                                            onClick={() => deleteSession(s.id)}
-                                          >
-                                            <Trash2 className="h-3.5 w-3.5" />
-                                          </Button>
-                                        )}
+                                        <Button
+                                          variant="ghost"
+                                          size="icon"
+                                          className="h-7 w-7 text-destructive hover:text-destructive"
+                                          aria-label="Delete this session"
+                                          onClick={() => deleteSession(s.id)}
+                                        >
+                                          <Trash2 className="h-3.5 w-3.5" />
+                                        </Button>
                                       </div>
                                     </TableCell>
                                   </TableRow>
