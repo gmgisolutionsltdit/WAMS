@@ -54,6 +54,10 @@ const Payment = () => {
   const [expenseAdvances, setExpenseAdvances] = useState<any[]>([]);
   const [uploading, setUploading] = useState(false);
 
+  // Expense Advance request only — Personal Advance requests stay removed.
+  const [requestOpen, setRequestOpen] = useState(false);
+  const [expenseRequestForm, setExpenseRequestForm] = useState({ amount: "", purpose: "", settle_by: "" });
+
   const [settleDialogId, setSettleDialogId] = useState<string | null>(null);
   const [settleReceipts, setSettleReceipts] = useState<{ amount: string; url: string }[]>([{ amount: "", url: "" }]);
   const [settling, setSettling] = useState(false);
@@ -142,6 +146,37 @@ const Payment = () => {
   const mine = unified.filter((u) => u.raw.user_id === user?.id);
   const pendingApprovals = unified.filter((u) => u.raw.status === "pending" && u.raw.user_id !== user?.id);
   const teamHistory = unified.filter((u) => u.raw.user_id !== user?.id);
+
+  const hasActiveExpense = expenseAdvances.some((r) => r.user_id === user?.id && ["pending", "approved"].includes(r.status));
+
+  const submitExpenseAdvanceRequest = async () => {
+    if (!user) return;
+    const amount = Number(expenseRequestForm.amount);
+    if (!amount || amount <= 0) return toast.error("Amount must be greater than 0");
+    if (!expenseRequestForm.settle_by) return toast.error("Settle By date is required");
+    if (expenseRequestForm.settle_by <= todayISO()) return toast.error("Settle By must be a future date");
+    if (hasActiveExpense) return toast.error("You already have an active Expense Advance request.");
+    const { data: inserted, error } = await supabase.from("expense_advances").insert({
+      user_id: user.id,
+      amount,
+      purpose: expenseRequestForm.purpose || null,
+      settle_by: expenseRequestForm.settle_by,
+    }).select().single();
+    if (error) {
+      if ((error as any).code === "23505") return toast.error("You already have an active Expense Advance request.");
+      return toast.error(error.message);
+    }
+    toast.success("Expense Advance requested");
+    setRequestOpen(false);
+    setExpenseRequestForm({ amount: "", purpose: "", settle_by: "" });
+    await notifyManagersAndAdmins(
+      "Expense Advance Requested",
+      `${user.email} requested an Expense Advance of ${amount}.`,
+      inserted?.id,
+      { route: "/payment", type: "expense_advance", requesterId: user.id },
+    );
+    fetchAll();
+  };
 
   const decide = async (item: UnifiedAdvance, status: "approved" | "rejected") => {
     if (!user) return;
@@ -351,6 +386,22 @@ const Payment = () => {
         </TabsList>
 
         <TabsContent value="mine" className="space-y-4">
+          <div className="flex justify-end">
+            <Dialog open={requestOpen} onOpenChange={(o) => { setRequestOpen(o); if (!o) setExpenseRequestForm({ amount: "", purpose: "", settle_by: "" }); }}>
+              <DialogTrigger asChild><Button><Plus className="h-4 w-4 mr-1" />New Expense Advance</Button></DialogTrigger>
+              <DialogContent>
+                <DialogHeader><DialogTitle>Request Expense Advance</DialogTitle></DialogHeader>
+                <div className="space-y-3">
+                  <div className="grid grid-cols-2 gap-3">
+                    <div><Label>Amount</Label><Input type="number" value={expenseRequestForm.amount} onChange={(e) => setExpenseRequestForm((f) => ({ ...f, amount: e.target.value }))} /></div>
+                    <div><Label>Settle By</Label><Input type="date" value={expenseRequestForm.settle_by} onChange={(e) => setExpenseRequestForm((f) => ({ ...f, settle_by: e.target.value }))} /></div>
+                  </div>
+                  <div><Label>Purpose</Label><Textarea value={expenseRequestForm.purpose} onChange={(e) => setExpenseRequestForm((f) => ({ ...f, purpose: e.target.value }))} /></div>
+                </div>
+                <DialogFooter><Button onClick={submitExpenseAdvanceRequest}>Submit</Button></DialogFooter>
+              </DialogContent>
+            </Dialog>
+          </div>
           <Card>
             <CardContent className="pt-6">
               <Table>
