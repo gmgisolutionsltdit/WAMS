@@ -93,6 +93,8 @@ export type FinalSalaryInput = {
   dueDeductionTotal: number;
   /** Sum of unrounded recovery deductions applied this month. */
   recoveryTotal: number;
+  /** Sum of unrounded Personal Advance installment deductions applied this month. Defaults to 0 when omitted. */
+  advanceDeductionTotal?: number;
   /** True when any Due record for the month is still Pending (undecided). */
   hasPendingDue: boolean;
 };
@@ -115,13 +117,14 @@ export type FinalSalaryResult = {
  * Final figure, and never label that Current figure "Final".
  */
 export const computeFinalSalary = (input: FinalSalaryInput): FinalSalaryResult => {
+  const advanceDeductionTotal = input.advanceDeductionTotal ?? 0;
   const netAdjustment = input.otPaymentTotal - input.dueDeductionTotal;
   const currentApplicable = input.gross + input.otPaymentTotal;
   const cap = input.gross + input.otPaymentTotal;
-  const deductionsExceedCap = input.dueDeductionTotal + input.recoveryTotal > cap + 1e-9;
+  const deductionsExceedCap = input.dueDeductionTotal + input.recoveryTotal + advanceDeductionTotal > cap + 1e-9;
   if (input.hasPendingDue) {
     return { netAdjustment, currentApplicable, final: "PENDING", deductionsExceedCap };
   }
-  const final = input.gross + input.otPaymentTotal - input.dueDeductionTotal - input.recoveryTotal;
+  const final = input.gross + input.otPaymentTotal - input.dueDeductionTotal - input.recoveryTotal - advanceDeductionTotal;
   return { netAdjustment, currentApplicable, final, deductionsExceedCap };
 };
