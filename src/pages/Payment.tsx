@@ -1140,6 +1140,8 @@ function ExpenseClaimsTab() {
     direction: "company_pays_employee",
   });
   const [uploading, setUploading] = useState(false);
+  const [filterMonth, setFilterMonth] = useState<string>("all");
+  const [filterYear, setFilterYear] = useState<number>(new Date().getFullYear());
 
   const fetchClaims = async () => {
     const { data, error } = await supabase.from("expense_claims").select("*, profiles!expense_claims_user_id_fkey(full_name,email,photo_url)").order("created_at", { ascending: false });
@@ -1228,13 +1230,21 @@ function ExpenseClaimsTab() {
     fetchClaims();
   };
 
-  const myClaims = claims.filter(c => c.user_id === user?.id);
-  const pendingApprovals = claims.filter(c => c.status === "pending" && c.user_id !== user?.id);
-  const allOthers = claims.filter(c => c.user_id !== user?.id);
+  const filteredClaims = claims.filter((c) => {
+    if (!c.claim_date) return filterMonth === "all";
+    const d = new Date(`${c.claim_date}T00:00:00`);
+    if (d.getFullYear() !== filterYear) return false;
+    if (filterMonth !== "all" && d.getMonth() + 1 !== Number(filterMonth)) return false;
+    return true;
+  });
+
+  const myClaims = filteredClaims.filter(c => c.user_id === user?.id);
+  const pendingApprovals = filteredClaims.filter(c => c.status === "pending" && c.user_id !== user?.id);
+  const allOthers = filteredClaims.filter(c => c.user_id !== user?.id);
 
   const totals = categories.map(cat => ({
     cat,
-    total: claims.filter(c => c.category === cat && c.status === "approved").reduce((s,c)=>s+Number(c.amount), 0)
+    total: filteredClaims.filter(c => c.category === cat && c.status === "approved").reduce((s,c)=>s+Number(c.amount), 0)
   })).filter(t => t.total > 0);
 
   return (
@@ -1283,6 +1293,23 @@ function ExpenseClaimsTab() {
           <Button size="sm" variant="outline" onClick={addCategory}>Add Expense Type</Button>
         </div>
       )}
+
+      <div className="flex flex-wrap items-end gap-2">
+        <div>
+          <Label className="text-xs">Month</Label>
+          <Select value={filterMonth} onValueChange={setFilterMonth}>
+            <SelectTrigger className="w-[150px]"><SelectValue /></SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">All Months</SelectItem>
+              {MONTHS.map((m, i) => <SelectItem key={m} value={String(i + 1)}>{m}</SelectItem>)}
+            </SelectContent>
+          </Select>
+        </div>
+        <div>
+          <Label className="text-xs">Year</Label>
+          <Input type="number" className="w-[100px]" value={filterYear} onChange={(e) => setFilterYear(Number(e.target.value) || filterYear)} />
+        </div>
+      </div>
 
       {totals.length > 0 && (
         <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
