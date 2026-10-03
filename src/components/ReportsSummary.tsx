@@ -219,6 +219,12 @@ const ReportsSummary = () => {
         if (s) s.otDays = set.size;
       });
 
+      // Late arrivals shorten the working day actually put in — deduct the
+      // total late time from Net Working Hour.
+      byUser.forEach((s) => {
+        s.netWorkingHours = Math.max(0, s.netWorkingHours - s.lateMinutesTotal / 60);
+      });
+
       setRows(Array.from(byUser.values()).sort((a, b) => a.name.localeCompare(b.name)));
       setChangedDays(changed.sort((a, b) => a.date.localeCompare(b.date)));
     } finally {
@@ -387,7 +393,7 @@ const ReportsSummary = () => {
                 <CardHeader className="pb-2"><CardDescription className="flex items-center gap-2"><Gauge className="h-4 w-4" /> Net Working Hour</CardDescription></CardHeader>
                 <CardContent>
                   <div className="text-2xl font-bold">{round1(mine?.netWorkingHours ?? 0)}h</div>
-                  <p className="text-xs font-semibold text-primary mt-1">net hours worked in range</p>
+                  <p className="text-xs font-semibold text-primary mt-1">net hours worked in range, less late time</p>
                 </CardContent>
               </Card>
               <Card>
