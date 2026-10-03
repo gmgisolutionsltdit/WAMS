@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
@@ -254,35 +254,8 @@ const EmployeeProfile = () => {
 
   const [activeTab, setActiveTab] = useState("overview");
 
-  // ---- Single page-wide Edit/Save/Cancel ----
-  const [pageEditing, setPageEditing] = useState(false);
+  // ---- Single page-wide Save ----
   const [savingAll, setSavingAll] = useState(false);
-  const editSnapshot = useRef<{
-    overviewForm: typeof overviewForm;
-    personalForm: Partial<Profile>;
-    compForm: typeof compForm;
-    selectedProjectIds: string[];
-    leaveTypes: LeaveType[];
-  } | null>(null);
-
-  const startPageEdit = () => {
-    editSnapshot.current = {
-      overviewForm, personalForm, compForm, selectedProjectIds, leaveTypes,
-    };
-    setPageEditing(true);
-  };
-
-  const cancelPageEdit = () => {
-    const snap = editSnapshot.current;
-    if (snap) {
-      setOverviewForm(snap.overviewForm);
-      setPersonalForm(snap.personalForm);
-      setCompForm(snap.compForm);
-      setSelectedProjectIds(snap.selectedProjectIds);
-      setLeaveTypes(snap.leaveTypes);
-    }
-    setPageEditing(false);
-  };
 
   const savePersonalInfoAll = async (): Promise<boolean> => {
     if (!id || !(isSelf || isAdmin)) return true;
@@ -321,32 +294,16 @@ const EmployeeProfile = () => {
       const r3 = canEditPayroll ? await saveCompensationAll() : true;
       const r4 = isAdmin ? await saveProjectAssignment() : true;
       const r5 = isAdmin ? await saveLeaveDefaults() : true;
-      if (r1 && r2 && r3 && r4 && r5) {
-        setPageEditing(false);
+      if (!(r1 && r2 && r3 && r4 && r5)) {
+        // At least one section failed to save; the relevant toast already explains why.
       }
     } finally {
       setSavingAll(false);
     }
   };
 
-  const hasUnsavedChanges = () => pageEditing;
-
-  const discardAllEdits = () => {
-    cancelPageEdit();
-  };
-
-  const confirmDiscardIfNeeded = () => {
-    if (!hasUnsavedChanges()) return true;
-    if (window.confirm("Discard changes?")) {
-      discardAllEdits();
-      return true;
-    }
-    return false;
-  };
-
   const handleTabChange = (next: string) => {
     if (next === activeTab) return;
-    if (!confirmDiscardIfNeeded()) return;
     setActiveTab(next);
   };
 
@@ -438,7 +395,6 @@ const EmployeeProfile = () => {
   const activeWings = wings.filter((w) => w.active);
 
   const goBack = () => {
-    if (!confirmDiscardIfNeeded()) return;
     if (window.history.length > 1) navigate(-1); else navigate("/employees");
   };
 
@@ -672,20 +628,9 @@ const EmployeeProfile = () => {
 
             {canManageThisEmployee && (
               <div className="flex items-center gap-2 shrink-0">
-                {pageEditing ? (
-                  <>
-                    <Button size="sm" onClick={saveAllInfo} disabled={savingAll}>
-                      {savingAll ? "Saving..." : "Save"}
-                    </Button>
-                    <Button size="sm" variant="outline" onClick={cancelPageEdit} disabled={savingAll}>
-                      Cancel
-                    </Button>
-                  </>
-                ) : (
-                  <Button size="sm" variant="outline" onClick={startPageEdit}>
-                    <Pencil className="h-4 w-4 mr-1" /> Edit
-                  </Button>
-                )}
+                <Button size="sm" onClick={saveAllInfo} disabled={savingAll}>
+                  {savingAll ? "Saving..." : "Save"}
+                </Button>
               </div>
             )}
           </div>
@@ -728,7 +673,7 @@ const EmployeeProfile = () => {
                       className="hidden"
                       onChange={(e) => { const f = e.target.files?.[0]; if (f) handlePhotoSelect(f); }}
                     />
-                    <Button size="sm" variant="outline" disabled={!pageEditing || uploadingPhoto}
+                    <Button size="sm" variant="outline" disabled={uploadingPhoto}
                       onClick={() => document.getElementById("profile-photo-input")?.click()}>
                       <Camera className="mr-1 h-4 w-4" />
                       {uploadingPhoto ? "Uploading…" : "Upload Photo"}
@@ -740,16 +685,16 @@ const EmployeeProfile = () => {
                 <div className="grid gap-3 md:grid-cols-2">
                   <div>
                     <Label className="text-xs">Full Name *</Label>
-                    <Input className="mt-1" disabled={!pageEditing} value={overviewForm.full_name} onChange={(e) => setOverviewForm((f) => ({ ...f, full_name: e.target.value }))} />
+                    <Input className="mt-1" value={overviewForm.full_name} onChange={(e) => setOverviewForm((f) => ({ ...f, full_name: e.target.value }))} />
                   </div>
                   <div><Label className="text-xs">Email</Label><Input type="email" value={profile.email || ""} disabled className="mt-1" /></div>
                   <div>
                     <Label className="text-xs">Phone</Label>
-                    <Input className="mt-1" disabled={!pageEditing} value={overviewForm.phone} onChange={(e) => setOverviewForm((f) => ({ ...f, phone: e.target.value }))} />
+                    <Input className="mt-1" value={overviewForm.phone} onChange={(e) => setOverviewForm((f) => ({ ...f, phone: e.target.value }))} />
                   </div>
                   <div>
                     <Label className="text-xs">Department</Label>
-                    <Input className="mt-1" disabled={!pageEditing} value={overviewForm.department} onChange={(e) => setOverviewForm((f) => ({ ...f, department: e.target.value }))} />
+                    <Input className="mt-1" value={overviewForm.department} onChange={(e) => setOverviewForm((f) => ({ ...f, department: e.target.value }))} />
                   </div>
 
                   <div className="md:col-span-2">
@@ -758,7 +703,7 @@ const EmployeeProfile = () => {
                       <div>
                         <Label className="text-xs">Wing</Label>
                         <Select
-                          disabled={!pageEditing}
+
                           value={overviewForm.wing_id || "none"}
                           onValueChange={(v) => {
                             const wingId = v === "none" ? "" : v;
@@ -790,7 +735,7 @@ const EmployeeProfile = () => {
                           const designationOptions = wingDesignations.filter((d) => d.wing_id === overviewForm.wing_id);
                           return designationOptions.length > 0 ? (
                             <Select
-                              disabled={!pageEditing}
+
                               value={overviewForm.designation || ""}
                               onValueChange={(v) => setOverviewForm((f) => ({ ...f, designation: v }))}
                             >
@@ -802,7 +747,7 @@ const EmployeeProfile = () => {
                               </SelectContent>
                             </Select>
                           ) : (
-                            <Input disabled={!pageEditing} value={overviewForm.designation} onChange={(e) => setOverviewForm((f) => ({ ...f, designation: e.target.value }))} />
+                            <Input value={overviewForm.designation} onChange={(e) => setOverviewForm((f) => ({ ...f, designation: e.target.value }))} />
                           );
                         })()}
                       </div>
@@ -819,7 +764,7 @@ const EmployeeProfile = () => {
                           <div>
                             <Label className="text-xs">Role</Label>
                             <Select
-                              disabled={!pageEditing}
+
                               value={overviewForm.role}
                               onValueChange={(v) => setOverviewForm((f) => ({ ...f, role: v, reporting_manager_ids: v === "admin" ? [] : f.reporting_manager_ids }))}
                             >
@@ -842,7 +787,7 @@ const EmployeeProfile = () => {
                                 ) : managers.filter((m) => m.id !== id).map((m) => (
                                   <label key={m.id} className="flex items-center gap-2 text-sm px-1 py-0.5">
                                     <Checkbox
-                                      disabled={!pageEditing}
+
                                       checked={overviewForm.reporting_manager_ids.includes(m.id)}
                                       onCheckedChange={() =>
                                         setOverviewForm((f) => ({
@@ -892,37 +837,37 @@ const EmployeeProfile = () => {
                   }
                   <div>
                     <Label className="text-xs">Service Status</Label>
-                    <Select disabled={!pageEditing} value={overviewForm.service_status} onValueChange={(v) => setOverviewForm((f) => ({ ...f, service_status: v }))}>
+                    <Select value={overviewForm.service_status} onValueChange={(v) => setOverviewForm((f) => ({ ...f, service_status: v }))}>
                       <SelectTrigger><SelectValue /></SelectTrigger>
                       <SelectContent>{SERVICE_STATUS.map((s) => <SelectItem key={s} value={s}>{s}</SelectItem>)}</SelectContent>
                     </Select>
                   </div>
                   <div>
                     <Label className="text-xs">Employee Status</Label>
-                    <Select disabled={!pageEditing} value={overviewForm.employee_status} onValueChange={(v) => setOverviewForm((f) => ({ ...f, employee_status: v }))}>
+                    <Select value={overviewForm.employee_status} onValueChange={(v) => setOverviewForm((f) => ({ ...f, employee_status: v }))}>
                       <SelectTrigger><SelectValue /></SelectTrigger>
                       <SelectContent>{EMPLOYEE_STATUS.map((s) => <SelectItem key={s} value={s}>{s}</SelectItem>)}</SelectContent>
                     </Select>
                   </div>
                   <div>
                     <Label className="text-xs">Joining Date</Label>
-                    <Input type="date" disabled={!pageEditing} value={overviewForm.joining_date} onChange={(e) => setOverviewForm((f) => ({ ...f, joining_date: e.target.value }))} />
+                    <Input type="date" value={overviewForm.joining_date} onChange={(e) => setOverviewForm((f) => ({ ...f, joining_date: e.target.value }))} />
                   </div>
                   <div>
                     <Label className="text-xs">Promotion Date</Label>
-                    <Input type="date" disabled={!pageEditing} value={overviewForm.promotion_date} onChange={(e) => setOverviewForm((f) => ({ ...f, promotion_date: e.target.value }))} />
+                    <Input type="date" value={overviewForm.promotion_date} onChange={(e) => setOverviewForm((f) => ({ ...f, promotion_date: e.target.value }))} />
                   </div>
                   <div>
                     <Label className="text-xs">Resign Date</Label>
-                    <Input type="date" disabled={!pageEditing} value={overviewForm.resign_date} onChange={(e) => setOverviewForm((f) => ({ ...f, resign_date: e.target.value }))} />
+                    <Input type="date" value={overviewForm.resign_date} onChange={(e) => setOverviewForm((f) => ({ ...f, resign_date: e.target.value }))} />
                   </div>
                   <div>
                     <Label className="text-xs">Daily OT Cap (hrs)</Label>
-                    <Input type="number" step="0.5" disabled={!pageEditing} value={overviewForm.daily_ot_cap} onChange={(e) => setOverviewForm((f) => ({ ...f, daily_ot_cap: e.target.value }))} />
+                    <Input type="number" step="0.5" value={overviewForm.daily_ot_cap} onChange={(e) => setOverviewForm((f) => ({ ...f, daily_ot_cap: e.target.value }))} />
                   </div>
                   <div>
                     <Label className="text-xs">Monthly OT Cap (hrs)</Label>
-                    <Input type="number" step="1" disabled={!pageEditing} value={overviewForm.monthly_ot_cap} onChange={(e) => setOverviewForm((f) => ({ ...f, monthly_ot_cap: e.target.value }))} />
+                    <Input type="number" step="1" value={overviewForm.monthly_ot_cap} onChange={(e) => setOverviewForm((f) => ({ ...f, monthly_ot_cap: e.target.value }))} />
                   </div>
                 </div>
 
@@ -936,23 +881,23 @@ const EmployeeProfile = () => {
                   <div className="grid gap-3 md:grid-cols-2">
                     <div>
                       <Label className="text-xs">Office Start</Label>
-                      <Input type="time" disabled={!pageEditing} value={overviewForm.office_start_time} onChange={(e) => setOverviewForm((f) => ({ ...f, office_start_time: e.target.value }))} />
+                      <Input type="time" value={overviewForm.office_start_time} onChange={(e) => setOverviewForm((f) => ({ ...f, office_start_time: e.target.value }))} />
                     </div>
                     <div>
                       <Label className="text-xs">Office End</Label>
-                      <Input type="time" disabled={!pageEditing} value={overviewForm.office_end_time} onChange={(e) => setOverviewForm((f) => ({ ...f, office_end_time: e.target.value }))} />
+                      <Input type="time" value={overviewForm.office_end_time} onChange={(e) => setOverviewForm((f) => ({ ...f, office_end_time: e.target.value }))} />
                     </div>
                     <div>
                       <Label className="text-xs">Standard Shift Hours</Label>
-                      <Input type="number" step="0.5" min="0.5" max="24" disabled={!pageEditing} value={overviewForm.standard_daily_hours} onChange={(e) => setOverviewForm((f) => ({ ...f, standard_daily_hours: e.target.value }))} />
+                      <Input type="number" step="0.5" min="0.5" max="24" value={overviewForm.standard_daily_hours} onChange={(e) => setOverviewForm((f) => ({ ...f, standard_daily_hours: e.target.value }))} />
                     </div>
                     <div>
                       <Label className="text-xs">Daily Break Allowance (minutes)</Label>
-                      <Input type="number" step="5" min="0" disabled={!pageEditing} value={overviewForm.unpaid_break_minutes} onChange={(e) => setOverviewForm((f) => ({ ...f, unpaid_break_minutes: e.target.value }))} />
+                      <Input type="number" step="5" min="0" value={overviewForm.unpaid_break_minutes} onChange={(e) => setOverviewForm((f) => ({ ...f, unpaid_break_minutes: e.target.value }))} />
                     </div>
                     <div>
                       <Label className="text-xs">Late Grace (minutes)</Label>
-                      <Input type="number" step="1" min="0" disabled={!pageEditing} value={overviewForm.late_grace_minutes} onChange={(e) => setOverviewForm((f) => ({ ...f, late_grace_minutes: e.target.value }))} />
+                      <Input type="number" step="1" min="0" value={overviewForm.late_grace_minutes} onChange={(e) => setOverviewForm((f) => ({ ...f, late_grace_minutes: e.target.value }))} />
                     </div>
                     <div className="md:col-span-2">
                       <Label className="text-xs">Working Days (unchecked days count as weekend)</Label>
@@ -960,7 +905,7 @@ const EmployeeProfile = () => {
                         {DOW.map((d) => (
                           <label key={d.v} className="flex items-center gap-1.5 text-sm">
                             <Checkbox
-                              disabled={!pageEditing}
+
                               checked={overviewForm.working_days.includes(d.v)}
                               onCheckedChange={() =>
                                 setOverviewForm((f) => ({
@@ -1029,7 +974,7 @@ const EmployeeProfile = () => {
               <CardContent className="flex flex-wrap items-center gap-2">
                 <AlertDialog>
                   <AlertDialogTrigger asChild>
-                    <Button size="sm" variant="outline" disabled={!pageEditing}>
+                    <Button size="sm" variant="outline" >
                       <KeyRound className="h-4 w-4 mr-1" /> Reset Password
                     </Button>
                   </AlertDialogTrigger>
@@ -1049,7 +994,7 @@ const EmployeeProfile = () => {
                 </AlertDialog>
                 <AlertDialog>
                   <AlertDialogTrigger asChild>
-                    <Button size="sm" variant="outline" disabled={!pageEditing}>
+                    <Button size="sm" variant="outline" >
                       <Trash2 className="h-4 w-4 mr-1 text-destructive" /> Delete
                     </Button>
                   </AlertDialogTrigger>
@@ -1099,7 +1044,7 @@ const EmployeeProfile = () => {
                       <Textarea
                         className="mt-1"
                         rows={2}
-                        disabled={!(isSelf || isAdmin) || !pageEditing}
+                        disabled={!(isSelf || isAdmin)}
                         value={(personalForm[key] as string) || ""}
                         onChange={(e) => setPersonalForm((f) => ({ ...f, [key]: e.target.value }))}
                       />
@@ -1107,7 +1052,7 @@ const EmployeeProfile = () => {
                       <Input
                         className="mt-1"
                         type={type === "date" ? "date" : type === "number" ? "number" : "text"}
-                        disabled={!(isSelf || isAdmin) || !pageEditing}
+                        disabled={!(isSelf || isAdmin)}
                         value={(personalForm[key] as string | number) ?? ""}
                         onChange={(e) => setPersonalForm((f) => ({ ...f, [key]: e.target.value }))}
                       />
@@ -1149,17 +1094,17 @@ const EmployeeProfile = () => {
                 <div className="grid grid-cols-3 gap-3">
                   <div>
                     <Label className="text-xs">Base Salary (monthly)</Label>
-                    <Input type="number" step="0.01" min="0" disabled={!pageEditing} value={compForm.base_salary}
+                    <Input type="number" step="0.01" min="0" value={compForm.base_salary}
                       onChange={(e) => setCompForm((f) => ({ ...f, base_salary: e.target.value }))} />
                   </div>
                   <div>
                     <Label className="text-xs">Hourly OT Rate</Label>
-                    <Input type="number" step="0.01" min="0" disabled={!pageEditing} value={compForm.hourly_overtime_rate}
+                    <Input type="number" step="0.01" min="0" value={compForm.hourly_overtime_rate}
                       onChange={(e) => setCompForm((f) => ({ ...f, hourly_overtime_rate: e.target.value }))} />
                   </div>
                   <div>
                     <Label className="text-xs">PF Contribution (%)</Label>
-                    <Input type="number" step="0.01" min="0" max="100" disabled={!pageEditing} value={compForm.pf_contribution_pct}
+                    <Input type="number" step="0.01" min="0" max="100" value={compForm.pf_contribution_pct}
                       onChange={(e) => setCompForm((f) => ({ ...f, pf_contribution_pct: e.target.value }))} />
                   </div>
                 </div>
@@ -1231,7 +1176,7 @@ const EmployeeProfile = () => {
                     No active projects yet — create one on the Projects page to assign it here.
                   </p>
                 ) : (
-                  <fieldset disabled={!pageEditing} className="flex flex-wrap gap-2 rounded-md border p-2 max-h-32 overflow-y-auto disabled:opacity-60">
+                  <div className="flex flex-wrap gap-2 rounded-md border p-2 max-h-32 overflow-y-auto">
                     {projects.map((p) => {
                       const checked = selectedProjectIds.includes(p.id);
                       return (
@@ -1251,7 +1196,7 @@ const EmployeeProfile = () => {
                         </label>
                       );
                     })}
-                  </fieldset>
+                  </div>
                 )}
               </CardContent>
             </Card>
@@ -1343,7 +1288,7 @@ const EmployeeProfile = () => {
                 </div>
               </CardHeader>
               <CardContent className="space-y-3">
-                <fieldset disabled={!pageEditing} className="grid gap-3 disabled:opacity-60">
+                <div className="grid gap-3">
                   {leaveTypes.map((lt) => (
                     <div key={lt.id} className="grid grid-cols-1 md:grid-cols-12 gap-3 items-center rounded-lg border p-3 bg-card">
                       <div className="md:col-span-5 flex items-center gap-3">
@@ -1374,7 +1319,7 @@ const EmployeeProfile = () => {
                       </div>
                     </div>
                   ))}
-                </fieldset>
+                </div>
               </CardContent>
             </Card>
           )}
@@ -1382,7 +1327,7 @@ const EmployeeProfile = () => {
 
         {/* CONTRACT DOCUMENTS */}
         <TabsContent value="documents" className="mt-4 space-y-4">
-          <EmployeeDocumentsTab userId={id!} canManage={isSelf || isAdmin} editing={pageEditing} />
+          <EmployeeDocumentsTab userId={id!} canManage={isSelf || isAdmin} editing={true} />
         </TabsContent>
       </Tabs>
 
