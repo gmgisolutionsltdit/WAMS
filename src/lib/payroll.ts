@@ -81,15 +81,33 @@ export async function fetchIncentivesTotal(
   return (data || []).reduce((s, r) => s + Number(r.amount || 0), 0);
 }
 
+/** Sum this month's Personal Advance payroll-deduction ledger entries for a user. 0 when no advance exists. */
+export async function fetchAdvanceDeductionTotal(
+  userId: string,
+  year: number,
+  month: number,
+): Promise<number> {
+  const monthStartISO = `${year}-${String(month).padStart(2, "0")}-01`;
+  const { data, error } = await supabase
+    .from("personal_advance_actions")
+    .select("amount")
+    .eq("user_id", userId)
+    .eq("month", monthStartISO)
+    .eq("action_type", "payroll_deduction");
+  if (error) throw error;
+  return (data || []).reduce((s, r) => s + Number(r.amount || 0), 0);
+}
+
 export async function computePayroll(
   profile: PayrollProfile,
   year: number,
   month: number,
   currency: string,
 ): Promise<PayrollComputation> {
-  const [otHours, incentives] = await Promise.all([
+  const [otHours, incentives, advanceDeduction] = await Promise.all([
     fetchApprovedOTHours(profile.id, year, month),
     fetchIncentivesTotal(profile.id, year, month),
+    fetchAdvanceDeductionTotal(profile.id, year, month),
   ]);
   const base = Number(profile.base_salary || 0);
   const otAmount = otHours * Number(profile.hourly_overtime_rate || 0);
@@ -97,7 +115,7 @@ export async function computePayroll(
   const pfPct = Number(profile.pf_contribution_pct || 0);
   const pfEmployee = (base * pfPct) / 100;
   const pfEmployer = pfEmployee; // matching contribution
-  const otherDeductions = 0;
+  const otherDeductions = advanceDeduction;
   const net = gross - pfEmployee - otherDeductions;
   return {
     user_id: profile.id,
