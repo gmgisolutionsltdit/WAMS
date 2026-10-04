@@ -63,6 +63,8 @@ type Profile = {
   reporting_manager_ids: string[] | null;
   daily_ot_cap: number | null;
   monthly_ot_cap: number | null;
+  overtime_scaling: number | null;
+  due_time_scaling: number | null;
   base_salary: number | null;
   hourly_overtime_rate: number | null;
   pf_contribution_pct: number | null;
@@ -236,6 +238,7 @@ const EmployeeProfile = () => {
     office_start_time: DEFAULT_OFFICE_START, office_end_time: DEFAULT_OFFICE_END,
     standard_daily_hours: "8", unpaid_break_minutes: "60",
     late_grace_minutes: String(DEFAULT_GRACE_MINUTES),
+    overtime_scaling: "1", due_time_scaling: "1",
     working_days: [...DEFAULT_WORKING_DAYS] as number[],
   });
 
@@ -334,6 +337,7 @@ const EmployeeProfile = () => {
       employee_status: p.employee_status || "Active",
       joining_date: p.joining_date || "", promotion_date: p.promotion_date || "", resign_date: p.resign_date || "",
       daily_ot_cap: String(p.daily_ot_cap ?? 4), monthly_ot_cap: String(p.monthly_ot_cap ?? 40),
+      overtime_scaling: String(p.overtime_scaling ?? 1), due_time_scaling: String(p.due_time_scaling ?? 1),
       office_start_time: (p.office_start_time || DEFAULT_OFFICE_START).slice(0, 5),
       office_end_time: (p.office_end_time || DEFAULT_OFFICE_END).slice(0, 5),
       standard_daily_hours: String(p.standard_daily_hours ?? 8),
@@ -459,6 +463,8 @@ const EmployeeProfile = () => {
         resign_date: overviewForm.resign_date || null,
         daily_ot_cap: parseFloat(overviewForm.daily_ot_cap) || 4,
         monthly_ot_cap: parseFloat(overviewForm.monthly_ot_cap) || 40,
+        overtime_scaling: parseFloat(overviewForm.overtime_scaling) || 1,
+        due_time_scaling: parseFloat(overviewForm.due_time_scaling) || 1,
         office_start_time: `${overviewForm.office_start_time}:00`,
         office_end_time: `${overviewForm.office_end_time}:00`,
         standard_daily_hours: parseFloat(overviewForm.standard_daily_hours) || 8,
@@ -1281,6 +1287,14 @@ const EmployeeProfile = () => {
                   <div>
                     <Label className="text-xs">Late Grace (minutes)</Label>
                     <Input type="number" step="1" min="0" disabled={!isAdmin} value={overviewForm.late_grace_minutes} onChange={(e) => setOverviewForm((f) => ({ ...f, late_grace_minutes: e.target.value }))} />
+                  </div>
+                  <div>
+                    <Label className="text-xs">Overtime Scaling</Label>
+                    <Input type="number" step="0.1" min="0.1" disabled={!isAdmin} value={overviewForm.overtime_scaling} onChange={(e) => setOverviewForm((f) => ({ ...f, overtime_scaling: e.target.value }))} />
+                  </div>
+                  <div>
+                    <Label className="text-xs">Due Time Scaling</Label>
+                    <Input type="number" step="0.1" min="0.1" disabled={!isAdmin} value={overviewForm.due_time_scaling} onChange={(e) => setOverviewForm((f) => ({ ...f, due_time_scaling: e.target.value }))} />
                   </div>
                   <div className="md:col-span-2">
                     <Label className="text-xs">Working Days (unchecked days count as weekend)</Label>
