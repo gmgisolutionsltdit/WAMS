@@ -1628,6 +1628,7 @@ export type Database = {
           daily_ot_cap: number
           department: string | null
           designation: string | null
+          due_time_scaling: number
           email: string | null
           employee_status: Database["public"]["Enums"]["employee_status"]
           face_descriptor: Json | null
@@ -1637,6 +1638,7 @@ export type Database = {
           joining_date: string | null
           late_grace_minutes: number
           monthly_ot_cap: number
+          overtime_scaling: number
           office_end_time: string
           office_start_time: string
           official_gmail: string | null
@@ -1686,6 +1688,7 @@ export type Database = {
           daily_ot_cap?: number
           department?: string | null
           designation?: string | null
+          due_time_scaling?: number
           email?: string | null
           employee_status?: Database["public"]["Enums"]["employee_status"]
           face_descriptor?: Json | null
@@ -1695,6 +1698,7 @@ export type Database = {
           joining_date?: string | null
           late_grace_minutes?: number
           monthly_ot_cap?: number
+          overtime_scaling?: number
           office_end_time?: string
           office_start_time?: string
           official_gmail?: string | null
@@ -1744,6 +1748,7 @@ export type Database = {
           daily_ot_cap?: number
           department?: string | null
           designation?: string | null
+          due_time_scaling?: number
           email?: string | null
           employee_status?: Database["public"]["Enums"]["employee_status"]
           face_descriptor?: Json | null
@@ -1753,6 +1758,7 @@ export type Database = {
           joining_date?: string | null
           late_grace_minutes?: number
           monthly_ot_cap?: number
+          overtime_scaling?: number
           office_end_time?: string
           office_start_time?: string
           official_gmail?: string | null
