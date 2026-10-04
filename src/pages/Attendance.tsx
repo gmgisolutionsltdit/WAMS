@@ -398,6 +398,7 @@ const Attendance = () => {
                 <TableHead>Sessions</TableHead>
                 <TableHead>Work Time</TableHead>
                 <TableHead>Break Time</TableHead>
+                <TableHead>Total Time</TableHead>
                 <TableHead>Due Time</TableHead>
                 <TableHead>OVERTIME (OT)</TableHead>
                 <TableHead>Approved OT</TableHead>
@@ -407,7 +408,7 @@ const Attendance = () => {
             </TableHeader>
             <TableBody>
               {days.length === 0 ? (
-                <TableRow><TableCell colSpan={14} className="text-center text-muted-foreground">No attendance records</TableCell></TableRow>
+                <TableRow><TableCell colSpan={15} className="text-center text-muted-foreground">No attendance records</TableCell></TableRow>
               ) : days.map((day) => {
                 const worked = day.workedSeconds;
                 const closed = !day.open && !!day.lastOut;
@@ -506,6 +507,7 @@ const Attendance = () => {
                       <TableCell><Badge variant="outline">{day.sessions.length}</Badge></TableCell>
                       <TableCell className="font-mono text-xs">{fmtHMS(worked)}</TableCell>
                       <TableCell className="font-mono text-xs">{day.breakSeconds > 0 ? fmtHMS(day.breakSeconds) : "—"}</TableCell>
+                      <TableCell className="font-mono text-xs">{fmtHMS(worked + day.breakSeconds)}</TableCell>
                       <TableCell>
                         {dueSeconds > 0
                           ? (
@@ -532,7 +534,7 @@ const Attendance = () => {
                     {isOpen && (
                       <TableRow className="bg-muted/40 hover:bg-muted/40">
                         <TableCell />
-                        <TableCell colSpan={12} className="p-0">
+                        <TableCell colSpan={13} className="p-0">
                           <div className="p-3">
                             <p className="text-xs font-medium text-muted-foreground mb-2">Individual sessions</p>
                             <Table>
@@ -542,8 +544,9 @@ const Attendance = () => {
                                   <TableHead>Start</TableHead>
                                   <TableHead>Close</TableHead>
                                   <TableHead>Work From</TableHead>
-                                  <TableHead>Break</TableHead>
-                                  <TableHead>Duration</TableHead>
+                                  <TableHead>Break Time</TableHead>
+                                  <TableHead>Work Time</TableHead>
+                                  <TableHead>Total Time</TableHead>
                                   <TableHead>Source</TableHead>
                                   <TableHead>Actions</TableHead>
                                 </TableRow>
@@ -564,6 +567,14 @@ const Attendance = () => {
                                       {s.clock_out && s.clock_in
                                         ? fmtHMS(sessionWorkedSeconds(s))
                                         : s.clock_in ? spanToHMS(s.clock_in, new Date()) : "—"}
+                                    </TableCell>
+                                    <TableCell className="font-mono text-xs">
+                                      {fmtHMS(
+                                        (Number(s.break_minutes) || 0) * 60 +
+                                        (s.clock_out && s.clock_in
+                                          ? sessionWorkedSeconds(s)
+                                          : s.clock_in ? (Date.now() - new Date(s.clock_in).getTime()) / 1000 : 0),
+                                      )}
                                     </TableCell>
                                     <TableCell className="text-xs text-muted-foreground">{s.device_source || "web"}</TableCell>
                                     <TableCell>
