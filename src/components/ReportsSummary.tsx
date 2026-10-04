@@ -52,6 +52,14 @@ type ChangedDay = {
 
 const round1 = (n: number) => Math.round(n * 10) / 10;
 
+/** Format a duration given in decimal hours as "X hr Ymin", e.g. 5.8 -> "5 hr 46min". */
+const fmtHoursMin = (hours: number) => {
+  const totalMinutes = Math.round((hours || 0) * 60);
+  const h = Math.floor(totalMinutes / 60);
+  const m = totalMinutes % 60;
+  return `${h} hr ${m}min`;
+};
+
 const ReportsSummary = () => {
   const { user, role } = useAuth();
   const isAdmin = role === "admin";
@@ -269,7 +277,7 @@ const ReportsSummary = () => {
    * as a positive value with a colored label for which side it landed on. */
   const netHoursOf = (s: Summary | undefined) => {
     const raw = (s?.otHoursTotal ?? 0) - (s?.shortfallHoursTotal ?? 0);
-    return { value: round1(Math.abs(raw)), isOvertime: raw >= 0 };
+    return { value: fmtHoursMin(Math.abs(raw)), isOvertime: raw >= 0 };
   };
 
   return (
@@ -345,12 +353,12 @@ const ReportsSummary = () => {
                           <TableCell className="font-medium">{r.name}</TableCell>
                           <TableCell><Badge variant={r.role === "admin" ? "default" : r.role === "manager" ? "secondary" : "outline"}>{r.role}</Badge></TableCell>
                           <TableCell>{r.lateDays} days · avg {r.lateDays > 0 ? humanMinutes(Math.round(r.lateMinutesTotal / r.lateDays)) : "—"}</TableCell>
-                          <TableCell>{r.lessThan7Days} days · avg {r.lessThan7Days > 0 ? round1(r.lessThan7HoursTotal / r.lessThan7Days) : 0}h</TableCell>
-                          <TableCell>{r.shortDays} days · {round1(r.shortfallHoursTotal)}h</TableCell>
-                          <TableCell>{r.otActualDays} days · {round1(r.otActualHoursTotal)}h</TableCell>
-                          <TableCell>{r.otDays} days · {round1(r.otHoursTotal)}h</TableCell>
+                          <TableCell>{r.lessThan7Days} days · avg {r.lessThan7Days > 0 ? fmtHoursMin(r.lessThan7HoursTotal / r.lessThan7Days) : "0 hr 0min"}</TableCell>
+                          <TableCell>{r.shortDays} days · {fmtHoursMin(r.shortfallHoursTotal)}</TableCell>
+                          <TableCell>{r.otActualDays} days · {fmtHoursMin(r.otActualHoursTotal)}</TableCell>
+                          <TableCell>{r.otDays} days · {fmtHoursMin(r.otHoursTotal)}</TableCell>
                           <TableCell>
-                            <div className="font-semibold">{net.value}h</div>
+                            <div className="font-semibold">{net.value}</div>
                             <div className={net.isOvertime ? "text-xs text-green-600" : "text-xs text-red-600"}>
                               {net.isOvertime ? "Overtime" : "Due Time"}
                             </div>
@@ -390,8 +398,8 @@ const ReportsSummary = () => {
                             <TableRow key={`${c.userId}-${c.date}`}>
                               <TableCell>{c.name}</TableCell>
                               <TableCell>{c.date}</TableCell>
-                              <TableCell className="text-right">{c.oldDueHours}h</TableCell>
-                              <TableCell className="text-right">{c.newDueHours}h</TableCell>
+                              <TableCell className="text-right">{fmtHoursMin(c.oldDueHours)}</TableCell>
+                              <TableCell className="text-right">{fmtHoursMin(c.newDueHours)}</TableCell>
                             </TableRow>
                           ))}
                         </TableBody>
@@ -417,7 +425,7 @@ const ReportsSummary = () => {
                 <CardContent>
                   <div className="text-2xl font-bold">{mine?.lessThan7Days ?? 0} days</div>
                   <p className="text-xs font-semibold text-primary mt-1">
-                    avg {mine && mine.lessThan7Days > 0 ? round1(mine.lessThan7HoursTotal / mine.lessThan7Days) : 0}h worked on those days
+                    avg {mine && mine.lessThan7Days > 0 ? fmtHoursMin(mine.lessThan7HoursTotal / mine.lessThan7Days) : "0 hr 0min"} worked on those days
                   </p>
                 </CardContent>
               </Card>
@@ -425,21 +433,21 @@ const ReportsSummary = () => {
                 <CardHeader className="pb-2"><CardDescription className="flex items-center gap-2"><Gauge className="h-4 w-4" /> Due Time</CardDescription></CardHeader>
                 <CardContent>
                   <div className="text-2xl font-bold">{mine?.shortDays ?? 0} days</div>
-                  <p className="text-xs font-semibold text-primary mt-1">{round1(mine?.shortfallHoursTotal ?? 0)}h total due time</p>
+                  <p className="text-xs font-semibold text-primary mt-1">{fmtHoursMin(mine?.shortfallHoursTotal ?? 0)} total due time</p>
                 </CardContent>
               </Card>
               <Card>
                 <CardHeader className="pb-2"><CardDescription className="flex items-center gap-2"><CalendarClock className="h-4 w-4" /> Overtime</CardDescription></CardHeader>
                 <CardContent>
                   <div className="text-2xl font-bold">{mine?.otActualDays ?? 0} days</div>
-                  <p className="text-xs font-semibold text-primary mt-1">{round1(mine?.otActualHoursTotal ?? 0)}h total overtime</p>
+                  <p className="text-xs font-semibold text-primary mt-1">{fmtHoursMin(mine?.otActualHoursTotal ?? 0)} total overtime</p>
                 </CardContent>
               </Card>
               <Card>
                 <CardHeader className="pb-2"><CardDescription className="flex items-center gap-2"><Timer className="h-4 w-4" /> Approved Overtime</CardDescription></CardHeader>
                 <CardContent>
                   <div className="text-2xl font-bold">{mine?.otDays ?? 0} days</div>
-                  <p className="text-xs font-semibold text-primary mt-1">{round1(mine?.otHoursTotal ?? 0)}h total approved overtime</p>
+                  <p className="text-xs font-semibold text-primary mt-1">{fmtHoursMin(mine?.otHoursTotal ?? 0)} total approved overtime</p>
                 </CardContent>
               </Card>
               {(() => {
@@ -448,7 +456,7 @@ const ReportsSummary = () => {
                   <Card>
                     <CardHeader className="pb-2"><CardDescription className="flex items-center gap-2"><Gauge className="h-4 w-4" /> Net Hours</CardDescription></CardHeader>
                     <CardContent>
-                      <div className="text-2xl font-bold">{net.value}h</div>
+                      <div className="text-2xl font-bold">{net.value}</div>
                       <p className={`text-xs font-semibold mt-1 ${net.isOvertime ? "text-green-600" : "text-red-600"}`}>
                         {net.isOvertime ? "Overtime" : "Due Time"}
                       </p>
