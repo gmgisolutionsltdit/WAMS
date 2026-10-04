@@ -53,7 +53,7 @@ const ReportsSummary = () => {
 
   const [dateFrom, setDateFrom] = useState("");
   const [dateTo, setDateTo] = useState("");
-  const [monthFrom, setMonthFrom] = useState("");
+  const [monthFrom, setMonthFrom] = useState(() => format(new Date(), "yyyy-MM"));
   const [monthTo, setMonthTo] = useState("");
   const [employees, setEmployees] = useState<EmployeeOption[]>([]);
   const [employeeFilter, setEmployeeFilter] = useState("all");

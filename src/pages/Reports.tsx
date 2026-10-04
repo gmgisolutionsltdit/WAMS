@@ -25,7 +25,7 @@ const Reports = () => {
   const [dateTo, setDateTo] = useState("");
   const [name, setName] = useState("");
   const [department, setDepartment] = useState("all");
-  const [monthFrom, setMonthFrom] = useState(""); // YYYY-MM
+  const [monthFrom, setMonthFrom] = useState(() => format(new Date(), "yyyy-MM")); // YYYY-MM
   const [monthTo, setMonthTo] = useState(""); // YYYY-MM
   const [departments, setDepartments] = useState<string[]>([]);
   const [expanded, setExpanded] = useState<Record<string, boolean>>({});
