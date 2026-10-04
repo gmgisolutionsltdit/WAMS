@@ -26,14 +26,19 @@ type Summary = {
   lateMinutesTotal: number;
   /** Extra work owed for a late arrival (0 once waived by Approve Start Time). */
   latePenaltyMinutesTotal: number;
+  /** Days with a closed, worked day under the fixed 7-hour mark. */
+  lessThan7Days: number;
+  lessThan7HoursTotal: number;
+  /** Due Time: days/hours short of the employee's own schedule requirement. */
   shortDays: number;
   shortfallHoursTotal: number;
+  /** Overtime: any day worked beyond the schedule requirement, or any time
+   * worked on a weekend/holiday (full day counts, no requirement to beat). */
+  otActualDays: number;
+  otActualHoursTotal: number;
+  /** Approved Overtime: from approved overtime_requests only. */
   otDays: number;
   otHoursTotal: number;
-  netWorkingHours: number;
-  /** Worked on a weekend or public holiday (not an approved leave day). */
-  otOnLeaveDays: number;
-  otOnLeaveHoursTotal: number;
 };
 
 /** One day that would be reported differently under the corrected rules vs the old (buggy) ones. */
@@ -148,10 +153,10 @@ const ReportsSummary = () => {
           name: p?.full_name || p?.email || "—",
           role: roleMap.get(id) || "employee",
           lateDays: 0, lateMinutesTotal: 0, latePenaltyMinutesTotal: 0,
+          lessThan7Days: 0, lessThan7HoursTotal: 0,
           shortDays: 0, shortfallHoursTotal: 0,
+          otActualDays: 0, otActualHoursTotal: 0,
           otDays: 0, otHoursTotal: 0,
-          netWorkingHours: 0,
-          otOnLeaveDays: 0, otOnLeaveHoursTotal: 0,
         });
       });
 
@@ -173,13 +178,12 @@ const ReportsSummary = () => {
         const nonWorking = dayKind.nonWorking || onLeave;
 
         const worked = day.workedSeconds / 3600;
-        s.netWorkingHours += worked;
 
-        // Overtime on Leave: worked a weekend or public holiday — not an
-        // approved leave day — on days with any logged attendance.
+        // Overtime (actual, not just approved) on a weekend/holiday: any
+        // time worked counts in full there, no requirement to beat.
         if (dayKind.nonWorking && !onLeave && worked > 0) {
-          s.otOnLeaveDays += 1;
-          s.otOnLeaveHoursTotal += worked;
+          s.otActualDays += 1;
+          s.otActualHoursTotal += worked;
         }
 
         // Late: compare against the stored, authoritative arrival once
@@ -207,6 +211,20 @@ const ReportsSummary = () => {
           s.shortDays += 1;
           s.shortfallHoursTotal += newDue;
         }
+
+        // Less than 7hr Work Time: a fixed 7-hour threshold, independent of
+        // the employee's own schedule requirement.
+        if (!nonWorking && closed && worked > 0 && worked < 7) {
+          s.lessThan7Days += 1;
+          s.lessThan7HoursTotal += worked;
+        }
+
+        // Overtime (actual, not just approved) on a normal working day:
+        // hours beyond the schedule requirement.
+        if (!nonWorking && closed && worked > required) {
+          s.otActualDays += 1;
+          s.otActualHoursTotal += worked - required;
+        }
         if (Math.abs(oldDue - newDue) > 0.01) {
           changed.push({ userId, name: s.name, date: day.date, oldDueHours: round1(oldDue), newDueHours: round1(newDue) });
         }
@@ -226,14 +244,6 @@ const ReportsSummary = () => {
         if (s) s.otDays = set.size;
       });
 
-      // Late arrivals cost Due Time — late minutes plus the extra-work
-      // penalty they trigger (e.g. 11m late + the 2h40m penalty = 2h51m) —
-      // deduct that total from Net Working Hour, same figure as Attendance's
-      // own Due Time column.
-      byUser.forEach((s) => {
-        s.netWorkingHours = Math.max(0, s.netWorkingHours - (s.lateMinutesTotal + s.latePenaltyMinutesTotal) / 60);
-      });
-
       setRows(Array.from(byUser.values()).sort((a, b) => a.name.localeCompare(b.name)));
       setChangedDays(changed.sort((a, b) => a.date.localeCompare(b.date)));
     } finally {
@@ -249,6 +259,13 @@ const ReportsSummary = () => {
   };
 
   const mine = rows.find((r) => r.userId === user?.id) || rows[0];
+
+  /** Net Hours = Approved Overtime hours minus Due Time hours, always shown
+   * as a positive value with a colored label for which side it landed on. */
+  const netHoursOf = (s: Summary | undefined) => {
+    const raw = (s?.otHoursTotal ?? 0) - (s?.shortfallHoursTotal ?? 0);
+    return { value: round1(Math.abs(raw)), isOvertime: raw >= 0 };
+  };
 
   return (
     <div className="space-y-4">
@@ -305,33 +322,37 @@ const ReportsSummary = () => {
                     <TableRow>
                       <TableHead>Employee</TableHead>
                       <TableHead>Role</TableHead>
-                      <TableHead>Late Days</TableHead>
-                      <TableHead>Total Late Time</TableHead>
-                      <TableHead>Short Duration Days</TableHead>
-                      <TableHead>Total Shortfall</TableHead>
-                      <TableHead>Approved OT Days</TableHead>
-                      <TableHead>Total OT Hours</TableHead>
-                      <TableHead>Overtime on Leave</TableHead>
-                      <TableHead>Net Working Hour</TableHead>
+                      <TableHead>Late Entry</TableHead>
+                      <TableHead>Less than 7hr Work Time</TableHead>
+                      <TableHead>Due Time</TableHead>
+                      <TableHead>Overtime</TableHead>
+                      <TableHead>Approved Overtime</TableHead>
+                      <TableHead>Net Hours</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
                     {rows.length === 0 ? (
-                      <TableRow><TableCell colSpan={10} className="text-center text-muted-foreground">No records</TableCell></TableRow>
-                    ) : rows.map((r) => (
-                      <TableRow key={r.userId}>
-                        <TableCell className="font-medium">{r.name}</TableCell>
-                        <TableCell><Badge variant={r.role === "admin" ? "default" : r.role === "manager" ? "secondary" : "outline"}>{r.role}</Badge></TableCell>
-                        <TableCell>{r.lateDays}</TableCell>
-                        <TableCell>{humanMinutes(r.lateMinutesTotal)}</TableCell>
-                        <TableCell>{r.shortDays}</TableCell>
-                        <TableCell>{round1(r.shortfallHoursTotal)}h</TableCell>
-                        <TableCell>{r.otDays}</TableCell>
-                        <TableCell>{round1(r.otHoursTotal)}h</TableCell>
-                        <TableCell>{r.otOnLeaveDays} days · {round1(r.otOnLeaveHoursTotal)}h</TableCell>
-                        <TableCell>{round1(r.netWorkingHours)}h</TableCell>
-                      </TableRow>
-                    ))}
+                      <TableRow><TableCell colSpan={8} className="text-center text-muted-foreground">No records</TableCell></TableRow>
+                    ) : rows.map((r) => {
+                      const net = netHoursOf(r);
+                      return (
+                        <TableRow key={r.userId}>
+                          <TableCell className="font-medium">{r.name}</TableCell>
+                          <TableCell><Badge variant={r.role === "admin" ? "default" : r.role === "manager" ? "secondary" : "outline"}>{r.role}</Badge></TableCell>
+                          <TableCell>{r.lateDays} days · avg {r.lateDays > 0 ? humanMinutes(Math.round(r.lateMinutesTotal / r.lateDays)) : "—"}</TableCell>
+                          <TableCell>{r.lessThan7Days} days · avg {r.lessThan7Days > 0 ? round1(r.lessThan7HoursTotal / r.lessThan7Days) : 0}h</TableCell>
+                          <TableCell>{r.shortDays} days · {round1(r.shortfallHoursTotal)}h</TableCell>
+                          <TableCell>{r.otActualDays} days · {round1(r.otActualHoursTotal)}h</TableCell>
+                          <TableCell>{r.otDays} days · {round1(r.otHoursTotal)}h</TableCell>
+                          <TableCell>
+                            <div className="font-semibold">{net.value}h</div>
+                            <div className={net.isOvertime ? "text-xs text-green-600" : "text-xs text-red-600"}>
+                              {net.isOvertime ? "Overtime" : "Due Time"}
+                            </div>
+                          </TableCell>
+                        </TableRow>
+                      );
+                    })}
                   </TableBody>
                 </Table>
               </div>
@@ -376,42 +397,60 @@ const ReportsSummary = () => {
               )}
             </div>
           ) : (
-            <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
+            <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
               <Card>
-                <CardHeader className="pb-2"><CardDescription className="flex items-center gap-2"><Clock className="h-4 w-4" /> Late Arrivals</CardDescription></CardHeader>
+                <CardHeader className="pb-2"><CardDescription className="flex items-center gap-2"><Clock className="h-4 w-4" /> Late Entry</CardDescription></CardHeader>
                 <CardContent>
                   <div className="text-2xl font-bold">{mine?.lateDays ?? 0} days</div>
-                  <p className="text-xs font-semibold text-primary mt-1">{humanMinutes(mine?.lateMinutesTotal ?? 0)} total, against due time</p>
+                  <p className="text-xs font-semibold text-primary mt-1">
+                    avg {mine && mine.lateDays > 0 ? humanMinutes(Math.round(mine.lateMinutesTotal / mine.lateDays)) : "—"} per late entry
+                  </p>
                 </CardContent>
               </Card>
               <Card>
-                <CardHeader className="pb-2"><CardDescription className="flex items-center gap-2"><TimerOff className="h-4 w-4" /> Short Duration Days</CardDescription></CardHeader>
+                <CardHeader className="pb-2"><CardDescription className="flex items-center gap-2"><TimerOff className="h-4 w-4" /> Less than 7hr Work Time</CardDescription></CardHeader>
+                <CardContent>
+                  <div className="text-2xl font-bold">{mine?.lessThan7Days ?? 0} days</div>
+                  <p className="text-xs font-semibold text-primary mt-1">
+                    avg {mine && mine.lessThan7Days > 0 ? round1(mine.lessThan7HoursTotal / mine.lessThan7Days) : 0}h worked on those days
+                  </p>
+                </CardContent>
+              </Card>
+              <Card>
+                <CardHeader className="pb-2"><CardDescription className="flex items-center gap-2"><Gauge className="h-4 w-4" /> Due Time</CardDescription></CardHeader>
                 <CardContent>
                   <div className="text-2xl font-bold">{mine?.shortDays ?? 0} days</div>
-                  <p className="text-xs font-semibold text-primary mt-1">{round1(mine?.shortfallHoursTotal ?? 0)}h short of due time</p>
+                  <p className="text-xs font-semibold text-primary mt-1">{round1(mine?.shortfallHoursTotal ?? 0)}h total due time</p>
+                </CardContent>
+              </Card>
+              <Card>
+                <CardHeader className="pb-2"><CardDescription className="flex items-center gap-2"><CalendarClock className="h-4 w-4" /> Overtime</CardDescription></CardHeader>
+                <CardContent>
+                  <div className="text-2xl font-bold">{mine?.otActualDays ?? 0} days</div>
+                  <p className="text-xs font-semibold text-primary mt-1">{round1(mine?.otActualHoursTotal ?? 0)}h total overtime</p>
                 </CardContent>
               </Card>
               <Card>
                 <CardHeader className="pb-2"><CardDescription className="flex items-center gap-2"><Timer className="h-4 w-4" /> Approved Overtime</CardDescription></CardHeader>
                 <CardContent>
                   <div className="text-2xl font-bold">{mine?.otDays ?? 0} days</div>
-                  <p className="text-xs font-semibold text-primary mt-1">{round1(mine?.otHoursTotal ?? 0)}h total overtime</p>
+                  <p className="text-xs font-semibold text-primary mt-1">{round1(mine?.otHoursTotal ?? 0)}h total approved overtime</p>
                 </CardContent>
               </Card>
-              <Card>
-                <CardHeader className="pb-2"><CardDescription className="flex items-center gap-2"><Gauge className="h-4 w-4" /> Net Working Hour</CardDescription></CardHeader>
-                <CardContent>
-                  <div className="text-2xl font-bold">{round1(mine?.netWorkingHours ?? 0)}h</div>
-                  <p className="text-xs font-semibold text-primary mt-1">net hours worked in range, less late time</p>
-                </CardContent>
-              </Card>
-              <Card>
-                <CardHeader className="pb-2"><CardDescription className="flex items-center gap-2"><CalendarClock className="h-4 w-4" /> Overtime on Leave</CardDescription></CardHeader>
-                <CardContent>
-                  <div className="text-2xl font-bold">{mine?.otOnLeaveDays ?? 0} days</div>
-                  <p className="text-xs font-semibold text-primary mt-1">{round1(mine?.otOnLeaveHoursTotal ?? 0)}h worked on weekends/holidays</p>
-                </CardContent>
-              </Card>
+              {(() => {
+                const net = netHoursOf(mine);
+                return (
+                  <Card>
+                    <CardHeader className="pb-2"><CardDescription className="flex items-center gap-2"><Gauge className="h-4 w-4" /> Net Hours</CardDescription></CardHeader>
+                    <CardContent>
+                      <div className="text-2xl font-bold">{net.value}h</div>
+                      <p className={`text-xs font-semibold mt-1 ${net.isOvertime ? "text-green-600" : "text-red-600"}`}>
+                        {net.isOvertime ? "Overtime" : "Due Time"}
+                      </p>
+                    </CardContent>
+                  </Card>
+                );
+              })()}
             </div>
           )}
         </CardContent>
