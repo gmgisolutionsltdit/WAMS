@@ -8,6 +8,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Label } from "@/components/ui/label";
+import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { WORK_FROM_OPTIONS, DEFAULT_WORK_FROM } from "@/lib/workFrom";
 import { format } from "date-fns";
@@ -39,6 +40,8 @@ const Attendance = () => {
   const [starting, setStarting] = useState(false);
   const [workFromOpen, setWorkFromOpen] = useState(false);
   const [workFrom, setWorkFrom] = useState<string[]>([DEFAULT_WORK_FROM]);
+  const [closeDialogOpen, setCloseDialogOpen] = useState(false);
+  const [closeForm, setCloseForm] = useState({ gmgi_task: "", gm_task: "", gmgi_time: "", gm_time: "" });
   const [currentTime, setCurrentTime] = useState(new Date());
   // Approved/modified OT request hours, summed per date, for the Approved OT column.
   const [approvedOTByDate, setApprovedOTByDate] = useState<Record<string, number>>({});
@@ -159,8 +162,17 @@ const Attendance = () => {
   const openSession = logs.find((l) => l.date === localToday() && l.clock_in && !l.clock_out);
   const isOnBreak = !!(openSession && openSession.break_start && !openSession.break_end);
 
-  const handleClose = async () => {
+  const handleClose = () => {
     if (!user || !openSession) return;
+    setCloseForm({ gmgi_task: "", gm_task: "", gmgi_time: "", gm_time: "" });
+    setCloseDialogOpen(true);
+  };
+
+  const confirmClose = async () => {
+    if (!user || !openSession) return;
+    const gmgiTime = Math.max(0, parseFloat(closeForm.gmgi_time) || 0);
+    const gmTime = Math.max(0, parseFloat(closeForm.gm_time) || 0);
+    setCloseDialogOpen(false);
     setStarting(true);
     const now = new Date();
     const totals = computeDailyTotals({
@@ -175,6 +187,10 @@ const Attendance = () => {
       overtime_hours: totals.overtimeHours,
       break_start: null,
       break_end: null,
+      gmgi_task: closeForm.gmgi_task.trim() || null,
+      gm_task: closeForm.gm_task.trim() || null,
+      gmgi_time: gmgiTime,
+      gm_time: gmTime,
     }).eq("id", openSession.id);
     if (error) toast.error(error.message);
     else { toast.success(`Clocked out! Total: ${totals.totalHours}h`); fetchData(); }
@@ -308,6 +324,55 @@ const Attendance = () => {
               </Select>
             </div>
             <Button className="w-full" onClick={confirmStart} disabled={starting}>Continue</Button>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={closeDialogOpen} onOpenChange={setCloseDialogOpen}>
+        <DialogContent>
+          <DialogHeader><DialogTitle>What did you work on today?</DialogTitle></DialogHeader>
+          <div className="space-y-4">
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-3">
+                <div>
+                  <Label>GMGI Task</Label>
+                  <Input
+                    placeholder="What GMGI work was done?"
+                    value={closeForm.gmgi_task}
+                    onChange={(e) => setCloseForm((f) => ({ ...f, gmgi_task: e.target.value }))}
+                  />
+                </div>
+                <div>
+                  <Label>GM Task</Label>
+                  <Input
+                    placeholder="What GM work was done?"
+                    value={closeForm.gm_task}
+                    onChange={(e) => setCloseForm((f) => ({ ...f, gm_task: e.target.value }))}
+                  />
+                </div>
+              </div>
+              <div className="space-y-3">
+                <div>
+                  <Label>GMGI Time (hours)</Label>
+                  <Input
+                    type="number" step="0.25" min="0"
+                    value={closeForm.gmgi_time}
+                    onChange={(e) => setCloseForm((f) => ({ ...f, gmgi_time: e.target.value }))}
+                  />
+                </div>
+                <div>
+                  <Label>GM Time (hours)</Label>
+                  <Input
+                    type="number" step="0.25" min="0"
+                    value={closeForm.gm_time}
+                    onChange={(e) => setCloseForm((f) => ({ ...f, gm_time: e.target.value }))}
+                  />
+                </div>
+              </div>
+            </div>
+            <Button className="w-full" variant="destructive" onClick={confirmClose} disabled={starting}>
+              <LogOut className="mr-1 h-4 w-4" /> Close
+            </Button>
           </div>
         </DialogContent>
       </Dialog>
