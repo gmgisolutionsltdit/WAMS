@@ -1257,29 +1257,30 @@ const EmployeeProfile = () => {
                 <CardTitle className="text-base flex items-center gap-2"><Clock3 className="h-4 w-4" /> Office Hours &amp; Work Schedule</CardTitle>
                 <CardDescription>
                   Attendance, late arrival, due time, overtime and leave are all calculated against these values.
+                  {!isAdmin && " Admin only can edit — you can view these settings."}
                 </CardDescription>
               </CardHeader>
               <CardContent className="space-y-3">
                 <div className="grid gap-3 md:grid-cols-2">
                   <div>
                     <Label className="text-xs">Office Start</Label>
-                    <Input type="time" value={overviewForm.office_start_time} onChange={(e) => setOverviewForm((f) => ({ ...f, office_start_time: e.target.value }))} />
+                    <Input type="time" disabled={!isAdmin} value={overviewForm.office_start_time} onChange={(e) => setOverviewForm((f) => ({ ...f, office_start_time: e.target.value }))} />
                   </div>
                   <div>
                     <Label className="text-xs">Office End</Label>
-                    <Input type="time" value={overviewForm.office_end_time} onChange={(e) => setOverviewForm((f) => ({ ...f, office_end_time: e.target.value }))} />
+                    <Input type="time" disabled={!isAdmin} value={overviewForm.office_end_time} onChange={(e) => setOverviewForm((f) => ({ ...f, office_end_time: e.target.value }))} />
                   </div>
                   <div>
                     <Label className="text-xs">Standard Shift Hours</Label>
-                    <Input type="number" step="0.5" min="0.5" max="24" value={overviewForm.standard_daily_hours} onChange={(e) => setOverviewForm((f) => ({ ...f, standard_daily_hours: e.target.value }))} />
+                    <Input type="number" step="0.5" min="0.5" max="24" disabled={!isAdmin} value={overviewForm.standard_daily_hours} onChange={(e) => setOverviewForm((f) => ({ ...f, standard_daily_hours: e.target.value }))} />
                   </div>
                   <div>
                     <Label className="text-xs">Daily Break Allowance (minutes)</Label>
-                    <Input type="number" step="5" min="0" value={overviewForm.unpaid_break_minutes} onChange={(e) => setOverviewForm((f) => ({ ...f, unpaid_break_minutes: e.target.value }))} />
+                    <Input type="number" step="5" min="0" disabled={!isAdmin} value={overviewForm.unpaid_break_minutes} onChange={(e) => setOverviewForm((f) => ({ ...f, unpaid_break_minutes: e.target.value }))} />
                   </div>
                   <div>
                     <Label className="text-xs">Late Grace (minutes)</Label>
-                    <Input type="number" step="1" min="0" value={overviewForm.late_grace_minutes} onChange={(e) => setOverviewForm((f) => ({ ...f, late_grace_minutes: e.target.value }))} />
+                    <Input type="number" step="1" min="0" disabled={!isAdmin} value={overviewForm.late_grace_minutes} onChange={(e) => setOverviewForm((f) => ({ ...f, late_grace_minutes: e.target.value }))} />
                   </div>
                   <div className="md:col-span-2">
                     <Label className="text-xs">Working Days (unchecked days count as weekend)</Label>
@@ -1287,7 +1288,7 @@ const EmployeeProfile = () => {
                       {DOW.map((d) => (
                         <label key={d.v} className="flex items-center gap-1.5 text-sm">
                           <Checkbox
-
+                            disabled={!isAdmin}
                             checked={overviewForm.working_days.includes(d.v)}
                             onCheckedChange={() =>
                               setOverviewForm((f) => ({
@@ -1308,13 +1309,16 @@ const EmployeeProfile = () => {
             </Card>
           )}
 
-          {isAdmin && (
+          {canManageThisEmployee && (
             <Card>
               <CardHeader>
                 <div className="flex items-start justify-between gap-2 flex-wrap">
                   <div>
                     <CardTitle className="text-base">Leave Defaults</CardTitle>
-                    <CardDescription>Applies to every employee for each leave type — not just this one.</CardDescription>
+                    <CardDescription>
+                      Applies to every employee for each leave type — not just this one.
+                      {!isAdmin && " Admin only can edit — you can view these settings."}
+                    </CardDescription>
                   </div>
                 </div>
               </CardHeader>
@@ -1326,8 +1330,9 @@ const EmployeeProfile = () => {
                         <input
                           type="color"
                           value={lt.color}
+                          disabled={!isAdmin}
                           onChange={(e) => updateLeaveType(lt.id, { color: e.target.value })}
-                          className="h-8 w-8 rounded border cursor-pointer"
+                          className="h-8 w-8 rounded border cursor-pointer disabled:cursor-not-allowed disabled:opacity-60"
                         />
                         <div>
                           <div className="font-medium text-sm">{lt.name}</div>
@@ -1340,12 +1345,13 @@ const EmployeeProfile = () => {
                           type="number"
                           min={0}
                           step="0.5"
+                          disabled={!isAdmin}
                           value={lt.annual_quota}
                           onChange={(e) => updateLeaveType(lt.id, { annual_quota: parseFloat(e.target.value) || 0 })}
                         />
                       </div>
                       <div className="md:col-span-3 flex items-center gap-2" title="Charge weekends/holidays adjacent (either side) to leave days">
-                        <Switch checked={!!lt.sandwich_leave} onCheckedChange={(v) => updateLeaveType(lt.id, { sandwich_leave: v })} />
+                        <Switch disabled={!isAdmin} checked={!!lt.sandwich_leave} onCheckedChange={(v) => updateLeaveType(lt.id, { sandwich_leave: v })} />
                         <Label className="text-xs">Sandwich</Label>
                       </div>
                     </div>
