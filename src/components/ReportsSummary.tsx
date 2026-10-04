@@ -205,8 +205,12 @@ const ReportsSummary = () => {
 
         const required = netRequiredHours(schedule);
         const closed = !day.open && !!day.lastOut;
+        // Matches Attendance.tsx's own Due Time / OVERTIME (OT) columns
+        // exactly: the late-arrival penalty adds to today's requirement
+        // before Due/Overtime are measured against it (0 when not late).
+        const requiredWithPenalty = required + arrival.penaltyMinutes / 60;
         const oldDue = Math.max(0, required - (Number(day.sessions[0]?.total_hours) || 0));
-        const newDue = (!nonWorking && closed && worked > 0 && worked < required) ? required - worked : 0;
+        const newDue = (!nonWorking && closed && worked < requiredWithPenalty) ? requiredWithPenalty - worked : 0;
         if (newDue > 0) {
           s.shortDays += 1;
           s.shortfallHoursTotal += newDue;
@@ -220,10 +224,11 @@ const ReportsSummary = () => {
         }
 
         // Overtime (actual, not just approved) on a normal working day:
-        // hours beyond the schedule requirement.
-        if (!nonWorking && closed && worked > required) {
+        // hours beyond the (penalty-adjusted) requirement, same as
+        // Attendance.tsx's OVERTIME (OT) column.
+        if (!nonWorking && closed && worked > requiredWithPenalty) {
           s.otActualDays += 1;
-          s.otActualHoursTotal += worked - required;
+          s.otActualHoursTotal += worked - requiredWithPenalty;
         }
         if (Math.abs(oldDue - newDue) > 0.01) {
           changed.push({ userId, name: s.name, date: day.date, oldDueHours: round1(oldDue), newDueHours: round1(newDue) });
