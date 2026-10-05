@@ -579,7 +579,7 @@ const Attendance = () => {
                                           : s.clock_in ? (Date.now() - new Date(s.clock_in).getTime()) / 1000 : 0),
                                       )}
                                     </TableCell>
-                                    <TableCell className="text-xs text-muted-foreground">{s.device_source || "web"}</TableCell>
+                                    <TableCell className="text-xs text-muted-foreground">{s.device_source === "manual" ? "Manual" : "Automatic"}</TableCell>
                                     <TableCell className="text-xs">{s.gmgi_task || "—"}</TableCell>
                                     <TableCell className="text-xs">{s.gm_task || "—"}</TableCell>
                                     <TableCell className="font-mono text-xs">{s.gmgi_time ? `${s.gmgi_time}h` : "—"}</TableCell>
