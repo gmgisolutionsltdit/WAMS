@@ -401,13 +401,11 @@ const Attendance = () => {
                 <TableHead>Due Time</TableHead>
                 <TableHead>OVERTIME (OT)</TableHead>
                 <TableHead>Approved OT</TableHead>
-                <TableHead>GMGI Time</TableHead>
-                <TableHead>GM Time</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
               {days.length === 0 ? (
-                <TableRow><TableCell colSpan={15} className="text-center text-muted-foreground">No attendance records</TableCell></TableRow>
+                <TableRow><TableCell colSpan={13} className="text-center text-muted-foreground">No attendance records</TableCell></TableRow>
               ) : days.map((day) => {
                 const worked = day.workedSeconds;
                 const closed = !day.open && !!day.lastOut;
@@ -527,13 +525,11 @@ const Attendance = () => {
                           ? <Badge className="bg-lime-500 text-white border-lime-500 font-mono">{fmtHMS(approvedOTByDate[day.date] * 3600)}</Badge>
                           : <span className="text-muted-foreground font-mono text-xs">00:00:00</span>}
                       </TableCell>
-                      <TableCell className="font-mono text-xs">{day.gmgiTime > 0 ? `${day.gmgiTime}h` : "—"}</TableCell>
-                      <TableCell className="font-mono text-xs">{day.gmTime > 0 ? `${day.gmTime}h` : "—"}</TableCell>
                     </TableRow>
                     {isOpen && (
                       <TableRow className="bg-muted/40 hover:bg-muted/40">
                         <TableCell />
-                        <TableCell colSpan={13} className="p-0">
+                        <TableCell colSpan={11} className="p-0">
                           <div className="p-3">
                             <p className="text-xs font-medium text-muted-foreground mb-2">Individual sessions</p>
                             <Table>
