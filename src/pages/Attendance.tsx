@@ -2,11 +2,12 @@ import { Fragment, useEffect, useState } from "react";
 import { useAuth } from "@/contexts/AuthContext";
 import { supabase } from "@/integrations/supabase/client";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { LogIn, LogOut, Pause, Play, Timer } from "lucide-react";
+import { LogIn, LogOut, Pause, Play, Timer, ListTodo } from "lucide-react";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Popover, PopoverTrigger, PopoverContent } from "@/components/ui/popover";
 import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -401,11 +402,13 @@ const Attendance = () => {
                 <TableHead>Due Time</TableHead>
                 <TableHead>OVERTIME (OT)</TableHead>
                 <TableHead>Approved OT</TableHead>
+                <TableHead>GMGI Time</TableHead>
+                <TableHead>GM Time</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
               {days.length === 0 ? (
-                <TableRow><TableCell colSpan={13} className="text-center text-muted-foreground">No attendance records</TableCell></TableRow>
+                <TableRow><TableCell colSpan={15} className="text-center text-muted-foreground">No attendance records</TableCell></TableRow>
               ) : days.map((day) => {
                 const worked = day.workedSeconds;
                 const closed = !day.open && !!day.lastOut;
@@ -525,11 +528,13 @@ const Attendance = () => {
                           ? <Badge className="bg-lime-500 text-white border-lime-500 font-mono">{fmtHMS(approvedOTByDate[day.date] * 3600)}</Badge>
                           : <span className="text-muted-foreground font-mono text-xs">00:00:00</span>}
                       </TableCell>
+                      <TableCell className="font-mono text-xs">{day.gmgiTime > 0 ? `${day.gmgiTime}h` : "—"}</TableCell>
+                      <TableCell className="font-mono text-xs">{day.gmTime > 0 ? `${day.gmTime}h` : "—"}</TableCell>
                     </TableRow>
                     {isOpen && (
                       <TableRow className="bg-muted/40 hover:bg-muted/40">
                         <TableCell />
-                        <TableCell colSpan={11} className="p-0">
+                        <TableCell colSpan={13} className="p-0">
                           <div className="p-3">
                             <p className="text-xs font-medium text-muted-foreground mb-2">Individual sessions</p>
                             <Table>
@@ -543,8 +548,7 @@ const Attendance = () => {
                                   <TableHead>Work Time</TableHead>
                                   <TableHead>Total Time</TableHead>
                                   <TableHead>Source</TableHead>
-                                  <TableHead>GMGI Task</TableHead>
-                                  <TableHead>GM Task</TableHead>
+                                  <TableHead>Task</TableHead>
                                   <TableHead>GMGI Time</TableHead>
                                   <TableHead>GM Time</TableHead>
                                   <TableHead>Actions</TableHead>
@@ -576,8 +580,25 @@ const Attendance = () => {
                                       )}
                                     </TableCell>
                                     <TableCell className="text-xs text-muted-foreground">{s.device_source === "manual" ? "Manual" : "Automatic"}</TableCell>
-                                    <TableCell className="text-xs">{s.gmgi_task || "—"}</TableCell>
-                                    <TableCell className="text-xs">{s.gm_task || "—"}</TableCell>
+                                    <TableCell>
+                                      <Popover>
+                                        <PopoverTrigger asChild>
+                                          <Button variant="outline" size="sm" className="h-7 text-xs">
+                                            <ListTodo className="h-3.5 w-3.5 mr-1" /> View Task
+                                          </Button>
+                                        </PopoverTrigger>
+                                        <PopoverContent className="w-72 text-xs space-y-2">
+                                          <div>
+                                            <p className="font-medium text-muted-foreground">GMGI Task</p>
+                                            <p>{s.gmgi_task || "—"}</p>
+                                          </div>
+                                          <div>
+                                            <p className="font-medium text-muted-foreground">GM Task</p>
+                                            <p>{s.gm_task || "—"}</p>
+                                          </div>
+                                        </PopoverContent>
+                                      </Popover>
+                                    </TableCell>
                                     <TableCell className="font-mono text-xs">{s.gmgi_time ? `${s.gmgi_time}h` : "—"}</TableCell>
                                     <TableCell className="font-mono text-xs">{s.gm_time ? `${s.gm_time}h` : "—"}</TableCell>
                                     <TableCell>
