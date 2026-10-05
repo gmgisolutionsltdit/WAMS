@@ -588,8 +588,9 @@ const EmployeeProfile = () => {
 
   const salaryBreakdown = useMemo(() => {
     const gross = Number(profile?.base_salary || 0);
-    // Common convention: Basic = 60%, Allowances = 40% (display-only when no detailed fields exist)
-    const basic = gross * 0.6;
+    // Basic = 50% of gross, Allowances = the other 50% — matches the Increment
+    // Evaluation Form's own Basic-Salary math (new Basic = new Gross / 2).
+    const basic = gross * 0.5;
     const allowances = gross - basic;
     return { gross, basic, allowances };
   }, [profile]);
@@ -1120,7 +1121,10 @@ const EmployeeProfile = () => {
                       {increments.map((inc) => {
                         const prev = Number(inc.base_salary) || 0;
                         const incAmt = Number(inc.increment_amount) || 0;
-                        const newSal = prev + incAmt;
+                        // New Basic = New Gross / 2 when gross is tracked (Increment
+                        // Evaluation Form entries); a plain manual entry without a
+                        // tracked gross falls back to Previous Basic + Increment.
+                        const newSal = inc.gross_salary_after != null ? Number(inc.gross_salary_after) / 2 : prev + incAmt;
                         const retentionPct = Number(inc.retention_pct) || 0;
                         const mainPct = Math.round(((Number(inc.increment_pct) || 0) - retentionPct) * 100) / 100;
                         return (

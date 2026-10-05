@@ -17,8 +17,8 @@ export const finalIncrementPct = (averageRecommendedPct: number, approvedFactorP
   return Math.round(((averageRecommendedPct * approvedFactorPct) / 100) * 100) / 100;
 };
 
-/** Annual increment is applied only on Basic Salary (Common convention: Basic = 60% of gross, matching the Employee Profile's own breakdown). */
-export const basicFromGross = (gross: number): number => Math.round(gross * 0.6 * 100) / 100;
+/** Annual increment is applied only on Basic Salary. Basic = 50% of gross, both before and after the increment (new Basic = new Gross / 2). */
+export const basicFromGross = (gross: number): number => Math.round(gross * 0.5 * 100) / 100;
 
 /** Increment % applied to Basic Salary, converted to a BDT amount. */
 export const incrementAmountFromBasic = (basic: number, pct: number): number =>
