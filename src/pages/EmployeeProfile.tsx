@@ -34,6 +34,7 @@ import { invokeAdminUserManagement, edgeErrorMessage } from "@/lib/adminUsers";
 import EmployeeDocumentsTab from "@/components/EmployeeDocumentsTab";
 import { DEFAULT_GRACE_MINUTES, DEFAULT_OFFICE_END, DEFAULT_OFFICE_START } from "@/lib/officeTime";
 import { DEFAULT_WORKING_DAYS } from "@/lib/workSchedule";
+import { salaryBreakdown as salaryBreakdownOf } from "@/lib/payrollAdjustments";
 const SERVICE_STATUS = ["Permanent", "Contractual", "Intern", "Short-Term", "Consultant"];
 const EMPLOYEE_STATUS = ["Active", "Inactive", "Resigned"];
 const DOW = [
@@ -586,14 +587,10 @@ const EmployeeProfile = () => {
     }
   };
 
-  const salaryBreakdown = useMemo(() => {
-    const gross = Number(profile?.base_salary || 0);
-    // Basic = 50% of gross, Allowances = the other 50% — matches the Increment
-    // Evaluation Form's own Basic-Salary math (new Basic = new Gross / 2).
-    const basic = gross * 0.5;
-    const allowances = gross - basic;
-    return { gross, basic, allowances };
-  }, [profile]);
+  const salaryBreakdown = useMemo(
+    () => salaryBreakdownOf(Number(profile?.base_salary || 0)),
+    [profile],
+  );
 
   if (loading) {
     return <Card><CardContent className="p-8 text-center text-muted-foreground">Loading profile…</CardContent></Card>;
@@ -1048,20 +1045,36 @@ const EmployeeProfile = () => {
 
         {/* FINANCIAL */}
         <TabsContent value="financial" className="mt-4 space-y-4">
-          <div className="grid gap-4 md:grid-cols-3">
-            <Card>
-              <CardHeader className="pb-2"><CardTitle className="text-sm text-muted-foreground flex items-center gap-2"><DollarSign className="h-4 w-4" /> Gross Salary</CardTitle></CardHeader>
-              <CardContent><div className="text-2xl font-bold">{fmtMoney(salaryBreakdown.gross)}</div></CardContent>
-            </Card>
-            <Card>
-              <CardHeader className="pb-2"><CardTitle className="text-sm text-muted-foreground">Basic (≈60%)</CardTitle></CardHeader>
-              <CardContent><div className="text-2xl font-bold">{fmtMoney(salaryBreakdown.basic)}</div></CardContent>
-            </Card>
-            <Card>
-              <CardHeader className="pb-2"><CardTitle className="text-sm text-muted-foreground">Allowances (≈40%)</CardTitle></CardHeader>
-              <CardContent><div className="text-2xl font-bold">{fmtMoney(salaryBreakdown.allowances)}</div></CardContent>
-            </Card>
-          </div>
+          <Card>
+            <CardHeader className="pb-2">
+              <CardTitle className="text-sm text-muted-foreground flex items-center gap-2"><DollarSign className="h-4 w-4" /> Gross Salary</CardTitle>
+            </CardHeader>
+            <CardContent><div className="text-2xl font-bold">{fmtMoney(salaryBreakdown.gross)}</div></CardContent>
+          </Card>
+
+          <Card>
+            <CardHeader className="pb-2"><CardTitle className="text-base">Salary Breakdown</CardTitle></CardHeader>
+            <CardContent>
+              <ol className="space-y-2 list-decimal list-inside">
+                <li className="flex items-center justify-between gap-4">
+                  <span>Basic Salary: 50% of total salary</span>
+                  <span className="font-semibold shrink-0">{fmtMoney(salaryBreakdown.basic)}</span>
+                </li>
+                <li className="flex items-center justify-between gap-4">
+                  <span>House Rent Allowance: 35% of total salary</span>
+                  <span className="font-semibold shrink-0">{fmtMoney(salaryBreakdown.houseRent)}</span>
+                </li>
+                <li className="flex items-center justify-between gap-4">
+                  <span>Conveyance Allowance: 10% of total salary</span>
+                  <span className="font-semibold shrink-0">{fmtMoney(salaryBreakdown.conveyance)}</span>
+                </li>
+                <li className="flex items-center justify-between gap-4">
+                  <span>Medical Allowance: 5% of total salary</span>
+                  <span className="font-semibold shrink-0">{fmtMoney(salaryBreakdown.medical)}</span>
+                </li>
+              </ol>
+            </CardContent>
+          </Card>
 
           {canEditPayroll && (
             <Card>
@@ -1107,6 +1120,7 @@ const EmployeeProfile = () => {
                     <TableHeader>
                       <TableRow>
                         <TableHead>Effective Date</TableHead>
+                        <TableHead>Effective Month</TableHead>
                         <TableHead>Cycle</TableHead>
                         <TableHead className="text-right">Previous Basic</TableHead>
                         <TableHead className="text-right">Increment</TableHead>
@@ -1130,6 +1144,7 @@ const EmployeeProfile = () => {
                         return (
                           <TableRow key={inc.id}>
                             <TableCell>{fmtDate(inc.effective_from)}</TableCell>
+                            <TableCell>{format(new Date(inc.effective_from), "MMMM yyyy")}</TableCell>
                             <TableCell>{fmt(inc.cycle_label)}</TableCell>
                             <TableCell className="text-right">{fmtMoney(prev)}</TableCell>
                             <TableCell className="text-right text-green-600 font-medium">+{fmtMoney(incAmt)}</TableCell>
