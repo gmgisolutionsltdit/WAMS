@@ -1875,6 +1875,8 @@ export type Database = {
           increment_amount: number
           increment_pct: number
           reason: string | null
+          retention_amount: number | null
+          retention_pct: number | null
           updated_at: string
           user_id: string
         }
@@ -1889,6 +1891,8 @@ export type Database = {
           increment_amount?: number
           increment_pct?: number
           reason?: string | null
+          retention_amount?: number | null
+          retention_pct?: number | null
           updated_at?: string
           user_id: string
         }
@@ -1903,6 +1907,8 @@ export type Database = {
           increment_amount?: number
           increment_pct?: number
           reason?: string | null
+          retention_amount?: number | null
+          retention_pct?: number | null
           updated_at?: string
           user_id?: string
         }

@@ -17,8 +17,15 @@ export const finalIncrementPct = (averageRecommendedPct: number, approvedFactorP
   return Math.round(((averageRecommendedPct * approvedFactorPct) / 100) * 100) / 100;
 };
 
-export const grossAfterIncrement = (grossBefore: number, finalPct: number): number =>
-  Math.round(grossBefore * (1 + finalPct / 100) * 100) / 100;
+/** Annual increment is applied only on Basic Salary (Common convention: Basic = 60% of gross, matching the Employee Profile's own breakdown). */
+export const basicFromGross = (gross: number): number => Math.round(gross * 0.6 * 100) / 100;
+
+/** Increment % applied to Basic Salary, converted to a BDT amount. */
+export const incrementAmountFromBasic = (basic: number, pct: number): number =>
+  Math.round(((basic * pct) / 100) * 100) / 100;
+
+export const grossAfterIncrement = (grossBefore: number, incrementAmount: number): number =>
+  Math.round((grossBefore + incrementAmount) * 100) / 100;
 
 export const RETENTION_CHECKLIST_ITEMS = [
   "Employee is in a key/critical role essential to operations",
