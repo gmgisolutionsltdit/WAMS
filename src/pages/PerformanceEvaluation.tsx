@@ -717,6 +717,8 @@ const IncrementEvaluationDialog = ({
         increment_pct: totalPct,
         retention_pct: retentionPct > 0 ? retentionPct : null,
         retention_amount: retentionAmount > 0 ? retentionAmount : null,
+        gross_salary_before: finalization.gross_salary,
+        gross_salary_after: grossAfter,
         reason: `Performance: ${finalization.final_category} (weighted avg ${finalization.weighted_average}/5)${retentionAmount > 0 ? "; includes a retention increment" : ""}.`,
         approved_by: user.id,
       }).select().single();
