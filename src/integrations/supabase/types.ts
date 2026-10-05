@@ -2395,6 +2395,137 @@ export type Database = {
           },
         ]
       }
+      performance_evaluation_requests: {
+        Row: {
+          created_at: string
+          employee_id: string
+          evaluator_id: string
+          id: string
+          period_from: string | null
+          period_to: string | null
+          requested_by: string
+          status: string
+          submitted_at: string | null
+          weight: number
+        }
+        Insert: {
+          created_at?: string
+          employee_id: string
+          evaluator_id: string
+          id?: string
+          period_from?: string | null
+          period_to?: string | null
+          requested_by: string
+          status?: string
+          submitted_at?: string | null
+          weight?: number
+        }
+        Update: {
+          created_at?: string
+          employee_id?: string
+          evaluator_id?: string
+          id?: string
+          period_from?: string | null
+          period_to?: string | null
+          requested_by?: string
+          status?: string
+          submitted_at?: string | null
+          weight?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "performance_evaluation_requests_employee_id_fkey"
+            columns: ["employee_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "performance_evaluation_requests_evaluator_id_fkey"
+            columns: ["evaluator_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "performance_evaluation_requests_requested_by_fkey"
+            columns: ["requested_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      performance_evaluations: {
+        Row: {
+          average_score: number
+          category: string
+          created_at: string
+          criteria_count: number
+          employee_id: string
+          evaluator_designation: string | null
+          evaluator_id: string
+          id: string
+          justification: string
+          relationship: string | null
+          request_id: string
+          scores: Json
+          total_score: number
+        }
+        Insert: {
+          average_score: number
+          category: string
+          created_at?: string
+          criteria_count: number
+          employee_id: string
+          evaluator_designation?: string | null
+          evaluator_id: string
+          id?: string
+          justification: string
+          relationship?: string | null
+          request_id: string
+          scores: Json
+          total_score: number
+        }
+        Update: {
+          average_score?: number
+          category?: string
+          created_at?: string
+          criteria_count?: number
+          employee_id?: string
+          evaluator_designation?: string | null
+          evaluator_id?: string
+          id?: string
+          justification?: string
+          relationship?: string | null
+          request_id?: string
+          scores?: Json
+          total_score?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "performance_evaluations_employee_id_fkey"
+            columns: ["employee_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "performance_evaluations_evaluator_id_fkey"
+            columns: ["evaluator_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "performance_evaluations_request_id_fkey"
+            columns: ["request_id"]
+            isOneToOne: true
+            referencedRelation: "performance_evaluation_requests"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
     }
     Views: {
       [_ in never]: never
