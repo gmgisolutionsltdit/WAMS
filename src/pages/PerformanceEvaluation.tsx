@@ -11,7 +11,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Badge } from "@/components/ui/badge";
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Checkbox } from "@/components/ui/checkbox";
-import { ClipboardList, Plus, TrendingUp } from "lucide-react";
+import { ClipboardList, Plus, TrendingUp, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 import { format } from "date-fns";
 import {
@@ -221,6 +221,14 @@ const PerformanceEvaluation = () => {
   const updateWeight = async (requestId: string, weight: number) => {
     const { error } = await supabase.from("performance_evaluation_requests").update({ weight }).eq("id", requestId);
     if (error) { toast.error(error.message); return; }
+    fetchAll();
+  };
+
+  const deleteRequest = async (requestId: string) => {
+    if (!window.confirm("Delete this evaluation? This also removes the evaluator's submitted answers, if any, and cannot be undone.")) return;
+    const { error } = await supabase.from("performance_evaluation_requests").delete().eq("id", requestId);
+    if (error) { toast.error(error.message); return; }
+    toast.success("Evaluation deleted");
     fetchAll();
   };
 
@@ -463,6 +471,7 @@ const PerformanceEvaluation = () => {
                       <TableHead>Average Score</TableHead>
                       <TableHead>Category</TableHead>
                       <TableHead>Weight</TableHead>
+                      <TableHead></TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
@@ -487,6 +496,15 @@ const PerformanceEvaluation = () => {
                                 if (v > 0 && v !== r.weight) updateWeight(r.id, v);
                               }}
                             />
+                          </TableCell>
+                          <TableCell>
+                            <Button
+                              variant="ghost" size="icon" className="h-7 w-7 text-destructive hover:text-destructive"
+                              aria-label="Delete this evaluation"
+                              onClick={() => deleteRequest(r.id)}
+                            >
+                              <Trash2 className="h-3.5 w-3.5" />
+                            </Button>
                           </TableCell>
                         </TableRow>
                       );
