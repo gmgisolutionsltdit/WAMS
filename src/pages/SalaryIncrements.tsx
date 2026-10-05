@@ -29,6 +29,8 @@ type Increment = {
   base_salary: number;
   increment_amount: number;
   increment_pct: number;
+  retention_pct: number | null;
+  retention_amount: number | null;
   reason: string | null;
   approved_by: string | null;
   created_at: string;
@@ -248,6 +250,7 @@ const SalaryIncrements = () => {
                 <TableHead>Effective</TableHead>
                 <TableHead className="text-right">Base</TableHead>
                 <TableHead className="text-right">Increment</TableHead>
+                <TableHead className="text-right">Retention</TableHead>
                 <TableHead>Reason</TableHead>
                 {canManage && <TableHead></TableHead>}
               </TableRow>
@@ -255,7 +258,7 @@ const SalaryIncrements = () => {
             <TableBody>
               {visible.length === 0 ? (
                 <TableRow>
-                  <TableCell colSpan={canManage ? 7 : 6} className="text-center text-muted-foreground">
+                  <TableCell colSpan={canManage ? 8 : 7} className="text-center text-muted-foreground">
                     No salary increment records
                   </TableCell>
                 </TableRow>
@@ -275,6 +278,11 @@ const SalaryIncrements = () => {
                       {r.increment_pct > 0 && (
                         <span className="text-xs text-muted-foreground ml-1">({r.increment_pct}%)</span>
                       )}
+                    </TableCell>
+                    <TableCell className="text-right">
+                      {r.retention_amount
+                        ? <>+{fmtMoney(r.retention_amount)}{r.retention_pct ? <span className="text-xs text-muted-foreground ml-1">({r.retention_pct}%)</span> : null}</>
+                        : "—"}
                     </TableCell>
                     <TableCell className="max-w-xs truncate">{r.reason || "—"}</TableCell>
                     {canManage && (

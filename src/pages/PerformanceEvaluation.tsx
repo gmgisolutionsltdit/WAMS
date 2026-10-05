@@ -21,6 +21,7 @@ import {
 } from "@/lib/performanceEvaluation";
 import {
   COMPANY_SCENARIOS, companyScenario, finalIncrementPct, grossAfterIncrement,
+  basicFromGross, incrementAmountFromBasic,
   RETENTION_CHECKLIST_ITEMS, RETENTION_PERIODS, type CompanyScenario,
 } from "@/lib/incrementEvaluation";
 import { notifyEmployee } from "@/lib/notifications";
@@ -595,10 +596,17 @@ const PerformanceEvaluation = () => {
   );
 };
 
+const nextMonthValue = () => {
+  const d = new Date();
+  d.setMonth(d.getMonth() + 1);
+  return format(d, "yyyy-MM");
+};
+
 const emptyIncrementForm = (finalization: Finalization) => ({
   company_scenario: "average" as CompanyScenario,
   approved_increment_factor_pct: companyScenario("average").range?.min ?? 0,
   average_recommended_pct: Math.round(((finalization.recommended_min_pct + finalization.recommended_max_pct) / 2) * 100) / 100,
+  effective_from_month: nextMonthValue(),
   retention_recommended: false,
   retention_checklist: [] as string[],
   retention_pct: "",
@@ -624,8 +632,31 @@ const IncrementEvaluationDialog = ({
   const [saving, setSaving] = useState(false);
 
   const scenario = companyScenario(form.company_scenario);
-  const finalPct = finalIncrementPct(form.average_recommended_pct, form.approved_increment_factor_pct, form.company_scenario);
-  const grossAfter = grossAfterIncrement(finalization.gross_salary, finalPct);
+  // Annual increment is applied only on Basic Salary, not gross.
+  const basicBefore = basicFromGross(finalization.gross_salary);
+  const basePct = finalIncrementPct(form.average_recommended_pct, form.approved_increment_factor_pct, form.company_scenario);
+  const baseAmount = incrementAmountFromBasic(basicBefore, basePct);
+
+  // Retention stacks on top of the performance-based increment: the admin's
+  // final approved % wins if set, otherwise the recommended retention %/amount applies.
+  let retentionPct = 0;
+  let retentionAmount = 0;
+  if (form.final_approved_retention_pct) {
+    retentionPct = parseFloat(form.final_approved_retention_pct) || 0;
+    retentionAmount = incrementAmountFromBasic(basicBefore, retentionPct);
+  } else if (form.retention_recommended) {
+    if (form.retention_pct) {
+      retentionPct = parseFloat(form.retention_pct) || 0;
+      retentionAmount = incrementAmountFromBasic(basicBefore, retentionPct);
+    } else if (form.retention_amount) {
+      retentionAmount = parseFloat(form.retention_amount) || 0;
+      retentionPct = basicBefore > 0 ? Math.round((retentionAmount / basicBefore) * 100 * 100) / 100 : 0;
+    }
+  }
+
+  const totalAmount = Math.round((baseAmount + retentionAmount) * 100) / 100;
+  const totalPct = basicBefore > 0 ? Math.round((totalAmount / basicBefore) * 100 * 100) / 100 : basePct;
+  const grossAfter = grossAfterIncrement(finalization.gross_salary, totalAmount);
 
   const toggleChecklistItem = (item: string) => {
     setForm((f) => ({
@@ -660,13 +691,13 @@ const IncrementEvaluationDialog = ({
         company_scenario: form.company_scenario,
         approved_increment_factor_pct: form.approved_increment_factor_pct,
         average_recommended_pct: form.average_recommended_pct,
-        final_increment_pct: finalPct,
+        final_increment_pct: totalPct,
         gross_salary_before: finalization.gross_salary,
         gross_salary_after: grossAfter,
         retention_recommended: form.retention_recommended,
         retention_checklist: form.retention_checklist,
-        retention_pct: form.retention_recommended && form.retention_pct ? parseFloat(form.retention_pct) : null,
-        retention_amount: form.retention_recommended && form.retention_amount ? parseFloat(form.retention_amount) : null,
+        retention_pct: retentionPct > 0 ? retentionPct : null,
+        retention_amount: retentionAmount > 0 ? retentionAmount : null,
         retention_period: form.retention_recommended ? form.retention_period || null : null,
         retention_condition: form.retention_recommended ? form.retention_condition.trim() || null : null,
         retention_justification: form.retention_recommended ? form.retention_justification.trim() : null,
@@ -680,11 +711,13 @@ const IncrementEvaluationDialog = ({
       const { data: increment, error: incrError } = await supabase.from("salary_increments").insert({
         user_id: finalization.employee_id,
         cycle_label: `Performance Review ${format(new Date(), "MMM yyyy")}`,
-        effective_from: format(new Date(), "yyyy-MM-dd"),
-        base_salary: finalization.gross_salary,
-        increment_amount: Math.round((grossAfter - finalization.gross_salary) * 100) / 100,
-        increment_pct: finalPct,
-        reason: `Performance: ${finalization.final_category} (weighted avg ${finalization.weighted_average}/5); company scenario: ${scenario.label} @ ${form.approved_increment_factor_pct}% factor.`,
+        effective_from: `${form.effective_from_month}-01`,
+        base_salary: basicBefore,
+        increment_amount: totalAmount,
+        increment_pct: totalPct,
+        retention_pct: retentionPct > 0 ? retentionPct : null,
+        retention_amount: retentionAmount > 0 ? retentionAmount : null,
+        reason: `Performance: ${finalization.final_category} (weighted avg ${finalization.weighted_average}/5)${retentionAmount > 0 ? "; includes a retention increment" : ""}.`,
         approved_by: user.id,
       }).select().single();
       if (incrError) throw incrError;
@@ -749,11 +782,29 @@ const IncrementEvaluationDialog = ({
               onChange={(e) => setForm((f) => ({ ...f, average_recommended_pct: parseFloat(e.target.value) || 0 }))}
             />
             <p className="text-xs text-muted-foreground mt-1">
-              Must be within the policy range {finalization.recommended_min_pct}%–{finalization.recommended_max_pct}%.
+              Must be within the policy range {finalization.recommended_min_pct}%–{finalization.recommended_max_pct}%. Applied to Basic Salary{" "}
+              (<span className="font-mono">{basicBefore.toLocaleString()}</span> BDT).
             </p>
+            <div className="mt-3">
+              <Label>Effective From (month the increment applies)</Label>
+              <Input
+                type="month"
+                value={form.effective_from_month}
+                onChange={(e) => setForm((f) => ({ ...f, effective_from_month: e.target.value }))}
+              />
+            </div>
             <div className="rounded-md bg-muted/40 p-3 text-sm mt-2 space-y-1">
-              <p>Final Annual Increment %: <span className="font-mono font-semibold">{finalPct}%</span></p>
-              <p className="text-xs text-muted-foreground">Gross salary after increment: <span className="font-mono">{grossAfter.toLocaleString()}</span> BDT</p>
+              <p>Final Annual Increment % (incl. retention): <span className="font-mono font-semibold">{totalPct}%</span></p>
+              {retentionAmount > 0 && (
+                <p className="text-xs text-muted-foreground">
+                  Performance {basePct}% (<span className="font-mono">{baseAmount.toLocaleString()}</span> BDT) + retention {retentionPct}%{" "}
+                  (<span className="font-mono">{retentionAmount.toLocaleString()}</span> BDT)
+                </p>
+              )}
+              <p className="text-xs text-muted-foreground">
+                Increment amount: <span className="font-mono">{totalAmount.toLocaleString()}</span> BDT · Gross salary after increment:{" "}
+                <span className="font-mono">{grossAfter.toLocaleString()}</span> BDT
+              </p>
             </div>
           </div>
 
