@@ -15,6 +15,8 @@ import type { ReactNode } from "react";
 import { notifyManagersAndAdmins } from "@/lib/notifications";
 import { computeDailyTotals } from "@/lib/workSchedule";
 import { DEFAULT_OFFICE_END, DEFAULT_OFFICE_START, humanMinutes, timeToMinutes } from "@/lib/officeTime";
+import { hmToHours, hmToMinutes, hoursToHM, minutesToHM } from "@/lib/time";
+import { HourMinuteInput } from "@/components/HourMinuteInput";
 
 const localToday = () => format(new Date(), "yyyy-MM-dd");
 
@@ -280,10 +282,13 @@ export const ManualTimeEntryDialog = ({ onSubmitted, trigger, initial, supersede
             Remaining Office Time: <span className="font-mono">{humanMinutes(remainingOfficeMinutes)}</span>{" "}
             of the {officeWindow.start}–{officeWindow.end} office window, settled from this entry's clock in/out.
           </p>
-          <div>
-            <Label>Break Time (minutes)</Label>
-            <Input type="number" step="5" min="0" value={form.break_minutes} onChange={(e) => setForm((f) => ({ ...f, break_minutes: e.target.value }))} />
-          </div>
+          <HourMinuteInput
+            label="Break Time"
+            hours={minutesToHM(form.break_minutes).h}
+            minutes={minutesToHM(form.break_minutes).m}
+            onHoursChange={(h) => setForm((f) => ({ ...f, break_minutes: String(hmToMinutes(h, minutesToHM(f.break_minutes).m)) }))}
+            onMinutesChange={(m) => setForm((f) => ({ ...f, break_minutes: String(hmToMinutes(minutesToHM(f.break_minutes).h, m)) }))}
+          />
           <div className="grid grid-cols-2 gap-4">
             <div className="space-y-3">
               <div>
@@ -304,22 +309,20 @@ export const ManualTimeEntryDialog = ({ onSubmitted, trigger, initial, supersede
               </div>
             </div>
             <div className="space-y-3">
-              <div>
-                <Label>GMGI Time (hours)</Label>
-                <Input
-                  type="number" step="0.25" min="0"
-                  value={form.gmgi_time}
-                  onChange={(e) => setForm((f) => ({ ...f, gmgi_time: e.target.value }))}
-                />
-              </div>
-              <div>
-                <Label>GM Time (hours)</Label>
-                <Input
-                  type="number" step="0.25" min="0"
-                  value={form.gm_time}
-                  onChange={(e) => setForm((f) => ({ ...f, gm_time: e.target.value }))}
-                />
-              </div>
+              <HourMinuteInput
+                label="GMGI Time"
+                hours={hoursToHM(form.gmgi_time).h}
+                minutes={hoursToHM(form.gmgi_time).m}
+                onHoursChange={(h) => setForm((f) => ({ ...f, gmgi_time: String(hmToHours(h, hoursToHM(f.gmgi_time).m)) }))}
+                onMinutesChange={(m) => setForm((f) => ({ ...f, gmgi_time: String(hmToHours(hoursToHM(f.gmgi_time).h, m)) }))}
+              />
+              <HourMinuteInput
+                label="GM Time"
+                hours={hoursToHM(form.gm_time).h}
+                minutes={hoursToHM(form.gm_time).m}
+                onHoursChange={(h) => setForm((f) => ({ ...f, gm_time: String(hmToHours(h, hoursToHM(f.gm_time).m)) }))}
+                onMinutesChange={(m) => setForm((f) => ({ ...f, gm_time: String(hmToHours(hoursToHM(f.gm_time).h, m)) }))}
+              />
             </div>
           </div>
           <p className={`text-xs -mt-2 ${taskTimeExceedsDuration ? "text-destructive" : "text-muted-foreground"}`}>

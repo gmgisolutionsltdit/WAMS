@@ -14,10 +14,11 @@ import { WORK_FROM_OPTIONS, DEFAULT_WORK_FROM } from "@/lib/workFrom";
 import { format } from "date-fns";
 import { ChevronDown, ChevronRight } from "lucide-react";
 import { useRealtimeSubscription } from "@/hooks/useRealtimeSubscription";
-import { fmtHMS, fmtClock, spanToHMS } from "@/lib/time";
+import { fmtHMS, fmtClock, spanToHMS, hmToHours, hoursToHM } from "@/lib/time";
 import { mergeDailySessions, sessionWorkedSeconds, type AttendanceSession } from "@/lib/attendance";
 import { evaluateArrival, humanMinutes, officeStart } from "@/lib/officeTime";
 import { ManualTimeEntryDialog } from "@/components/ManualTimeEntryDialog";
+import { HourMinuteInput } from "@/components/HourMinuteInput";
 import {
   classifyDay, computeDailyTotals, netRequiredHours, unpaidBreakMinutes, weekendDaysFor,
   type WorkSchedule,
@@ -352,22 +353,20 @@ const Attendance = () => {
                 </div>
               </div>
               <div className="space-y-3">
-                <div>
-                  <Label>GMGI Time (hours)</Label>
-                  <Input
-                    type="number" step="0.25" min="0"
-                    value={closeForm.gmgi_time}
-                    onChange={(e) => setCloseForm((f) => ({ ...f, gmgi_time: e.target.value }))}
-                  />
-                </div>
-                <div>
-                  <Label>GM Time (hours)</Label>
-                  <Input
-                    type="number" step="0.25" min="0"
-                    value={closeForm.gm_time}
-                    onChange={(e) => setCloseForm((f) => ({ ...f, gm_time: e.target.value }))}
-                  />
-                </div>
+                <HourMinuteInput
+                  label="GMGI Time"
+                  hours={hoursToHM(closeForm.gmgi_time).h}
+                  minutes={hoursToHM(closeForm.gmgi_time).m}
+                  onHoursChange={(h) => setCloseForm((f) => ({ ...f, gmgi_time: String(hmToHours(h, hoursToHM(f.gmgi_time).m)) }))}
+                  onMinutesChange={(m) => setCloseForm((f) => ({ ...f, gmgi_time: String(hmToHours(hoursToHM(f.gmgi_time).h, m)) }))}
+                />
+                <HourMinuteInput
+                  label="GM Time"
+                  hours={hoursToHM(closeForm.gm_time).h}
+                  minutes={hoursToHM(closeForm.gm_time).m}
+                  onHoursChange={(h) => setCloseForm((f) => ({ ...f, gm_time: String(hmToHours(h, hoursToHM(f.gm_time).m)) }))}
+                  onMinutesChange={(m) => setCloseForm((f) => ({ ...f, gm_time: String(hmToHours(hoursToHM(f.gm_time).h, m)) }))}
+                />
               </div>
             </div>
             <Button className="w-full" variant="destructive" onClick={confirmClose} disabled={starting}>
@@ -548,6 +547,10 @@ const Attendance = () => {
                                   <TableHead>Work Time</TableHead>
                                   <TableHead>Total Time</TableHead>
                                   <TableHead>Source</TableHead>
+                                  <TableHead>GMGI Task</TableHead>
+                                  <TableHead>GM Task</TableHead>
+                                  <TableHead>GMGI Time</TableHead>
+                                  <TableHead>GM Time</TableHead>
                                   <TableHead>Actions</TableHead>
                                 </TableRow>
                               </TableHeader>
@@ -577,6 +580,10 @@ const Attendance = () => {
                                       )}
                                     </TableCell>
                                     <TableCell className="text-xs text-muted-foreground">{s.device_source || "web"}</TableCell>
+                                    <TableCell className="text-xs">{s.gmgi_task || "—"}</TableCell>
+                                    <TableCell className="text-xs">{s.gm_task || "—"}</TableCell>
+                                    <TableCell className="font-mono text-xs">{s.gmgi_time ? `${s.gmgi_time}h` : "—"}</TableCell>
+                                    <TableCell className="font-mono text-xs">{s.gm_time ? `${s.gm_time}h` : "—"}</TableCell>
                                     <TableCell>
                                       <div className="flex items-center gap-1">
                                         <ManualTimeEntryDialog
@@ -587,6 +594,10 @@ const Attendance = () => {
                                             clock_in: s.clock_in ? format(new Date(s.clock_in), "HH:mm") : "09:00",
                                             clock_out: s.clock_out ? format(new Date(s.clock_out), "HH:mm") : "17:00",
                                             break_minutes: String(Number(s.break_minutes) || 0),
+                                            gmgi_task: s.gmgi_task || "",
+                                            gm_task: s.gm_task || "",
+                                            gmgi_time: s.gmgi_time ? String(s.gmgi_time) : "",
+                                            gm_time: s.gm_time ? String(s.gm_time) : "",
                                             task_note: `Correction to session on ${s.date}`,
                                             reason: "Correction to this session",
                                           }}
