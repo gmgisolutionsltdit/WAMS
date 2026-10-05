@@ -1054,11 +1054,11 @@ const EmployeeProfile = () => {
               <CardContent><div className="text-2xl font-bold">{fmtMoney(salaryBreakdown.gross)}</div></CardContent>
             </Card>
             <Card>
-              <CardHeader className="pb-2"><CardTitle className="text-sm text-muted-foreground">Basic (≈60%)</CardTitle></CardHeader>
+              <CardHeader className="pb-2"><CardTitle className="text-sm text-muted-foreground">Basic (≈50%)</CardTitle></CardHeader>
               <CardContent><div className="text-2xl font-bold">{fmtMoney(salaryBreakdown.basic)}</div></CardContent>
             </Card>
             <Card>
-              <CardHeader className="pb-2"><CardTitle className="text-sm text-muted-foreground">Allowances (≈40%)</CardTitle></CardHeader>
+              <CardHeader className="pb-2"><CardTitle className="text-sm text-muted-foreground">Allowances (≈50%)</CardTitle></CardHeader>
               <CardContent><div className="text-2xl font-bold">{fmtMoney(salaryBreakdown.allowances)}</div></CardContent>
             </Card>
           </div>
@@ -1107,6 +1107,7 @@ const EmployeeProfile = () => {
                     <TableHeader>
                       <TableRow>
                         <TableHead>Effective Date</TableHead>
+                        <TableHead>Effective Month</TableHead>
                         <TableHead>Cycle</TableHead>
                         <TableHead className="text-right">Previous Basic</TableHead>
                         <TableHead className="text-right">Increment</TableHead>
@@ -1130,6 +1131,7 @@ const EmployeeProfile = () => {
                         return (
                           <TableRow key={inc.id}>
                             <TableCell>{fmtDate(inc.effective_from)}</TableCell>
+                            <TableCell>{format(new Date(inc.effective_from), "MMMM yyyy")}</TableCell>
                             <TableCell>{fmt(inc.cycle_label)}</TableCell>
                             <TableCell className="text-right">{fmtMoney(prev)}</TableCell>
                             <TableCell className="text-right text-green-600 font-medium">+{fmtMoney(incAmt)}</TableCell>
