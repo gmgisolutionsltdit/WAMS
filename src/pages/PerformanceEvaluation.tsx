@@ -10,16 +10,45 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
-import { ClipboardList, Plus } from "lucide-react";
+import { Checkbox } from "@/components/ui/checkbox";
+import { ClipboardList, Plus, TrendingUp } from "lucide-react";
 import { toast } from "sonner";
 import { format } from "date-fns";
 import {
   EVALUATION_SECTIONS, TOTAL_CRITERIA_COUNT, summarizeScores, weightedFinalCategory,
-  CATEGORY_BADGE_CLASS, type CriterionScore, type EvaluationCategory,
+  CATEGORY_BADGE_CLASS, salaryCategoryForGross, SALARY_CATEGORY_LABEL, recommendedIncrementRange,
+  type CriterionScore, type EvaluationCategory, type SalaryCategory,
 } from "@/lib/performanceEvaluation";
+import {
+  COMPANY_SCENARIOS, companyScenario, finalIncrementPct, grossAfterIncrement,
+  RETENTION_CHECKLIST_ITEMS, RETENTION_PERIODS, type CompanyScenario,
+} from "@/lib/incrementEvaluation";
 import { notifyEmployee } from "@/lib/notifications";
 
-type Profile = { id: string; full_name: string | null; email: string | null };
+type Profile = { id: string; full_name: string | null; email: string | null; base_salary?: number | null };
+
+type Finalization = {
+  id: string;
+  employee_id: string;
+  finalized_by: string;
+  weighted_average: number;
+  final_category: EvaluationCategory;
+  gross_salary: number;
+  salary_category: SalaryCategory;
+  recommended_min_pct: number;
+  recommended_max_pct: number;
+  request_ids: string[];
+  created_at: string;
+};
+
+type IncrementEval = {
+  id: string;
+  finalization_id: string;
+  employee_id: string;
+  final_increment_pct: number;
+  salary_increment_id: string | null;
+  created_at: string;
+};
 
 type EvalRequest = {
   id: string;
@@ -67,6 +96,8 @@ const PerformanceEvaluation = () => {
   const [evaluations, setEvaluations] = useState<Evaluation[]>([]);
   const [profiles, setProfiles] = useState<Profile[]>([]);
   const [evaluators, setEvaluators] = useState<Profile[]>([]);
+  const [finalizations, setFinalizations] = useState<Finalization[]>([]);
+  const [incrementEvals, setIncrementEvals] = useState<IncrementEval[]>([]);
 
   const [requestOpen, setRequestOpen] = useState(false);
   const [requestForm, setRequestForm] = useState(emptyRequestForm());
@@ -74,6 +105,8 @@ const PerformanceEvaluation = () => {
 
   const [answerRequest, setAnswerRequest] = useState<EvalRequest | null>(null);
   const [answerForm, setAnswerForm] = useState(emptyAnswerForm());
+
+  const [incrementDialogFinalization, setIncrementDialogFinalization] = useState<Finalization | null>(null);
 
   const profileMap = useMemo(() => {
     const m: Record<string, Profile> = {};
@@ -101,8 +134,14 @@ const PerformanceEvaluation = () => {
     setEvaluators((mgrs || []) as Profile[]);
 
     if (isAdmin) {
-      const { data: pf } = await supabase.from("profiles").select("id, full_name, email").order("full_name");
+      const [{ data: pf }, { data: finals }, { data: incEvals }] = await Promise.all([
+        supabase.from("profiles").select("id, full_name, email, base_salary").order("full_name"),
+        supabase.from("performance_evaluation_finalizations").select("*").order("created_at", { ascending: false }),
+        supabase.from("increment_evaluations").select("id, finalization_id, employee_id, final_increment_pct, salary_increment_id, created_at"),
+      ]);
       setProfiles((pf || []) as Profile[]);
+      setFinalizations((finals || []) as unknown as Finalization[]);
+      setIncrementEvals((incEvals || []) as IncrementEval[]);
     }
   }, [user, isAdmin]);
 
@@ -183,6 +222,44 @@ const PerformanceEvaluation = () => {
     if (error) { toast.error(error.message); return; }
     fetchAll();
   };
+
+  // Section 3 + Section 6A: persists the weighted final category alongside
+  // the employee's current gross salary, salary category and the
+  // policy-based increment % range, so the Increment Evaluation Form below
+  // can pick it up without recomputing it from scratch each time.
+  const finalizeEmployee = async (employeeId: string, empRequests: EvalRequest[], final: { weightedAverage: number; category: EvaluationCategory }) => {
+    if (!user) return;
+    const gross = Number(profileMap[employeeId]?.base_salary) || 0;
+    if (gross <= 0) {
+      toast.error("This employee has no gross salary on file — set it in their profile first");
+      return;
+    }
+    const salaryCategory = salaryCategoryForGross(gross);
+    const range = recommendedIncrementRange(salaryCategory, final.category);
+    const { error } = await supabase.from("performance_evaluation_finalizations").insert({
+      employee_id: employeeId,
+      finalized_by: user.id,
+      weighted_average: final.weightedAverage,
+      final_category: final.category,
+      gross_salary: gross,
+      salary_category: salaryCategory,
+      recommended_min_pct: range.min,
+      recommended_max_pct: range.max,
+      request_ids: empRequests.map((r) => r.id),
+    });
+    if (error) { toast.error(error.message); return; }
+    toast.success("Performance result finalized");
+    fetchAll();
+  };
+
+  const latestFinalization = useCallback(
+    (employeeId: string) => finalizations.find((f) => f.employee_id === employeeId),
+    [finalizations],
+  );
+  const incrementEvalFor = useCallback(
+    (finalizationId: string) => incrementEvals.find((e) => e.finalization_id === finalizationId),
+    [incrementEvals],
+  );
 
   // Employee-level view: every evaluation's average score, weighted by its
   // request's admin-assigned weight, decides the final Section 6 category.
@@ -337,17 +414,46 @@ const PerformanceEvaluation = () => {
           <CardContent className="space-y-6">
             {employeeGroups.length === 0 ? (
               <p className="text-sm text-muted-foreground">No evaluations requested yet.</p>
-            ) : employeeGroups.map((g) => (
+            ) : employeeGroups.map((g) => {
+              const finalization = latestFinalization(g.employeeId);
+              const incrementEval = finalization ? incrementEvalFor(finalization.id) : undefined;
+              const hasSubmitted = g.evaluations.length > 0;
+              return (
               <div key={g.employeeId} className="rounded-lg border p-4 space-y-3">
                 <div className="flex items-center justify-between flex-wrap gap-2">
                   <p className="font-medium">{profileMap[g.employeeId]?.full_name || profileMap[g.employeeId]?.email || "—"}</p>
                   {g.final && (
-                    <div className="flex items-center gap-2">
-                      <span className="text-xs text-muted-foreground">Final weighted average: {g.final.weightedAverage} / 5</span>
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <span className="text-xs text-muted-foreground">Weighted average: {g.final.weightedAverage} / 5</span>
                       <Badge className={CATEGORY_BADGE_CLASS[g.final.category]}>{g.final.category}</Badge>
+                      <Button size="sm" variant="outline" disabled={!hasSubmitted} onClick={() => finalizeEmployee(g.employeeId, g.requests, g.final!)}>
+                        Finalize
+                      </Button>
                     </div>
                   )}
                 </div>
+
+                {finalization && (
+                  <div className="rounded-md bg-muted/40 p-3 text-xs space-y-1">
+                    <p>
+                      Finalized {format(new Date(finalization.created_at), "MMM d, yyyy")}: {SALARY_CATEGORY_LABEL[finalization.salary_category]},{" "}
+                      {finalization.final_category} → recommended annual increment{" "}
+                      <span className="font-mono">{finalization.recommended_min_pct}% – {finalization.recommended_max_pct}%</span> of gross salary{" "}
+                      <span className="font-mono">{finalization.gross_salary.toLocaleString()}</span> BDT.
+                    </p>
+                    {incrementEval ? (
+                      <p className="text-success-foreground">
+                        Increment decided: <span className="font-mono">{incrementEval.final_increment_pct}%</span>
+                        {incrementEval.salary_increment_id && " — applied to Salary Increments"}
+                      </p>
+                    ) : (
+                      <Button size="sm" className="mt-1" onClick={() => setIncrementDialogFinalization(finalization)}>
+                        <TrendingUp className="h-3.5 w-3.5 mr-1" /> Create Increment Recommendation
+                      </Button>
+                    )}
+                  </div>
+                )}
+
                 <Table>
                   <TableHeader>
                     <TableRow>
@@ -387,7 +493,8 @@ const PerformanceEvaluation = () => {
                   </TableBody>
                 </Table>
               </div>
-            ))}
+              );
+            })}
           </CardContent>
         </Card>
       )}
@@ -475,7 +582,254 @@ const PerformanceEvaluation = () => {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      {incrementDialogFinalization && (
+        <IncrementEvaluationDialog
+          finalization={incrementDialogFinalization}
+          employeeName={profileMap[incrementDialogFinalization.employee_id]?.full_name || profileMap[incrementDialogFinalization.employee_id]?.email || "this employee"}
+          onClose={() => setIncrementDialogFinalization(null)}
+          onSaved={() => { setIncrementDialogFinalization(null); fetchAll(); }}
+        />
+      )}
     </div>
+  );
+};
+
+const emptyIncrementForm = (finalization: Finalization) => ({
+  company_scenario: "average" as CompanyScenario,
+  approved_increment_factor_pct: companyScenario("average").range?.min ?? 0,
+  average_recommended_pct: Math.round(((finalization.recommended_min_pct + finalization.recommended_max_pct) / 2) * 100) / 100,
+  retention_recommended: false,
+  retention_checklist: [] as string[],
+  retention_pct: "",
+  retention_amount: "",
+  retention_period: "",
+  retention_condition: "",
+  retention_justification: "",
+  final_approved_retention_pct: "",
+  final_approved_bonus_amount: "",
+  final_notes: "",
+});
+
+const IncrementEvaluationDialog = ({
+  finalization, employeeName, onClose, onSaved,
+}: {
+  finalization: Finalization;
+  employeeName: string;
+  onClose: () => void;
+  onSaved: () => void;
+}) => {
+  const { user } = useAuth();
+  const [form, setForm] = useState(emptyIncrementForm(finalization));
+  const [saving, setSaving] = useState(false);
+
+  const scenario = companyScenario(form.company_scenario);
+  const finalPct = finalIncrementPct(form.average_recommended_pct, form.approved_increment_factor_pct, form.company_scenario);
+  const grossAfter = grossAfterIncrement(finalization.gross_salary, finalPct);
+
+  const toggleChecklistItem = (item: string) => {
+    setForm((f) => ({
+      ...f,
+      retention_checklist: f.retention_checklist.includes(item)
+        ? f.retention_checklist.filter((i) => i !== item)
+        : [...f.retention_checklist, item],
+    }));
+  };
+
+  const save = async () => {
+    if (!user) return;
+    if (form.company_scenario !== "freeze" && scenario.range) {
+      if (form.approved_increment_factor_pct < scenario.range.min || form.approved_increment_factor_pct > scenario.range.max) {
+        toast.error(`Approved Increment Factor must be within ${scenario.range.min}%–${scenario.range.max}% for the "${scenario.label}" scenario`);
+        return;
+      }
+    }
+    if (form.average_recommended_pct < finalization.recommended_min_pct || form.average_recommended_pct > finalization.recommended_max_pct) {
+      toast.error(`Average Recommended % must be within the policy range ${finalization.recommended_min_pct}%–${finalization.recommended_max_pct}%`);
+      return;
+    }
+    if (form.retention_recommended && !form.retention_justification.trim()) {
+      toast.error("Retention justification is required when retention is recommended");
+      return;
+    }
+    setSaving(true);
+    try {
+      const { data: incEval, error: incError } = await supabase.from("increment_evaluations").insert({
+        finalization_id: finalization.id,
+        employee_id: finalization.employee_id,
+        company_scenario: form.company_scenario,
+        approved_increment_factor_pct: form.approved_increment_factor_pct,
+        average_recommended_pct: form.average_recommended_pct,
+        final_increment_pct: finalPct,
+        gross_salary_before: finalization.gross_salary,
+        gross_salary_after: grossAfter,
+        retention_recommended: form.retention_recommended,
+        retention_checklist: form.retention_checklist,
+        retention_pct: form.retention_recommended && form.retention_pct ? parseFloat(form.retention_pct) : null,
+        retention_amount: form.retention_recommended && form.retention_amount ? parseFloat(form.retention_amount) : null,
+        retention_period: form.retention_recommended ? form.retention_period || null : null,
+        retention_condition: form.retention_recommended ? form.retention_condition.trim() || null : null,
+        retention_justification: form.retention_recommended ? form.retention_justification.trim() : null,
+        final_approved_retention_pct: form.final_approved_retention_pct ? parseFloat(form.final_approved_retention_pct) : null,
+        final_approved_bonus_amount: form.final_approved_bonus_amount ? parseFloat(form.final_approved_bonus_amount) : null,
+        final_notes: form.final_notes.trim() || null,
+        created_by: user.id,
+      }).select().single();
+      if (incError) throw incError;
+
+      const { data: increment, error: incrError } = await supabase.from("salary_increments").insert({
+        user_id: finalization.employee_id,
+        cycle_label: `Performance Review ${format(new Date(), "MMM yyyy")}`,
+        effective_from: format(new Date(), "yyyy-MM-dd"),
+        base_salary: finalization.gross_salary,
+        increment_amount: Math.round((grossAfter - finalization.gross_salary) * 100) / 100,
+        increment_pct: finalPct,
+        reason: `Performance: ${finalization.final_category} (weighted avg ${finalization.weighted_average}/5); company scenario: ${scenario.label} @ ${form.approved_increment_factor_pct}% factor.`,
+        approved_by: user.id,
+      }).select().single();
+      if (incrError) throw incrError;
+
+      const { error: linkError } = await supabase.from("increment_evaluations").update({ salary_increment_id: increment.id }).eq("id", incEval.id);
+      if (linkError) throw linkError;
+
+      toast.success("Increment decided and applied to Salary Increments");
+      onSaved();
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Failed to save increment recommendation");
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <Dialog open onOpenChange={(o) => !o && onClose()}>
+      <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
+        <DialogHeader><DialogTitle>Increment Evaluation — {employeeName}</DialogTitle></DialogHeader>
+        <div className="space-y-5">
+          <div className="rounded-md bg-muted/40 p-3 text-xs">
+            {SALARY_CATEGORY_LABEL[finalization.salary_category]} · {finalization.final_category} · Policy range{" "}
+            <span className="font-mono">{finalization.recommended_min_pct}%–{finalization.recommended_max_pct}%</span> · Gross salary{" "}
+            <span className="font-mono">{finalization.gross_salary.toLocaleString()}</span> BDT
+          </div>
+
+          <div>
+            <p className="text-sm font-medium mb-2">Section 1: Company Performance Scenario &amp; Approved Increment Factor</p>
+            <div className="grid grid-cols-2 gap-2">
+              {COMPANY_SCENARIOS.map((s) => (
+                <button
+                  key={s.value}
+                  type="button"
+                  className={`rounded-md border p-2 text-left text-xs ${form.company_scenario === s.value ? "border-primary bg-primary/5" : ""}`}
+                  onClick={() => setForm((f) => ({ ...f, company_scenario: s.value, approved_increment_factor_pct: s.range?.min ?? 0 }))}
+                >
+                  <p className="font-medium">{s.label}</p>
+                  <p className="text-muted-foreground">{s.detail}</p>
+                  <p className="text-muted-foreground">{s.range ? `${s.range.min}% – ${s.range.max}%` : "0%"}</p>
+                </button>
+              ))}
+            </div>
+            {form.company_scenario !== "freeze" && (
+              <div className="mt-2">
+                <Label>Approved Increment Factor %</Label>
+                <Input
+                  type="number" step="1"
+                  value={form.approved_increment_factor_pct}
+                  onChange={(e) => setForm((f) => ({ ...f, approved_increment_factor_pct: parseFloat(e.target.value) || 0 }))}
+                />
+              </div>
+            )}
+          </div>
+
+          <div>
+            <p className="text-sm font-medium mb-2">Section 2: Final Annual Increment Calculation</p>
+            <Label>Average Recommended Annual Increment %</Label>
+            <Input
+              type="number" step="0.5"
+              value={form.average_recommended_pct}
+              onChange={(e) => setForm((f) => ({ ...f, average_recommended_pct: parseFloat(e.target.value) || 0 }))}
+            />
+            <p className="text-xs text-muted-foreground mt-1">
+              Must be within the policy range {finalization.recommended_min_pct}%–{finalization.recommended_max_pct}%.
+            </p>
+            <div className="rounded-md bg-muted/40 p-3 text-sm mt-2 space-y-1">
+              <p>Final Annual Increment %: <span className="font-mono font-semibold">{finalPct}%</span></p>
+              <p className="text-xs text-muted-foreground">Gross salary after increment: <span className="font-mono">{grossAfter.toLocaleString()}</span> BDT</p>
+            </div>
+          </div>
+
+          <div>
+            <div className="flex items-center gap-2">
+              <Checkbox checked={form.retention_recommended} onCheckedChange={(c) => setForm((f) => ({ ...f, retention_recommended: !!c }))} />
+              <p className="text-sm font-medium">Section 3: Recommend a Retention Increment</p>
+            </div>
+            {form.retention_recommended && (
+              <div className="space-y-3 mt-2 pl-6">
+                <div className="space-y-1">
+                  {RETENTION_CHECKLIST_ITEMS.map((item) => (
+                    <label key={item} className="flex items-start gap-2 text-xs">
+                      <Checkbox checked={form.retention_checklist.includes(item)} onCheckedChange={() => toggleChecklistItem(item)} className="mt-0.5" />
+                      {item}
+                    </label>
+                  ))}
+                </div>
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <Label>Retention Amount (BDT)</Label>
+                    <Input type="number" value={form.retention_pct ? "" : form.retention_amount} disabled={!!form.retention_pct}
+                      onChange={(e) => setForm((f) => ({ ...f, retention_amount: e.target.value }))} />
+                  </div>
+                  <div>
+                    <Label>OR Retention % of Basic</Label>
+                    <Input type="number" value={form.retention_amount ? "" : form.retention_pct} disabled={!!form.retention_amount}
+                      onChange={(e) => setForm((f) => ({ ...f, retention_pct: e.target.value }))} />
+                  </div>
+                </div>
+                <div>
+                  <Label>Required Retention Period</Label>
+                  <Select value={form.retention_period} onValueChange={(v) => setForm((f) => ({ ...f, retention_period: v }))}>
+                    <SelectTrigger className="mt-1"><SelectValue placeholder="Select period" /></SelectTrigger>
+                    <SelectContent>
+                      {RETENTION_PERIODS.map((p) => <SelectItem key={p} value={p}>{p}</SelectItem>)}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div>
+                  <Label>OR Required Retention Condition</Label>
+                  <Textarea rows={2} value={form.retention_condition} onChange={(e) => setForm((f) => ({ ...f, retention_condition: e.target.value }))} />
+                </div>
+                <div>
+                  <Label>Retention Justification (required)</Label>
+                  <Textarea rows={2} value={form.retention_justification} onChange={(e) => setForm((f) => ({ ...f, retention_justification: e.target.value }))} />
+                </div>
+              </div>
+            )}
+          </div>
+
+          <div>
+            <p className="text-sm font-medium mb-2">Section 4: Final Approval Summary</p>
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <Label>Final Approved Retention % (Basic)</Label>
+                <Input type="number" value={form.final_approved_retention_pct} onChange={(e) => setForm((f) => ({ ...f, final_approved_retention_pct: e.target.value }))} />
+              </div>
+              <div>
+                <Label>Final Approved Bonus (BDT)</Label>
+                <Input type="number" value={form.final_approved_bonus_amount} onChange={(e) => setForm((f) => ({ ...f, final_approved_bonus_amount: e.target.value }))} />
+              </div>
+            </div>
+            <div className="mt-2">
+              <Label>Final Notes / Comments</Label>
+              <Textarea rows={2} value={form.final_notes} onChange={(e) => setForm((f) => ({ ...f, final_notes: e.target.value }))} />
+            </div>
+          </div>
+        </div>
+        <DialogFooter>
+          <Button onClick={save} disabled={saving} className="w-full">
+            {saving ? "Saving…" : "Decide Final Increment & Apply"}
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
   );
 };
 

@@ -79,6 +79,49 @@ export const summarizeScores = (scores: CriterionScore[]) => {
   return { total, average, category: categoryForAverage(average) };
 };
 
+/** Section 3: Employee Category (Salary Range Based), from current gross salary (BDT). */
+export type SalaryCategory = "A" | "B" | "C";
+
+export const SALARY_CATEGORY_LABEL: Record<SalaryCategory, string> = {
+  A: "Category A (Above 40,000 to 60,000 BDT)",
+  B: "Category B (Above 20,000 to 40,000 BDT)",
+  C: "Category C (Up to 20,000 BDT)",
+};
+
+/** The form's bands cap at 60,000; a gross above that is treated as Category A, the top band. */
+export const salaryCategoryForGross = (gross: number): SalaryCategory => {
+  if (gross > 40000) return "A";
+  if (gross > 20000) return "B";
+  return "C";
+};
+
+export type IncrementRange = { min: number; max: number };
+
+/** Section 6A: Annual Increment Range Table (Policy Reference) — % range by salary category x performance category. */
+const INCREMENT_POLICY: Record<SalaryCategory, Record<EvaluationCategory, IncrementRange>> = {
+  A: {
+    "Outstanding": { min: 20, max: 30 },
+    "Above Expectation": { min: 10, max: 20 },
+    "Meet Expectation": { min: 5, max: 10 },
+    "Below Expectation": { min: 0, max: 5 },
+  },
+  B: {
+    "Outstanding": { min: 20, max: 40 },
+    "Above Expectation": { min: 20, max: 25 },
+    "Meet Expectation": { min: 10, max: 20 },
+    "Below Expectation": { min: 0, max: 10 },
+  },
+  C: {
+    "Outstanding": { min: 40, max: 50 },
+    "Above Expectation": { min: 30, max: 40 },
+    "Meet Expectation": { min: 20, max: 30 },
+    "Below Expectation": { min: 0, max: 20 },
+  },
+};
+
+export const recommendedIncrementRange = (salaryCategory: SalaryCategory, performanceCategory: EvaluationCategory): IncrementRange =>
+  INCREMENT_POLICY[salaryCategory][performanceCategory];
+
 /** Final Section 6 category when an employee has multiple evaluators, combined via the admin-assigned weight on each. */
 export const weightedFinalCategory = (evaluations: { average_score: number; weight: number }[]): {
   weightedAverage: number;
