@@ -2395,6 +2395,291 @@ export type Database = {
           },
         ]
       }
+      performance_evaluation_requests: {
+        Row: {
+          created_at: string
+          employee_id: string
+          evaluator_id: string
+          id: string
+          period_from: string | null
+          period_to: string | null
+          requested_by: string
+          status: string
+          submitted_at: string | null
+          weight: number
+        }
+        Insert: {
+          created_at?: string
+          employee_id: string
+          evaluator_id: string
+          id?: string
+          period_from?: string | null
+          period_to?: string | null
+          requested_by: string
+          status?: string
+          submitted_at?: string | null
+          weight?: number
+        }
+        Update: {
+          created_at?: string
+          employee_id?: string
+          evaluator_id?: string
+          id?: string
+          period_from?: string | null
+          period_to?: string | null
+          requested_by?: string
+          status?: string
+          submitted_at?: string | null
+          weight?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "performance_evaluation_requests_employee_id_fkey"
+            columns: ["employee_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "performance_evaluation_requests_evaluator_id_fkey"
+            columns: ["evaluator_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "performance_evaluation_requests_requested_by_fkey"
+            columns: ["requested_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      performance_evaluations: {
+        Row: {
+          average_score: number
+          category: string
+          created_at: string
+          criteria_count: number
+          employee_id: string
+          evaluator_designation: string | null
+          evaluator_id: string
+          id: string
+          justification: string
+          relationship: string | null
+          request_id: string
+          scores: Json
+          total_score: number
+        }
+        Insert: {
+          average_score: number
+          category: string
+          created_at?: string
+          criteria_count: number
+          employee_id: string
+          evaluator_designation?: string | null
+          evaluator_id: string
+          id?: string
+          justification: string
+          relationship?: string | null
+          request_id: string
+          scores: Json
+          total_score: number
+        }
+        Update: {
+          average_score?: number
+          category?: string
+          created_at?: string
+          criteria_count?: number
+          employee_id?: string
+          evaluator_designation?: string | null
+          evaluator_id?: string
+          id?: string
+          justification?: string
+          relationship?: string | null
+          request_id?: string
+          scores?: Json
+          total_score?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "performance_evaluations_employee_id_fkey"
+            columns: ["employee_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "performance_evaluations_evaluator_id_fkey"
+            columns: ["evaluator_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "performance_evaluations_request_id_fkey"
+            columns: ["request_id"]
+            isOneToOne: true
+            referencedRelation: "performance_evaluation_requests"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      performance_evaluation_finalizations: {
+        Row: {
+          created_at: string
+          employee_id: string
+          final_category: string
+          finalized_by: string
+          gross_salary: number
+          id: string
+          recommended_max_pct: number
+          recommended_min_pct: number
+          request_ids: string[]
+          salary_category: string
+          weighted_average: number
+        }
+        Insert: {
+          created_at?: string
+          employee_id: string
+          final_category: string
+          finalized_by: string
+          gross_salary: number
+          id?: string
+          recommended_max_pct: number
+          recommended_min_pct: number
+          request_ids: string[]
+          salary_category: string
+          weighted_average: number
+        }
+        Update: {
+          created_at?: string
+          employee_id?: string
+          final_category?: string
+          finalized_by?: string
+          gross_salary?: number
+          id?: string
+          recommended_max_pct?: number
+          recommended_min_pct?: number
+          request_ids?: string[]
+          salary_category?: string
+          weighted_average?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "performance_evaluation_finalizations_employee_id_fkey"
+            columns: ["employee_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "performance_evaluation_finalizations_finalized_by_fkey"
+            columns: ["finalized_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      increment_evaluations: {
+        Row: {
+          approved_increment_factor_pct: number
+          average_recommended_pct: number
+          company_scenario: string
+          created_at: string
+          created_by: string
+          employee_id: string
+          final_approved_bonus_amount: number | null
+          final_approved_retention_pct: number | null
+          final_increment_pct: number
+          final_notes: string | null
+          finalization_id: string
+          gross_salary_after: number
+          gross_salary_before: number
+          id: string
+          retention_amount: number | null
+          retention_checklist: string[]
+          retention_condition: string | null
+          retention_justification: string | null
+          retention_pct: number | null
+          retention_period: string | null
+          retention_recommended: boolean
+          salary_increment_id: string | null
+        }
+        Insert: {
+          approved_increment_factor_pct?: number
+          average_recommended_pct: number
+          company_scenario: string
+          created_at?: string
+          created_by: string
+          employee_id: string
+          final_approved_bonus_amount?: number | null
+          final_approved_retention_pct?: number | null
+          final_increment_pct: number
+          final_notes?: string | null
+          finalization_id: string
+          gross_salary_after: number
+          gross_salary_before: number
+          id?: string
+          retention_amount?: number | null
+          retention_checklist?: string[]
+          retention_condition?: string | null
+          retention_justification?: string | null
+          retention_pct?: number | null
+          retention_period?: string | null
+          retention_recommended?: boolean
+          salary_increment_id?: string | null
+        }
+        Update: {
+          approved_increment_factor_pct?: number
+          average_recommended_pct?: number
+          company_scenario?: string
+          created_at?: string
+          created_by?: string
+          employee_id?: string
+          final_approved_bonus_amount?: number | null
+          final_approved_retention_pct?: number | null
+          final_increment_pct?: number
+          final_notes?: string | null
+          finalization_id?: string
+          gross_salary_after?: number
+          gross_salary_before?: number
+          id?: string
+          retention_amount?: number | null
+          retention_checklist?: string[]
+          retention_condition?: string | null
+          retention_justification?: string | null
+          retention_pct?: number | null
+          retention_period?: string | null
+          retention_recommended?: boolean
+          salary_increment_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "increment_evaluations_employee_id_fkey"
+            columns: ["employee_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "increment_evaluations_finalization_id_fkey"
+            columns: ["finalization_id"]
+            isOneToOne: false
+            referencedRelation: "performance_evaluation_finalizations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "increment_evaluations_salary_increment_id_fkey"
+            columns: ["salary_increment_id"]
+            isOneToOne: false
+            referencedRelation: "salary_increments"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
     }
     Views: {
       [_ in never]: never

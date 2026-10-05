@@ -30,6 +30,7 @@ import Payment from "./pages/Payment";
 import NoticeBoard from "./pages/NoticeBoard";
 import SOP from "./pages/SOP";
 import TeamMemberDetails from "./pages/TeamMemberDetails";
+import PerformanceEvaluation from "./pages/PerformanceEvaluation";
 
 const queryClient = new QueryClient();
 
@@ -70,6 +71,7 @@ const AppRoutes = () => (
     <Route path="/attendance" element={<ProtectedRoute><Attendance /></ProtectedRoute>} />
     <Route path="/ot-requests" element={<ProtectedRoute><OTRequests /></ProtectedRoute>} />
     <Route path="/approvals" element={<ProtectedRoute><RoleGate allow={["admin", "manager"]}><Approvals /></RoleGate></ProtectedRoute>} />
+    <Route path="/performance-evaluation" element={<ProtectedRoute><RoleGate allow={["admin", "manager"]}><PerformanceEvaluation /></RoleGate></ProtectedRoute>} />
     <Route path="/reports" element={<ProtectedRoute><Reports /></ProtectedRoute>} />
     <Route path="/settings" element={<ProtectedRoute><RoleGate allow={["admin"]}><SettingsPage /></RoleGate></ProtectedRoute>} />
     <Route path="/employees" element={<ProtectedRoute><RoleGate allow={["admin"]}><EmployeeManagement /></RoleGate></ProtectedRoute>} />
