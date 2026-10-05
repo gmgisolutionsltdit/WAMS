@@ -29,3 +29,23 @@ export const fmtClock = (value: string | Date | null | undefined): string =>
 /** Format a timestamp with seconds in 24h form, e.g. "09:04:31". */
 export const fmtClock24 = (value: string | Date | null | undefined): string =>
   value ? format(new Date(value), "HH:mm:ss") : "—";
+
+/** Split a total-minutes value (e.g. break_minutes) into whole hour/minute parts for an Hour/Minute input pair. */
+export const minutesToHM = (totalMinutes: number | string | null | undefined): { h: string; m: string } => {
+  const total = Math.max(0, Math.round(Number(totalMinutes) || 0));
+  return { h: String(Math.floor(total / 60)), m: String(total % 60) };
+};
+
+/** Combine hour/minute input parts back into a total-minutes value. */
+export const hmToMinutes = (h: string, m: string): number =>
+  Math.max(0, Math.round(Number(h) || 0) * 60 + Math.max(0, Math.round(Number(m) || 0)));
+
+/** Split a decimal-hours value (e.g. gmgi_time) into whole hour/minute parts for an Hour/Minute input pair. */
+export const hoursToHM = (decimalHours: number | string | null | undefined): { h: string; m: string } => {
+  const totalMinutes = Math.max(0, Math.round((Number(decimalHours) || 0) * 60));
+  return { h: String(Math.floor(totalMinutes / 60)), m: String(totalMinutes % 60) };
+};
+
+/** Combine hour/minute input parts back into a decimal-hours value, rounded to 2 decimals. */
+export const hmToHours = (h: string, m: string): number =>
+  Math.round((hmToMinutes(h, m) / 60) * 100) / 100;
