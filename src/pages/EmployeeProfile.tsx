@@ -136,6 +136,10 @@ type Increment = {
   base_salary: number;
   increment_amount: number;
   increment_pct: number;
+  retention_pct: number | null;
+  retention_amount: number | null;
+  gross_salary_before: number | null;
+  gross_salary_after: number | null;
   cycle_label: string;
   reason: string | null;
 };
@@ -1103,10 +1107,12 @@ const EmployeeProfile = () => {
                       <TableRow>
                         <TableHead>Effective Date</TableHead>
                         <TableHead>Cycle</TableHead>
-                        <TableHead className="text-right">Previous Salary</TableHead>
+                        <TableHead className="text-right">Previous Basic</TableHead>
                         <TableHead className="text-right">Increment</TableHead>
-                        <TableHead className="text-right">%</TableHead>
-                        <TableHead className="text-right">New Salary</TableHead>
+                        <TableHead className="text-right">Main %</TableHead>
+                        <TableHead className="text-right">Retention %</TableHead>
+                        <TableHead className="text-right">New Basic</TableHead>
+                        <TableHead className="text-right">New Gross</TableHead>
                         <TableHead>Reason</TableHead>
                       </TableRow>
                     </TableHeader>
@@ -1115,14 +1121,20 @@ const EmployeeProfile = () => {
                         const prev = Number(inc.base_salary) || 0;
                         const incAmt = Number(inc.increment_amount) || 0;
                         const newSal = prev + incAmt;
+                        const retentionPct = Number(inc.retention_pct) || 0;
+                        const mainPct = Math.round(((Number(inc.increment_pct) || 0) - retentionPct) * 100) / 100;
                         return (
                           <TableRow key={inc.id}>
                             <TableCell>{fmtDate(inc.effective_from)}</TableCell>
                             <TableCell>{fmt(inc.cycle_label)}</TableCell>
                             <TableCell className="text-right">{fmtMoney(prev)}</TableCell>
                             <TableCell className="text-right text-green-600 font-medium">+{fmtMoney(incAmt)}</TableCell>
-                            <TableCell className="text-right">{Number(inc.increment_pct || 0).toFixed(2)}%</TableCell>
+                            <TableCell className="text-right">{mainPct.toFixed(2)}%</TableCell>
+                            <TableCell className="text-right">{retentionPct > 0 ? `${retentionPct.toFixed(2)}%` : "—"}</TableCell>
                             <TableCell className="text-right font-semibold">{fmtMoney(newSal)}</TableCell>
+                            <TableCell className="text-right font-semibold">
+                              {inc.gross_salary_after != null ? fmtMoney(Number(inc.gross_salary_after)) : "—"}
+                            </TableCell>
                             <TableCell className="text-sm text-muted-foreground">{fmt(inc.reason)}</TableCell>
                           </TableRow>
                         );

@@ -1871,6 +1871,8 @@ export type Database = {
           cycle_label: string
           effective_from: string
           effective_to: string | null
+          gross_salary_after: number | null
+          gross_salary_before: number | null
           id: string
           increment_amount: number
           increment_pct: number
@@ -1887,6 +1889,8 @@ export type Database = {
           cycle_label: string
           effective_from: string
           effective_to?: string | null
+          gross_salary_after?: number | null
+          gross_salary_before?: number | null
           id?: string
           increment_amount?: number
           increment_pct?: number
@@ -1903,6 +1907,8 @@ export type Database = {
           cycle_label?: string
           effective_from?: string
           effective_to?: string | null
+          gross_salary_after?: number | null
+          gross_salary_before?: number | null
           id?: string
           increment_amount?: number
           increment_pct?: number
