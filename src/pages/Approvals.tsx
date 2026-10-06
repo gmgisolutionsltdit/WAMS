@@ -17,6 +17,10 @@ import { applyOTFulfillment } from "@/lib/otFulfillment";
 import { humanMinutes } from "@/lib/officeTime";
 import AttachmentThumbnails from "@/components/AttachmentThumbnails";
 
+/** RLS blocks a disallowed update/delete without an error — it just matches 0 rows,
+ *  which would otherwise look like silent success. */
+const NOT_ALLOWED = "You're not assigned as this employee's approver, so this action didn't go through.";
+
 const otStatusStyle = (status: string) => {
   if (status === "approved") return "bg-lime-500 text-white hover:bg-lime-600 border-lime-500";
   if (status === "rejected") return "bg-[#FF6347] text-white hover:bg-[#E5533D] border-[#FF6347]";
@@ -25,7 +29,7 @@ const otStatusStyle = (status: string) => {
 };
 
 const Approvals = () => {
-  const { user, role } = useAuth();
+  const { user } = useAuth();
   const [pending, setPending] = useState<any[]>([]);
   const [history, setHistory] = useState<any[]>([]);
   const [stats, setStats] = useState({ totalOT: 0, pendingCount: 0, activeEmployees: 0 });
@@ -38,7 +42,6 @@ const Approvals = () => {
   const [names, setNames] = useState<Record<string, string>>({});
   const [notes, setNotes] = useState<Record<string, string>>({});
   const [manualOT, setManualOT] = useState<Record<string, string>>({});
-  const [startTimeApproverRole, setStartTimeApproverRole] = useState("admin");
 
   const [editOpen, setEditOpen] = useState(false);
   const [editReq, setEditReq] = useState<any>(null);
@@ -75,9 +78,6 @@ const Approvals = () => {
     const ltNames: Record<string, string> = {};
     (leaveTypes || []).forEach((lt: { id: string; name: string }) => { ltNames[lt.id] = lt.name; });
     setLeaveTypeNames(ltNames);
-
-    const { data: cfg } = await supabase.from("settings").select("start_time_approver_role").limit(1).maybeSingle();
-    setStartTimeApproverRole((cfg as { start_time_approver_role?: string } | null)?.start_time_approver_role || "admin");
 
     const ids = Array.from(new Set(
       [...(manualReqs || []), ...(lateReqs || []), ...(lateHist || []), ...(leaveReqs || []), ...(leaveHist || [])]
@@ -119,7 +119,7 @@ const Approvals = () => {
         overtimeOverride = parsed;
       }
     }
-    const { error } = await supabase
+    const { data, error } = await supabase
       .from("manual_time_requests")
       .update({
         status,
@@ -127,8 +127,10 @@ const Approvals = () => {
         approver_note: notes[req.id] || null,
         ...(overtimeOverride !== undefined ? { overtime_hours: overtimeOverride } : {}),
       })
-      .eq("id", req.id);
+      .eq("id", req.id)
+      .select("id");
     if (error) { toast.error(error.message); return; }
+    if (!data?.length) { toast.error(NOT_ALLOWED); return; }
     toast.success(`Manual time request ${status}`);
     await notifyEmployee(
       req.user_id,
@@ -142,11 +144,13 @@ const Approvals = () => {
 
   const decideLate = async (req: any, status: "approved" | "rejected") => {
     if (!user) return;
-    const { error } = await supabase
+    const { data, error } = await supabase
       .from("late_time_requests")
       .update({ status, approved_by: user.id, approver_note: notes[req.id] || null })
-      .eq("id", req.id);
+      .eq("id", req.id)
+      .select("id");
     if (error) { toast.error(error.message); return; }
+    if (!data?.length) { toast.error(NOT_ALLOWED); return; }
     toast.success(`Late time request ${status}`);
     await notifyEmployee(
       req.user_id,
@@ -180,11 +184,13 @@ const Approvals = () => {
 
   const decideLeave = async (req: any, status: "approved" | "rejected") => {
     if (!user) return;
-    const { error } = await supabase
+    const { data, error } = await supabase
       .from("leave_requests")
       .update({ status, approver_id: user.id, approver_note: notes[req.id] || null, approved_at: new Date().toISOString() })
-      .eq("id", req.id);
+      .eq("id", req.id)
+      .select("id");
     if (error) { toast.error(error.message); return; }
+    if (!data?.length) { toast.error(NOT_ALLOWED); return; }
     if (status === "approved") await applyLeaveBalance(req);
     toast.success(`Leave request ${status}`);
     await notifyEmployee(
@@ -204,8 +210,13 @@ const Approvals = () => {
     if (status === "approved") {
       finalHours = await applyOTFulfillment(req.user_id, req.date, req.requested_hours);
     }
-    const { error } = await supabase.from("overtime_requests").update({ status, approved_by: user.id, requested_hours: finalHours }).eq("id", req.id);
+    const { data, error } = await supabase
+      .from("overtime_requests")
+      .update({ status, approved_by: user.id, requested_hours: finalHours })
+      .eq("id", req.id)
+      .select("id");
     if (error) toast.error(error.message);
+    else if (!data?.length) toast.error(NOT_ALLOWED);
     else {
       const detail = status === "approved" && finalHours < req.requested_hours
         ? ` (adjusted from ${req.requested_hours}h to ${finalHours}h after standard hours fulfillment)`
@@ -224,24 +235,27 @@ const Approvals = () => {
 
   const deleteOT = async (req: any) => {
     if (!window.confirm("Delete this OT request? This cannot be undone.")) return;
-    const { error } = await supabase.from("overtime_requests").delete().eq("id", req.id);
+    const { data, error } = await supabase.from("overtime_requests").delete().eq("id", req.id).select("id");
     if (error) { toast.error(error.message); return; }
+    if (!data?.length) { toast.error(NOT_ALLOWED); return; }
     toast.success("OT request deleted");
     fetchData();
   };
 
   const deleteLeave = async (req: any) => {
     if (!window.confirm("Delete this leave request? This cannot be undone.")) return;
-    const { error } = await supabase.from("leave_requests").delete().eq("id", req.id);
+    const { data, error } = await supabase.from("leave_requests").delete().eq("id", req.id).select("id");
     if (error) { toast.error(error.message); return; }
+    if (!data?.length) { toast.error(NOT_ALLOWED); return; }
     toast.success("Leave request deleted");
     fetchData();
   };
 
   const deleteLate = async (req: any) => {
     if (!window.confirm("Delete this late time request? This cannot be undone.")) return;
-    const { error } = await supabase.from("late_time_requests").delete().eq("id", req.id);
+    const { data, error } = await supabase.from("late_time_requests").delete().eq("id", req.id).select("id");
     if (error) { toast.error(error.message); return; }
+    if (!data?.length) { toast.error(NOT_ALLOWED); return; }
     toast.success("Late time request deleted");
     fetchData();
   };
@@ -257,7 +271,7 @@ const Approvals = () => {
     const newHours = parseFloat(editHours);
     if (isNaN(newHours) || newHours <= 0) { toast.error("Invalid hours"); return; }
     const adjustedHours = await applyOTFulfillment(editReq.user_id, editReq.date, newHours);
-    const { error } = await supabase
+    const { data, error } = await supabase
       .from("overtime_requests")
       .update({
         requested_hours: adjustedHours,
@@ -267,8 +281,10 @@ const Approvals = () => {
         modified_by: user.id,
         modified_at: new Date().toISOString(),
       })
-      .eq("id", editReq.id);
+      .eq("id", editReq.id)
+      .select("id");
     if (error) toast.error(error.message);
+    else if (!data?.length) toast.error(NOT_ALLOWED);
     else {
       const msg = adjustedHours < newHours
         ? `Modified to ${newHours}h, adjusted to ${adjustedHours}h after fulfillment`
@@ -465,18 +481,12 @@ const Approvals = () => {
                     />
                   </TableCell>
                   <TableCell className="space-x-1 whitespace-nowrap">
-                    {req.request_type === "late_adjustment" && role !== "admin" && startTimeApproverRole === "admin" ? (
-                      <span className="text-xs text-muted-foreground">Admin approval required</span>
-                    ) : (
-                      <>
-                        <Button size="sm" className="bg-lime-500 hover:bg-lime-600 text-white" onClick={() => decideLate(req, "approved")}>
-                          <Check className="h-4 w-4 mr-1" /> Approve
-                        </Button>
-                        <Button size="sm" className="bg-[#FF6347] hover:bg-[#E5533D] text-white" onClick={() => decideLate(req, "rejected")}>
-                          <X className="h-4 w-4 mr-1" /> Reject
-                        </Button>
-                      </>
-                    )}
+                    <Button size="sm" className="bg-lime-500 hover:bg-lime-600 text-white" onClick={() => decideLate(req, "approved")}>
+                      <Check className="h-4 w-4 mr-1" /> Approve
+                    </Button>
+                    <Button size="sm" className="bg-[#FF6347] hover:bg-[#E5533D] text-white" onClick={() => decideLate(req, "rejected")}>
+                      <X className="h-4 w-4 mr-1" /> Reject
+                    </Button>
                   </TableCell>
                 </TableRow>
               ))}
