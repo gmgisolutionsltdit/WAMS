@@ -392,7 +392,7 @@ const Attendance = () => {
 
       <Card>
       <CardHeader>
-        <CardTitle>My Attendance History</CardTitle>
+        <CardTitle className="text-green-600">My Attendance History</CardTitle>
         <p className="text-xs text-muted-foreground">
           Multiple punches on the same day are merged into one record — expand a row to see each session.
         </p>
