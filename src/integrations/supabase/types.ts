@@ -342,6 +342,7 @@ export type Database = {
           currency: string
           description: string | null
           direction: string
+          entry_type: string
           id: string
           paid_date: string | null
           payment_status: string
@@ -364,6 +365,7 @@ export type Database = {
           currency?: string
           description?: string | null
           direction?: string
+          entry_type?: string
           id?: string
           paid_date?: string | null
           payment_status?: string
@@ -386,6 +388,7 @@ export type Database = {
           currency?: string
           description?: string | null
           direction?: string
+          entry_type?: string
           id?: string
           paid_date?: string | null
           payment_status?: string
@@ -422,6 +425,7 @@ export type Database = {
           action_type: string
           admin_id: string
           amount: number
+          carried_to_month: string | null
           created_at: string
           expense_claim_id: string
           id: string
@@ -434,6 +438,7 @@ export type Database = {
           action_type: string
           admin_id: string
           amount?: number
+          carried_to_month?: string | null
           created_at?: string
           expense_claim_id: string
           id?: string
@@ -446,6 +451,7 @@ export type Database = {
           action_type?: string
           admin_id?: string
           amount?: number
+          carried_to_month?: string | null
           created_at?: string
           expense_claim_id?: string
           id?: string
