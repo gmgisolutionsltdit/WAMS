@@ -425,6 +425,7 @@ export type Database = {
           action_type: string
           admin_id: string
           amount: number
+          carried_to_month: string | null
           created_at: string
           expense_claim_id: string
           id: string
@@ -437,6 +438,7 @@ export type Database = {
           action_type: string
           admin_id: string
           amount?: number
+          carried_to_month?: string | null
           created_at?: string
           expense_claim_id: string
           id?: string
@@ -449,6 +451,7 @@ export type Database = {
           action_type?: string
           admin_id?: string
           amount?: number
+          carried_to_month?: string | null
           created_at?: string
           expense_claim_id?: string
           id?: string

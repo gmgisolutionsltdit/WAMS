@@ -646,6 +646,7 @@ const RECOVERY_ACTIONS = [
   { value: "deduct_month", label: "Deduct all this month" },
   { value: "specific_amount", label: "Specific amount / installment" },
   { value: "paid_back_directly", label: "Paid back directly" },
+  { value: "carry_forward", label: "Carry Forward to Next Month" },
   { value: "waive", label: "Waive" },
   { value: "pending", label: "Pending" },
 ];
@@ -657,9 +658,10 @@ const ExpenseRecoverySection = ({
   const [actionType, setActionType] = useState("deduct_month");
   const [amount, setAmount] = useState("");
   const [note, setNote] = useState("");
+  const [carryToMonth, setCarryToMonth] = useState("");
   const [saving, setSaving] = useState(false);
 
-  const openAction = (e: ExpenseRow) => { setActOn(e); setActionType("deduct_month"); setAmount(""); setNote(""); };
+  const openAction = (e: ExpenseRow) => { setActOn(e); setActionType("deduct_month"); setAmount(""); setNote(""); setCarryToMonth(""); };
 
   const remainingOf = (e: ExpenseRow) => Math.max(0, (Number(e.recoverable_total ?? e.amount)) - Number(e.recovered_amount));
 
@@ -672,21 +674,31 @@ const ExpenseRecoverySection = ({
       amt = Number(amount);
       if (!Number.isFinite(amt) || amt <= 0) { toast.error("Enter a positive amount."); return; }
       if (amt > remaining) { toast.error(`Amount cannot exceed the remaining ${remaining}.`); return; }
+    } else if (actionType === "carry_forward" && !carryToMonth) {
+      toast.error("Pick which month to carry this expense forward to.");
+      return;
     }
     setSaving(true);
     try {
+      // Carry Forward defers the remaining amount to a chosen month without
+      // recovering anything this month — same as OT/Due's own Carry Forward.
       const newRecovered = actionType === "waive" ? Number(actOn.recoverable_total ?? actOn.amount) : Number(actOn.recovered_amount) + amt;
       const newRemaining = Math.max(0, Number(actOn.recoverable_total ?? actOn.amount) - newRecovered);
-      const newStatus = actionType === "waive" ? "waived" : actionType === "pending" ? "pending_decision" : newRemaining <= 0 ? "fully_recovered" : "partially_recovered";
+      const newStatus = actionType === "waive" ? "waived"
+        : actionType === "pending" ? "pending_decision"
+        : actionType === "carry_forward" ? "carried_forward"
+        : newRemaining <= 0 ? "fully_recovered" : "partially_recovered";
 
       const { error: actionErr } = await supabase.from("expense_recovery_actions").insert({
         expense_claim_id: actOn.id, user_id: userId, action_type: actionType, amount: amt,
-        remaining_after: newRemaining, month, note: note || null, admin_id: adminId,
+        remaining_after: actionType === "carry_forward" ? remaining : newRemaining, month, note: note || null, admin_id: adminId,
+        carried_to_month: actionType === "carry_forward" ? carryToMonth : null,
       });
       if (actionErr) { toast.error(actionErr.message); return; }
 
       const { error: updErr } = await supabase.from("expense_claims").update({
-        recovered_amount: newRecovered, recovery_status: newStatus,
+        recovered_amount: actionType === "carry_forward" ? actOn.recovered_amount : newRecovered,
+        recovery_status: newStatus,
       }).eq("id", actOn.id);
       if (updErr) { toast.error(updErr.message); return; }
 
@@ -750,6 +762,9 @@ const ExpenseRecoverySection = ({
               </div>
               {(actionType === "specific_amount" || actionType === "paid_back_directly") && (
                 <div><Label>Amount</Label><Input type="number" step="0.01" value={amount} onChange={(e) => setAmount(e.target.value)} /></div>
+              )}
+              {actionType === "carry_forward" && (
+                <div><Label>Carry to month</Label><Input type="month" value={carryToMonth} onChange={(e) => setCarryToMonth(e.target.value)} /></div>
               )}
               {actionType === "waive" && <div><Label>Reason</Label><Textarea rows={2} value={note} onChange={(e) => setNote(e.target.value)} /></div>}
               {actionType !== "waive" && <div><Label>Note (optional)</Label><Textarea rows={2} value={note} onChange={(e) => setNote(e.target.value)} /></div>}
