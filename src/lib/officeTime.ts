@@ -15,6 +15,21 @@ export const DEFAULT_GRACE_MINUTES = 11;
 /** Extra work required for a late day: 2 hours 40 minutes. */
 export const LATE_PENALTY_MINUTES = 160;
 
+/**
+ * The office's own clock (Asia/Dhaka, UTC+6, no DST). Arrival must be judged
+ * against this fixed offset, not the viewing browser's local timezone —
+ * otherwise the same stored clock-in comes out late or on-time depending on
+ * who is looking at it (e.g. an admin's machine vs. the employee's own),
+ * instead of on when the employee actually arrived.
+ */
+const ORG_UTC_OFFSET_MINUTES = 6 * 60;
+
+/** Minutes past midnight, office time, for a given instant. */
+const minutesSinceMidnightOrgTz = (d: Date): number => {
+  const utcMinutes = d.getUTCHours() * 60 + d.getUTCMinutes() + d.getUTCSeconds() / 60;
+  return (((utcMinutes + ORG_UTC_OFFSET_MINUTES) % 1440) + 1440) % 1440;
+};
+
 export type OfficeTime = {
   office_start_time?: string | null;
   office_end_time?: string | null;
@@ -58,7 +73,7 @@ export const evaluateArrival = (
 ): { late: boolean; lateMinutes: number; penaltyMinutes: number } => {
   if (!clockIn) return { late: false, lateMinutes: 0, penaltyMinutes: 0 };
   const d = new Date(clockIn);
-  const arrival = d.getHours() * 60 + d.getMinutes() + d.getSeconds() / 60;
+  const arrival = minutesSinceMidnightOrgTz(d);
   const cutoff = timeToMinutes(officeStart(profile)) + graceMinutes(profile);
   if (arrival <= cutoff) return { late: false, lateMinutes: 0, penaltyMinutes: 0 };
   return {
