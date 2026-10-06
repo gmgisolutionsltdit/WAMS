@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import { useAuth } from "@/contexts/AuthContext";
 import { useRealtimeSubscription } from "@/hooks/useRealtimeSubscription";
 import { supabase } from "@/integrations/supabase/client";
@@ -76,8 +76,17 @@ const Dashboard = () => {
     return () => clearInterval(timer);
   }, []);
 
+  // An explicit call after a mutation (break start/end, clock in/out) and the
+  // attendance_logs realtime subscription both call this for the same
+  // change, with no ordering guarantee. A sequence guard keeps a slower,
+  // already-superseded response from overwriting newer state — e.g. a stale
+  // "still on break" read landing after Resume already cleared it, freezing
+  // the break panel back on.
+  const fetchEmployeeSeq = useRef(0);
+
   const fetchEmployeeData = useCallback(async () => {
     if (!user) return;
+    const seq = ++fetchEmployeeSeq.current;
     const today = localToday();
     const [{ data: todayData }, { data: recent }, { data: otData }] = await Promise.all([
       supabase.from("attendance_logs").select("*").eq("user_id", user.id).eq("date", today).is("clock_out", null).maybeSingle(),
@@ -86,8 +95,10 @@ const Dashboard = () => {
     ]);
     if (!todayData) {
       const { data: completedToday } = await supabase.from("attendance_logs").select("*").eq("user_id", user.id).eq("date", today).order("created_at", { ascending: false }).limit(1).maybeSingle();
+      if (seq !== fetchEmployeeSeq.current) return;
       setTodayLog(completedToday);
     } else {
+      if (seq !== fetchEmployeeSeq.current) return;
       setTodayLog(todayData);
     }
     setRecentLogs(recent || []);

@@ -1,4 +1,4 @@
-import { Fragment, useEffect, useState } from "react";
+import { Fragment, useEffect, useRef, useState } from "react";
 import { useAuth } from "@/contexts/AuthContext";
 import { supabase } from "@/integrations/supabase/client";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -52,8 +52,17 @@ const Attendance = () => {
   // no standard-hours requirement, so any time worked counts as overtime.
   const [leaveDates, setLeaveDates] = useState<Map<string, string>>(new Map());
 
+  // Both an explicit call after a mutation (clock-in, break start/end, close)
+  // and the attendance_logs realtime subscription call fetchData for the same
+  // change, with no ordering guarantee between the two in-flight requests. A
+  // sequence guard keeps a slower, already-superseded response from
+  // overwriting state set by a newer one — e.g. a stale "still on break" read
+  // landing after Resume already cleared it, freezing the break panel back on.
+  const fetchSeq = useRef(0);
+
   const fetchData = () => {
     if (!user) return;
+    const seq = ++fetchSeq.current;
     Promise.all([
       supabase.from("attendance_logs").select("*").eq("user_id", user.id).order("date", { ascending: false }),
       supabase.from("profiles").select("office_start_time, office_end_time, late_grace_minutes, standard_daily_hours, unpaid_break_minutes, working_days, company_wing").eq("id", user.id).maybeSingle(),
@@ -61,6 +70,7 @@ const Attendance = () => {
       supabase.from("overtime_requests").select("date, requested_hours").eq("user_id", user.id).in("status", ["approved", "modified"]),
       supabase.from("leave_requests").select("start_date, end_date, leave_types(name)").eq("user_id", user.id).eq("status", "approved"),
     ]).then(([{ data: logsData }, { data: prof }, { data: holidayRows }, { data: otRows }, { data: leaveRows }]) => {
+      if (seq !== fetchSeq.current) return;
       setLogs((logsData || []) as AttendanceSession[]);
       setSchedule((prof as WorkSchedule) || null);
       // A holiday with no wing applies to everyone; otherwise only to its wing.
