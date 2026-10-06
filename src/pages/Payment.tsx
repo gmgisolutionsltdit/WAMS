@@ -1076,6 +1076,11 @@ const DIRECTIONS = [
   { value: "employee_owes_company", label: "Employee Owes Company" },
 ];
 
+const ENTRY_TYPES = [
+  { value: "expense", label: "Expense" },
+  { value: "advance", label: "Advance" },
+];
+
 function ExpenseClaimsTab() {
   const { user, role } = useAuth();
   const isAdmin = role === "admin";
@@ -1086,7 +1091,7 @@ function ExpenseClaimsTab() {
   const [open, setOpen] = useState(false);
   const [form, setForm] = useState({
     category: "Travel", amount: "", claim_date: format(new Date(), "yyyy-MM-dd"), description: "", receipt_url: "",
-    direction: "company_pays_employee",
+    direction: "company_pays_employee", entry_type: "expense",
   });
   const [uploading, setUploading] = useState(false);
   const [filterMonth, setFilterMonth] = useState<string>("all");
@@ -1140,12 +1145,13 @@ function ExpenseClaimsTab() {
       description: form.description,
       receipt_url: form.receipt_url || null,
       direction: form.direction,
+      entry_type: form.entry_type,
       recoverable_total: form.direction === "employee_owes_company" ? amount : null,
     }).select().single();
     if (error) return toast.error(error.message);
     toast.success("Expense submitted");
     setOpen(false);
-    setForm({ category: "Travel", amount: "", claim_date: format(new Date(), "yyyy-MM-dd"), description: "", receipt_url: "", direction: "company_pays_employee" });
+    setForm({ category: "Travel", amount: "", claim_date: format(new Date(), "yyyy-MM-dd"), description: "", receipt_url: "", direction: "company_pays_employee", entry_type: "expense" });
     await notifyManagersAndAdmins(
       "Expense Claim Submitted",
       `${user?.email} submitted a ${form.category} claim for ${form.amount}.`,
@@ -1206,6 +1212,10 @@ function ExpenseClaimsTab() {
     total: filteredClaims.filter(c => c.category === cat && c.status === "approved").reduce((s,c)=>s+Number(c.amount), 0)
   })).filter(t => t.total > 0);
 
+  const advanceTotal = filteredClaims.filter(c => c.entry_type === "advance" && c.status === "approved").reduce((s, c) => s + Number(c.amount), 0);
+  const expenseTotal = filteredClaims.filter(c => c.entry_type !== "advance" && c.status === "approved").reduce((s, c) => s + Number(c.amount), 0);
+  const netAmount = expenseTotal - advanceTotal;
+
   return (
     <div className="space-y-6">
       <div className="flex justify-between items-center flex-wrap gap-4">
@@ -1222,6 +1232,12 @@ function ExpenseClaimsTab() {
                 <Select value={form.category} onValueChange={(v)=>setForm({...form, category: v})}>
                   <SelectTrigger><SelectValue /></SelectTrigger>
                   <SelectContent>{categories.map(c => <SelectItem key={c} value={c}>{c}</SelectItem>)}</SelectContent>
+                </Select>
+              </div>
+              <div><Label>Entry Type</Label>
+                <Select value={form.entry_type} onValueChange={(v)=>setForm({...form, entry_type: v})}>
+                  <SelectTrigger><SelectValue /></SelectTrigger>
+                  <SelectContent>{ENTRY_TYPES.map(t => <SelectItem key={t.value} value={t.value}>{t.label}</SelectItem>)}</SelectContent>
                 </Select>
               </div>
               <div><Label>Direction</Label>
@@ -1252,6 +1268,12 @@ function ExpenseClaimsTab() {
           <Button size="sm" variant="outline" onClick={addCategory}>Add Expense Type</Button>
         </div>
       )}
+
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+        <Card><CardHeader className="pb-2"><CardDescription>Advance</CardDescription><CardTitle>{advanceTotal.toLocaleString()}</CardTitle></CardHeader></Card>
+        <Card><CardHeader className="pb-2"><CardDescription>Expense</CardDescription><CardTitle>{expenseTotal.toLocaleString()}</CardTitle></CardHeader></Card>
+        <Card><CardHeader className="pb-2"><CardDescription>Net Amount</CardDescription><CardTitle className={netAmount < 0 ? "text-destructive" : ""}>{netAmount.toLocaleString()}</CardTitle></CardHeader></Card>
+      </div>
 
       <div className="flex flex-wrap items-end gap-2">
         <div>
@@ -1321,17 +1343,18 @@ const ClaimTable = ({ claims, showEmployee, onApprove, onReject, onTogglePaid, i
         <TableHeader>
           <TableRow>
             {showEmployee && <TableHead>Employee</TableHead>}
-            <TableHead>Date</TableHead><TableHead>Category</TableHead><TableHead>Direction</TableHead><TableHead>Amount</TableHead><TableHead>Description</TableHead><TableHead>Receipt</TableHead><TableHead>Status</TableHead>
+            <TableHead>Date</TableHead><TableHead>Category</TableHead><TableHead>Entry Type</TableHead><TableHead>Direction</TableHead><TableHead>Amount</TableHead><TableHead>Description</TableHead><TableHead>Receipt</TableHead><TableHead>Status</TableHead>
             {(onApprove || onReject) && <TableHead></TableHead>}
           </TableRow>
         </TableHeader>
         <TableBody>
-          {claims.length === 0 ? <TableRow><TableCell colSpan={showEmployee ? 9 : 8} className="text-center text-muted-foreground">No claims</TableCell></TableRow> :
+          {claims.length === 0 ? <TableRow><TableCell colSpan={showEmployee ? 10 : 9} className="text-center text-muted-foreground">No claims</TableCell></TableRow> :
             claims.map((c: any) => (
               <TableRow key={c.id}>
                 {showEmployee && <TableCell>{c.profiles?.full_name || c.profiles?.email || "—"}</TableCell>}
                 <TableCell>{format(new Date(c.claim_date), "MMM d, yyyy")}</TableCell>
                 <TableCell><Badge variant="outline">{c.category}</Badge></TableCell>
+                <TableCell><Badge variant={c.entry_type === "advance" ? "secondary" : "outline"}>{c.entry_type === "advance" ? "Advance" : "Expense"}</Badge></TableCell>
                 <TableCell>
                   {c.direction === "employee_owes_company" ? (
                     <Badge variant="outline">Employee Owes</Badge>

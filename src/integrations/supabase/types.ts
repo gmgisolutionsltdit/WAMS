@@ -342,6 +342,7 @@ export type Database = {
           currency: string
           description: string | null
           direction: string
+          entry_type: string
           id: string
           paid_date: string | null
           payment_status: string
@@ -364,6 +365,7 @@ export type Database = {
           currency?: string
           description?: string | null
           direction?: string
+          entry_type?: string
           id?: string
           paid_date?: string | null
           payment_status?: string
@@ -386,6 +388,7 @@ export type Database = {
           currency?: string
           description?: string | null
           direction?: string
+          entry_type?: string
           id?: string
           paid_date?: string | null
           payment_status?: string
