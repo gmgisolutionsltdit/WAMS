@@ -193,7 +193,7 @@ const Attendance = () => {
       breakMinutes: Number(openSession.break_minutes) || 0,
       schedule,
     });
-    const { error } = await supabase.from("attendance_logs").update({
+    const { data, error } = await supabase.from("attendance_logs").update({
       clock_out: now.toISOString(),
       total_hours: totals.totalHours,
       overtime_hours: totals.overtimeHours,
@@ -203,19 +203,21 @@ const Attendance = () => {
       gm_task: closeForm.gm_task.trim() || null,
       gmgi_time: gmgiTime,
       gm_time: gmTime,
-    }).eq("id", openSession.id);
+    }).eq("id", openSession.id).select("id");
     if (error) toast.error(error.message);
+    else if (!data?.length) toast.error("Couldn't close this session — try refreshing the page.");
     else { toast.success(`Clocked out! Total: ${totals.totalHours}h`); fetchData(); }
     setStarting(false);
   };
 
   const handleBreakStart = async () => {
     if (!user || !openSession) return;
-    const { error } = await supabase.from("attendance_logs").update({
+    const { data, error } = await supabase.from("attendance_logs").update({
       break_start: new Date().toISOString(),
       break_end: null,
-    }).eq("id", openSession.id);
+    }).eq("id", openSession.id).select("id");
     if (error) toast.error(error.message);
+    else if (!data?.length) toast.error("Couldn't start the break — try refreshing the page.");
     else { toast.success("Break started"); fetchData(); }
   };
 
@@ -224,12 +226,13 @@ const Attendance = () => {
     const now = new Date();
     const breakSecs = Math.max(0, Math.round((now.getTime() - new Date(openSession.break_start).getTime()) / 1000));
     const totalBreak = Math.round(((Number(openSession.break_minutes) || 0) + breakSecs / 60) * 10000) / 10000;
-    const { error } = await supabase.from("attendance_logs").update({
+    const { data, error } = await supabase.from("attendance_logs").update({
       break_end: now.toISOString(),
       break_start: null,
       break_minutes: totalBreak,
-    }).eq("id", openSession.id);
+    }).eq("id", openSession.id).select("id");
     if (error) toast.error(error.message);
+    else if (!data?.length) toast.error("Couldn't resume — try refreshing the page.");
     else { toast.success(`Break ended (${fmtHMS(breakSecs)})`); fetchData(); }
   };
 
