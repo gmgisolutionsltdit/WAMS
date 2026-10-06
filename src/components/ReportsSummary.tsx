@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
@@ -71,6 +71,11 @@ const ReportsSummary = () => {
   const [employees, setEmployees] = useState<EmployeeOption[]>([]);
   const [employeeFilter, setEmployeeFilter] = useState("all");
   const [loading, setLoading] = useState(true);
+  // Guards against an older in-flight fetch (e.g. from before the Employee
+  // filter was switched) resolving after a newer one and clobbering the
+  // right results with stale data — only the most recently started fetch's
+  // response is ever applied to state.
+  const fetchSeq = useRef(0);
   const [rows, setRows] = useState<Summary[]>([]);
   const [changedDays, setChangedDays] = useState<ChangedDay[]>([]);
   const [showChanged, setShowChanged] = useState(false);
@@ -112,9 +117,13 @@ const ReportsSummary = () => {
    * total first so nothing is double counted.
    */
   const fetchSummary = useCallback(async () => {
+    const seq = ++fetchSeq.current;
     setLoading(true);
     try {
-      if (targetIds.length === 0) { setRows([]); setChangedDays([]); return; }
+      if (targetIds.length === 0) {
+        if (seq === fetchSeq.current) { setRows([]); setChangedDays([]); }
+        return;
+      }
 
       const [{ data: scheduleRows }, { data: attRows }, { data: otRows }, { data: roleRows }, { data: holidayRows }, { data: leaveRows }] = await Promise.all([
         supabase.from("profiles").select("id, full_name, email, standard_daily_hours, unpaid_break_minutes, office_start_time, late_grace_minutes, working_days, company_wing").in("id", targetIds),
@@ -257,10 +266,15 @@ const ReportsSummary = () => {
         if (s) s.otDays = set.size;
       });
 
-      setRows(Array.from(byUser.values()).sort((a, b) => a.name.localeCompare(b.name)));
-      setChangedDays(changed.sort((a, b) => a.date.localeCompare(b.date)));
+      // Discard this response if a newer fetch (e.g. the Employee filter
+      // changed again) has already started — applying it now would show
+      // stale counts for whichever employee is currently selected.
+      if (seq === fetchSeq.current) {
+        setRows(Array.from(byUser.values()).sort((a, b) => a.name.localeCompare(b.name)));
+        setChangedDays(changed.sort((a, b) => a.date.localeCompare(b.date)));
+      }
     } finally {
-      setLoading(false);
+      if (seq === fetchSeq.current) setLoading(false);
     }
   }, [targetIds, effectiveRange]);
 
