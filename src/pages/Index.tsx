@@ -254,14 +254,15 @@ const Dashboard = () => {
     if (!pendingClockOut) return;
     setLoading(true);
     const { clockOutTime, logId, totalHours, overtimeHours, breakMins } = pendingClockOut;
-    const { error } = await supabase.from("attendance_logs").update({
+    const { data, error } = await supabase.from("attendance_logs").update({
       clock_out: clockOutTime,
       total_hours: totalHours,
       overtime_hours: overtimeHours,
       break_start: null,
       break_end: null,
-    }).eq("id", logId);
+    }).eq("id", logId).select("id");
     if (error) toast.error(error.message);
+    else if (!data?.length) toast.error("Couldn't close this session — try refreshing the page.");
     else { toast.success(`Clocked out! Total: ${totalHours}h (breaks: ${breakMins}m), OT: ${overtimeHours}h`); fetchEmployeeData(); fetchAdminData(); }
     setPendingClockOut(null);
     setLoading(false);
@@ -271,11 +272,12 @@ const Dashboard = () => {
   const handleBreakStart = async () => {
     if (!user || !todayLog) return;
     setLoading(true);
-    const { error } = await supabase.from("attendance_logs").update({
+    const { data, error } = await supabase.from("attendance_logs").update({
       break_start: new Date().toISOString(),
       break_end: null,
-    }).eq("id", todayLog.id);
+    }).eq("id", todayLog.id).select("id");
     if (error) toast.error(error.message);
+    else if (!data?.length) toast.error("Couldn't start the break — try refreshing the page.");
     else { toast.success("Break started"); fetchEmployeeData(); }
     setLoading(false);
   };
@@ -289,12 +291,13 @@ const Dashboard = () => {
     // from every report and made sub-minute breaks vanish entirely.
     const breakSecs = Math.max(0, Math.round((now.getTime() - breakStart.getTime()) / 1000));
     const totalBreak = toStoredMinutes((Number(todayLog.break_minutes) || 0) + breakSecs / 60);
-    const { error } = await supabase.from("attendance_logs").update({
+    const { data, error } = await supabase.from("attendance_logs").update({
       break_end: now.toISOString(),
       break_start: null,
       break_minutes: totalBreak,
-    }).eq("id", todayLog.id);
+    }).eq("id", todayLog.id).select("id");
     if (error) toast.error(error.message);
+    else if (!data?.length) toast.error("Couldn't resume — try refreshing the page.");
     else { toast.success(`Break ended (${fmtHMS(breakSecs)})`); fetchEmployeeData(); }
     setLoading(false);
   };
