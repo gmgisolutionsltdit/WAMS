@@ -309,6 +309,11 @@ const Attendance = () => {
                     )}
                   </>
                 )}
+                {!isOnBreak && openSession && (Number(openSession.break_minutes) || 0) > 0 && (
+                  <span className="text-[11px] text-muted-foreground">
+                    Earlier breaks {fmtHMS((Number(openSession.break_minutes) || 0) * 60)}
+                  </span>
+                )}
               </div>
               {isOnBreak && openSession?.break_start && (() => {
                 // This break only — restarts at 00:00:00 each time a break
