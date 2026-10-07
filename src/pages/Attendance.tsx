@@ -15,7 +15,7 @@ import { WORK_FROM_OPTIONS, DEFAULT_WORK_FROM } from "@/lib/workFrom";
 import { format } from "date-fns";
 import { ChevronDown, ChevronRight } from "lucide-react";
 import { useRealtimeSubscription } from "@/hooks/useRealtimeSubscription";
-import { fmtHMS, fmtClock, spanToHMS, hmToHours, hoursToHM } from "@/lib/time";
+import { fmtHMS, fmtClock, hmToHours, hoursToHM } from "@/lib/time";
 import { mergeDailySessions, sessionWorkedSeconds, type AttendanceSession } from "@/lib/attendance";
 import { evaluateArrival, humanMinutes, officeStart } from "@/lib/officeTime";
 import { ManualTimeEntryDialog } from "@/components/ManualTimeEntryDialog";
@@ -607,17 +607,19 @@ const Attendance = () => {
                                     </TableCell>
                                     <TableCell className="font-mono text-xs">{fmtHMS((Number(s.break_minutes) || 0) * 60)}</TableCell>
                                     <TableCell className="font-mono text-xs">
-                                      {s.clock_out && s.clock_in
-                                        ? fmtHMS(sessionWorkedSeconds(s))
-                                        : s.clock_in ? spanToHMS(s.clock_in, new Date()) : "—"}
+                                      {/* Net time actually worked, break already deducted - sessionWorkedSeconds
+                                          handles an open session the same as a closed one (clocks against now). */}
+                                      {s.clock_in ? fmtHMS(sessionWorkedSeconds(s)) : "—"}
                                     </TableCell>
                                     <TableCell className="font-mono text-xs">
-                                      {fmtHMS(
-                                        (Number(s.break_minutes) || 0) * 60 +
-                                        (s.clock_out && s.clock_in
-                                          ? sessionWorkedSeconds(s)
-                                          : s.clock_in ? (Date.now() - new Date(s.clock_in).getTime()) / 1000 : 0),
-                                      )}
+                                      {/* Gross clock-in to clock-out span, break included - equal to Work Time +
+                                          Break Time. The open-session case used to take a shortcut that measured
+                                          raw elapsed time *and* added the break on top of it, double-counting the
+                                          break and overstating both this and the Work Time column while a session
+                                          was still in progress. */}
+                                      {s.clock_in
+                                        ? fmtHMS(((s.clock_out ? new Date(s.clock_out).getTime() : Date.now()) - new Date(s.clock_in).getTime()) / 1000)
+                                        : "—"}
                                     </TableCell>
                                     <TableCell className="text-xs text-muted-foreground">{s.device_source === "manual" ? "Manual" : "Automatic"}</TableCell>
                                     <TableCell>
