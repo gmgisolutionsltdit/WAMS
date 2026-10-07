@@ -206,19 +206,34 @@ const Attendance = () => {
     }).eq("id", openSession.id).select("id");
     if (error) toast.error(error.message);
     else if (!data?.length) toast.error("Couldn't close this session — try refreshing the page.");
-    else { toast.success(`Clocked out! Total: ${totals.totalHours}h`); fetchData(); }
+    else {
+      toast.success(`Clocked out! Total: ${totals.totalHours}h`);
+      setLogs((prev) => prev.map((l) => (l.id === openSession.id
+        ? { ...l, clock_out: now.toISOString(), total_hours: totals.totalHours, overtime_hours: totals.overtimeHours, break_start: null, break_end: null }
+        : l)));
+      fetchData();
+    }
     setStarting(false);
   };
 
   const handleBreakStart = async () => {
     if (!user || !openSession) return;
+    const break_start = new Date().toISOString();
     const { data, error } = await supabase.from("attendance_logs").update({
-      break_start: new Date().toISOString(),
+      break_start,
       break_end: null,
     }).eq("id", openSession.id).select("id");
     if (error) toast.error(error.message);
     else if (!data?.length) toast.error("Couldn't start the break — try refreshing the page.");
-    else { toast.success("Break started"); fetchData(); }
+    else {
+      toast.success("Break started");
+      // Apply the change to local state immediately rather than waiting on the
+      // async refetch (triggered both here and by the realtime subscription) -
+      // that round trip is what let a slower, stale read occasionally land
+      // after this one and leave the break panel showing as "still on break".
+      setLogs((prev) => prev.map((l) => (l.id === openSession.id ? { ...l, break_start, break_end: null } : l)));
+      fetchData();
+    }
   };
 
   const handleBreakEnd = async () => {
@@ -233,7 +248,14 @@ const Attendance = () => {
     }).eq("id", openSession.id).select("id");
     if (error) toast.error(error.message);
     else if (!data?.length) toast.error("Couldn't resume — try refreshing the page.");
-    else { toast.success(`Break ended (${fmtHMS(breakSecs)})`); fetchData(); }
+    else {
+      toast.success(`Break ended (${fmtHMS(breakSecs)})`);
+      // See handleBreakStart: apply locally right away so the Current break
+      // panel clears the instant Resume succeeds, instead of waiting on a
+      // refetch that a slower, superseded read could still occasionally win.
+      setLogs((prev) => prev.map((l) => (l.id === openSession.id ? { ...l, break_start: null, break_end: now.toISOString(), break_minutes: totalBreak } : l)));
+      fetchData();
+    }
   };
 
   /** Continuously ticks so the Working duration in the header updates live. */

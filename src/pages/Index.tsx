@@ -263,7 +263,11 @@ const Dashboard = () => {
     }).eq("id", logId).select("id");
     if (error) toast.error(error.message);
     else if (!data?.length) toast.error("Couldn't close this session — try refreshing the page.");
-    else { toast.success(`Clocked out! Total: ${totalHours}h (breaks: ${breakMins}m), OT: ${overtimeHours}h`); fetchEmployeeData(); fetchAdminData(); }
+    else {
+      toast.success(`Clocked out! Total: ${totalHours}h (breaks: ${breakMins}m), OT: ${overtimeHours}h`);
+      setTodayLog((prev: any) => (prev ? { ...prev, clock_out: clockOutTime, total_hours: totalHours, overtime_hours: overtimeHours, break_start: null, break_end: null } : prev));
+      fetchEmployeeData(); fetchAdminData();
+    }
     setPendingClockOut(null);
     setLoading(false);
   };
@@ -272,13 +276,23 @@ const Dashboard = () => {
   const handleBreakStart = async () => {
     if (!user || !todayLog) return;
     setLoading(true);
+    const break_start = new Date().toISOString();
     const { data, error } = await supabase.from("attendance_logs").update({
-      break_start: new Date().toISOString(),
+      break_start,
       break_end: null,
     }).eq("id", todayLog.id).select("id");
     if (error) toast.error(error.message);
     else if (!data?.length) toast.error("Couldn't start the break — try refreshing the page.");
-    else { toast.success("Break started"); fetchEmployeeData(); }
+    else {
+      toast.success("Break started");
+      // Apply the change to local state immediately rather than waiting on
+      // the async refetch (triggered both here and by the realtime
+      // subscription) - that round trip is what let a slower, stale read
+      // occasionally land after this one and leave the break panel showing
+      // as "still on break".
+      setTodayLog((prev: any) => (prev ? { ...prev, break_start, break_end: null } : prev));
+      fetchEmployeeData();
+    }
     setLoading(false);
   };
 
@@ -298,7 +312,13 @@ const Dashboard = () => {
     }).eq("id", todayLog.id).select("id");
     if (error) toast.error(error.message);
     else if (!data?.length) toast.error("Couldn't resume — try refreshing the page.");
-    else { toast.success(`Break ended (${fmtHMS(breakSecs)})`); fetchEmployeeData(); }
+    else {
+      toast.success(`Break ended (${fmtHMS(breakSecs)})`);
+      // See handleBreakStart: apply locally right away so the Current break
+      // panel clears the instant Resume succeeds.
+      setTodayLog((prev: any) => (prev ? { ...prev, break_start: null, break_end: now.toISOString(), break_minutes: totalBreak } : prev));
+      fetchEmployeeData();
+    }
     setLoading(false);
   };
 
