@@ -50,7 +50,24 @@ type ChangedDay = {
   newDueHours: number;
 };
 
+type MonthlySummary = Summary & { month: string };
+
 const round1 = (n: number) => Math.round(n * 10) / 10;
+
+/** Every "yyyy-MM" month between two "yyyy-MM-dd" dates, inclusive. */
+const monthsInRange = (fromISO: string, toISO: string): string[] => {
+  if (!fromISO || !toISO) return [];
+  const [fy, fm] = fromISO.split("-").map(Number);
+  const [ty, tm] = toISO.split("-").map(Number);
+  const months: string[] = [];
+  let y = fy, m = fm;
+  while (y < ty || (y === ty && m <= tm)) {
+    months.push(`${y}-${String(m).padStart(2, "0")}`);
+    m += 1;
+    if (m > 12) { m = 1; y += 1; }
+  }
+  return months;
+};
 
 /** Format a duration given in decimal hours as "X hr Ymin", e.g. 5.8 -> "5 hr 46min". */
 const fmtHoursMin = (hours: number) => {
@@ -77,6 +94,7 @@ const ReportsSummary = () => {
   // response is ever applied to state.
   const fetchSeq = useRef(0);
   const [rows, setRows] = useState<Summary[]>([]);
+  const [monthlyRows, setMonthlyRows] = useState<MonthlySummary[]>([]);
   const [changedDays, setChangedDays] = useState<ChangedDay[]>([]);
   const [showChanged, setShowChanged] = useState(false);
 
@@ -162,10 +180,9 @@ const ReportsSummary = () => {
         leaveByUser.set(r.user_id, set);
       });
 
-      const byUser = new Map<string, Summary>();
-      targetIds.forEach((id) => {
+      const newSummary = (id: string, extra: { month?: string } = {}): Summary & { month?: string } => {
         const p = scheduleMap.get(id);
-        byUser.set(id, {
+        return {
           userId: id,
           name: p?.full_name || p?.email || "—",
           role: roleMap.get(id) || "employee",
@@ -174,8 +191,24 @@ const ReportsSummary = () => {
           shortDays: 0, shortfallHoursTotal: 0,
           otActualDays: 0, otActualHoursTotal: 0,
           otDays: 0, otHoursTotal: 0,
+          ...extra,
+        };
+      };
+
+      const byUser = new Map<string, Summary>();
+      targetIds.forEach((id) => byUser.set(id, newSummary(id)));
+
+      // The per-month breakdown table is only rendered for the non-admin
+      // (own) view, which always has exactly one target (the signed-in
+      // user) — skip building it for the admin table's potentially large
+      // employee list, where it would never be shown.
+      const monthList = !isAdmin ? monthsInRange(effectiveRange.from, effectiveRange.to) : [];
+      const byUserMonth = new Map<string, MonthlySummary>();
+      if (!isAdmin) {
+        targetIds.forEach((id) => {
+          monthList.forEach((month) => byUserMonth.set(`${id}|${month}`, newSummary(id, { month }) as MonthlySummary));
         });
-      });
+      }
 
       const changed: ChangedDay[] = [];
       const days = mergeDailySessions((attRows || []) as AttendanceSession[]);
@@ -184,6 +217,8 @@ const ReportsSummary = () => {
         const s = byUser.get(userId);
         const schedule = scheduleMap.get(userId);
         if (!s || !schedule) return;
+        const sm = byUserMonth.get(`${userId}|${day.date.slice(0, 7)}`);
+        const targets = sm ? [s, sm] : [s];
 
         // A holiday with no wing applies to everyone; otherwise only to its wing.
         const holidayMap = new Map<string, string>();
@@ -199,8 +234,7 @@ const ReportsSummary = () => {
         // Overtime (actual, not just approved) on a weekend/holiday: any
         // time worked counts in full there, no requirement to beat.
         if (dayKind.nonWorking && !onLeave && worked > 0) {
-          s.otActualDays += 1;
-          s.otActualHoursTotal += worked;
+          targets.forEach((t) => { t.otActualDays += 1; t.otActualHoursTotal += worked; });
         }
 
         // Late: compare against the stored, authoritative arrival once
@@ -215,9 +249,11 @@ const ReportsSummary = () => {
           : liveArrival;
         const arrival = nonWorking ? { late: false, lateMinutes: 0, penaltyMinutes: 0 } : storedArrival;
         if (arrival.late) {
-          s.lateDays += 1;
-          s.lateMinutesTotal += arrival.lateMinutes;
-          s.latePenaltyMinutesTotal += arrival.penaltyMinutes;
+          targets.forEach((t) => {
+            t.lateDays += 1;
+            t.lateMinutesTotal += arrival.lateMinutes;
+            t.latePenaltyMinutesTotal += arrival.penaltyMinutes;
+          });
         }
 
         const required = netRequiredHours(schedule);
@@ -229,23 +265,20 @@ const ReportsSummary = () => {
         const oldDue = Math.max(0, required - (Number(day.sessions[0]?.total_hours) || 0));
         const newDue = (!nonWorking && closed && worked < requiredWithPenalty) ? requiredWithPenalty - worked : 0;
         if (newDue > 0) {
-          s.shortDays += 1;
-          s.shortfallHoursTotal += newDue;
+          targets.forEach((t) => { t.shortDays += 1; t.shortfallHoursTotal += newDue; });
         }
 
         // Less than 7hr Work Time: a fixed 7-hour threshold, independent of
         // the employee's own schedule requirement.
         if (!nonWorking && closed && worked > 0 && worked < 7) {
-          s.lessThan7Days += 1;
-          s.lessThan7HoursTotal += worked;
+          targets.forEach((t) => { t.lessThan7Days += 1; t.lessThan7HoursTotal += worked; });
         }
 
         // Overtime (actual, not just approved) on a normal working day:
         // hours beyond the (penalty-adjusted) requirement, same as
         // Attendance.tsx's OVERTIME (OT) column.
         if (!nonWorking && closed && worked > requiredWithPenalty) {
-          s.otActualDays += 1;
-          s.otActualHoursTotal += worked - requiredWithPenalty;
+          targets.forEach((t) => { t.otActualDays += 1; t.otActualHoursTotal += worked - requiredWithPenalty; });
         }
         if (Math.abs(oldDue - newDue) > 0.01) {
           changed.push({ userId, name: s.name, date: day.date, oldDueHours: round1(oldDue), newDueHours: round1(newDue) });
@@ -253,17 +286,31 @@ const ReportsSummary = () => {
       });
 
       const otDaySets = new Map<string, Set<string>>();
+      const otDaySetsMonthly = new Map<string, Set<string>>();
       (otRows || []).forEach((r) => {
         const s = byUser.get(r.user_id);
-        if (!s) return;
-        s.otHoursTotal += Number(r.requested_hours) || 0;
-        const set = otDaySets.get(r.user_id) || new Set<string>();
-        set.add(r.date);
-        otDaySets.set(r.user_id, set);
+        if (s) {
+          s.otHoursTotal += Number(r.requested_hours) || 0;
+          const set = otDaySets.get(r.user_id) || new Set<string>();
+          set.add(r.date);
+          otDaySets.set(r.user_id, set);
+        }
+        const key = `${r.user_id}|${r.date.slice(0, 7)}`;
+        const sm = byUserMonth.get(key);
+        if (sm) {
+          sm.otHoursTotal += Number(r.requested_hours) || 0;
+          const setm = otDaySetsMonthly.get(key) || new Set<string>();
+          setm.add(r.date);
+          otDaySetsMonthly.set(key, setm);
+        }
       });
       otDaySets.forEach((set, id) => {
         const s = byUser.get(id);
         if (s) s.otDays = set.size;
+      });
+      otDaySetsMonthly.forEach((set, key) => {
+        const sm = byUserMonth.get(key);
+        if (sm) sm.otDays = set.size;
       });
 
       // Discard this response if a newer fetch (e.g. the Employee filter
@@ -271,12 +318,13 @@ const ReportsSummary = () => {
       // stale counts for whichever employee is currently selected.
       if (seq === fetchSeq.current) {
         setRows(Array.from(byUser.values()).sort((a, b) => a.name.localeCompare(b.name)));
+        setMonthlyRows(Array.from(byUserMonth.values()).sort((a, b) => b.month.localeCompare(a.month)));
         setChangedDays(changed.sort((a, b) => a.date.localeCompare(b.date)));
       }
     } finally {
       if (seq === fetchSeq.current) setLoading(false);
     }
-  }, [targetIds, effectiveRange]);
+  }, [targetIds, effectiveRange, isAdmin]);
 
   useEffect(() => { fetchSummary(); }, [fetchSummary]);
 
@@ -424,6 +472,7 @@ const ReportsSummary = () => {
               )}
             </div>
           ) : (
+            <div className="space-y-4">
             <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
               <Card>
                 <CardHeader className="pb-2"><CardDescription className="flex items-center gap-2"><Clock className="h-4 w-4" /> Late Entry</CardDescription></CardHeader>
@@ -478,6 +527,56 @@ const ReportsSummary = () => {
                   </Card>
                 );
               })()}
+            </div>
+
+            <div className="overflow-x-auto">
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Month</TableHead>
+                    <TableHead>Late Entry</TableHead>
+                    <TableHead>Late Entry Avg</TableHead>
+                    <TableHead>Less than 7hr Days</TableHead>
+                    <TableHead>Less than 7hr Avg</TableHead>
+                    <TableHead>Due Time Days</TableHead>
+                    <TableHead>Due Time</TableHead>
+                    <TableHead>Overtime Days</TableHead>
+                    <TableHead>Overtime</TableHead>
+                    <TableHead>Approved OT Days</TableHead>
+                    <TableHead>Approved Overtime</TableHead>
+                    <TableHead>Net Hours</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {monthlyRows.length === 0 ? (
+                    <TableRow><TableCell colSpan={12} className="text-center text-muted-foreground">No records</TableCell></TableRow>
+                  ) : monthlyRows.map((m) => {
+                    const net = netHoursOf(m);
+                    return (
+                      <TableRow key={m.month}>
+                        <TableCell className="font-medium whitespace-nowrap">{format(new Date(`${m.month}-01T00:00:00`), "MMM yyyy")}</TableCell>
+                        <TableCell>{m.lateDays} days</TableCell>
+                        <TableCell>{m.lateDays > 0 ? humanMinutes(Math.round(m.lateMinutesTotal / m.lateDays)) : "—"}</TableCell>
+                        <TableCell>{m.lessThan7Days} days</TableCell>
+                        <TableCell>{m.lessThan7Days > 0 ? fmtHoursMin(m.lessThan7HoursTotal / m.lessThan7Days) : "0 hr 0min"}</TableCell>
+                        <TableCell>{m.shortDays} days</TableCell>
+                        <TableCell>{fmtHoursMin(m.shortfallHoursTotal)}</TableCell>
+                        <TableCell>{m.otActualDays} days</TableCell>
+                        <TableCell>{fmtHoursMin(m.otActualHoursTotal)}</TableCell>
+                        <TableCell>{m.otDays} days</TableCell>
+                        <TableCell>{fmtHoursMin(m.otHoursTotal)}</TableCell>
+                        <TableCell>
+                          <span className="font-semibold">{net.value}</span>{" "}
+                          <span className={net.isOvertime ? "text-xs text-green-600" : "text-xs text-red-600"}>
+                            {net.isOvertime ? "(Overtime)" : "(Due Time)"}
+                          </span>
+                        </TableCell>
+                      </TableRow>
+                    );
+                  })}
+                </TableBody>
+              </Table>
+            </div>
             </div>
           )}
         </CardContent>
