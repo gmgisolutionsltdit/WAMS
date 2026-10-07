@@ -202,7 +202,19 @@ const ReportsSummary = () => {
       // (own) view, which always has exactly one target (the signed-in
       // user) — skip building it for the admin table's potentially large
       // employee list, where it would never be shown.
-      const monthList = !isAdmin ? monthsInRange(effectiveRange.from, effectiveRange.to) : [];
+      // With no Month/date filter set, effectiveRange is empty and the
+      // queries above are unbounded — fall back to every month actually
+      // present in the fetched data, so the table still shows all months by
+      // default instead of going empty.
+      const explicitMonths = monthsInRange(effectiveRange.from, effectiveRange.to);
+      const monthList = !isAdmin
+        ? (explicitMonths.length
+          ? explicitMonths
+          : Array.from(new Set([
+            ...(attRows || []).map((r) => r.date.slice(0, 7)),
+            ...(otRows || []).map((r) => r.date.slice(0, 7)),
+          ])).sort())
+        : [];
       const byUserMonth = new Map<string, MonthlySummary>();
       if (!isAdmin) {
         targetIds.forEach((id) => {
