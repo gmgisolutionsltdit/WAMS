@@ -816,8 +816,8 @@ function SalaryMonthlyTableView({ rows, showEmployee, loading }: { rows: SalaryM
             <TableHead className="text-right">- Due Deduction</TableHead>
             <TableHead className="text-right">Net Adjustment</TableHead>
             <TableHead className="text-right">- Expense</TableHead>
-            <TableHead className="text-right">Final</TableHead>
             <TableHead className="text-right">Loan</TableHead>
+            <TableHead className="text-right">Final</TableHead>
             <TableHead>Payment Status</TableHead>
           </TableRow>
         </TableHeader>
@@ -839,8 +839,8 @@ function SalaryMonthlyTableView({ rows, showEmployee, loading }: { rows: SalaryM
               <TableCell className="text-right">{fmtBDT(-r.dueDeduction)}</TableCell>
               <TableCell className="text-right">{fmtBDT(r.netAdjustment)}</TableCell>
               <TableCell className="text-right">{fmtBDT(-r.recoveryTotal)}</TableCell>
-              <TableCell className="text-right font-semibold">{fmtBDT(r.final)}</TableCell>
               <TableCell className="text-right">{fmtBDT(r.loanPaid)}</TableCell>
+              <TableCell className="text-right font-semibold">{fmtBDT(r.final)}</TableCell>
               <TableCell>
                 <Badge variant={r.paymentStatus === "paid" ? "default" : "outline"}>{PAYMENT_STATUS_LABEL[r.paymentStatus]}</Badge>
               </TableCell>
