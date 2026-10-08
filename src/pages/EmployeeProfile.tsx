@@ -229,6 +229,8 @@ const EmployeeProfile = () => {
   // ---- Editable "Overview" fields (formerly the Edit Employee popup) ----
   const [uploadingPhoto, setUploadingPhoto] = useState(false);
   const [savingOverview, setSavingOverview] = useState(false);
+  const [grossSalaryInput, setGrossSalaryInput] = useState("");
+  const [savingGrossSalary, setSavingGrossSalary] = useState(false);
   const [managers, setManagers] = useState<{ id: string; full_name: string | null; email: string | null }[]>([]);
   const [wings, setWings] = useState<WingRow[]>([]);
   const [wingDesignations, setWingDesignations] = useState<{ id: string; wing_id: string; title: string }[]>([]);
@@ -311,6 +313,7 @@ const EmployeeProfile = () => {
     }
     setProfile(p as Profile);
     setPersonalForm(p as Profile);
+    setGrossSalaryInput(String(p.base_salary ?? 0));
     setRole((r?.role as string) || "employee");
     setOverviewForm({
       full_name: p.full_name || "", phone: p.phone || "",
@@ -469,6 +472,21 @@ const EmployeeProfile = () => {
       return true;
     } finally {
       setSavingOverview(false);
+    }
+  };
+
+  const saveGrossSalary = async () => {
+    if (!id) return;
+    const amount = parseFloat(grossSalaryInput);
+    if (!Number.isFinite(amount) || amount < 0) { toast.error("Enter a valid gross salary"); return; }
+    setSavingGrossSalary(true);
+    try {
+      const { error } = await supabase.from("profiles").update({ base_salary: amount }).eq("id", id);
+      if (error) { toast.error(error.message); return; }
+      setProfile((p) => (p ? { ...p, base_salary: amount } : p));
+      toast.success("Gross salary updated");
+    } finally {
+      setSavingGrossSalary(false);
     }
   };
 
@@ -1025,7 +1043,25 @@ const EmployeeProfile = () => {
             <CardHeader className="pb-2">
               <CardTitle className="text-sm text-muted-foreground flex items-center gap-2"><DollarSign className="h-4 w-4" /> Gross Salary</CardTitle>
             </CardHeader>
-            <CardContent><div className="text-2xl font-bold">{fmtMoney(salaryBreakdown.gross)}</div></CardContent>
+            <CardContent>
+              {isAdmin ? (
+                <div className="flex items-end gap-2">
+                  <div>
+                    <Label className="text-xs">Monthly Gross Salary (BDT)</Label>
+                    <Input
+                      type="number" step="0.01" min="0" className="w-48"
+                      value={grossSalaryInput}
+                      onChange={(e) => setGrossSalaryInput(e.target.value)}
+                    />
+                  </div>
+                  <Button size="sm" onClick={saveGrossSalary} disabled={savingGrossSalary}>
+                    {savingGrossSalary ? "Saving…" : "Save"}
+                  </Button>
+                </div>
+              ) : (
+                <div className="text-2xl font-bold">{fmtMoney(salaryBreakdown.gross)}</div>
+              )}
+            </CardContent>
           </Card>
 
           <Card>
