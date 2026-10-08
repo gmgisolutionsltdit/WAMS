@@ -246,7 +246,14 @@ const PerformanceEvaluation = () => {
   // can pick it up without recomputing it from scratch each time.
   const finalizeEmployee = async (employeeId: string, empRequests: EvalRequest[], final: { weightedAverage: number; category: EvaluationCategory }) => {
     if (!user) return;
-    const gross = Number(profileMap[employeeId]?.base_salary) || 0;
+    // Read the gross salary fresh rather than from this page's local
+    // profiles list, which was only fetched once on mount and can go stale
+    // if the admin updates it (e.g. from the employee's Financial tab)
+    // without reloading this page.
+    const { data: freshProfile, error: profileErr } = await supabase
+      .from("profiles").select("base_salary").eq("id", employeeId).maybeSingle();
+    if (profileErr) { toast.error(profileErr.message); return; }
+    const gross = Number(freshProfile?.base_salary) || 0;
     if (gross <= 0) {
       toast.error("This employee has no gross salary on file — set it in their profile first");
       return;
