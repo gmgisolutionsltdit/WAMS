@@ -284,9 +284,10 @@ const EmployeeProfile = () => {
     try {
       const r1 = canManageThisEmployee ? await saveOverview() : true;
       const r2 = (isSelf || isAdmin) ? await savePersonalInfoAll() : true;
+      const r3 = isAdmin ? await saveGrossSalary() : true;
       const r4 = isAdmin ? await saveProjectAssignment() : true;
       const r5 = isAdmin ? await saveLeaveDefaults() : true;
-      if (!(r1 && r2 && r4 && r5)) {
+      if (!(r1 && r2 && r3 && r4 && r5)) {
         // At least one section failed to save; the relevant toast already explains why.
       }
     } finally {
@@ -475,16 +476,17 @@ const EmployeeProfile = () => {
     }
   };
 
-  const saveGrossSalary = async () => {
-    if (!id) return;
+  const saveGrossSalary = async (): Promise<boolean> => {
+    if (!id || !isAdmin) return true;
     const amount = parseFloat(grossSalaryInput);
-    if (!Number.isFinite(amount) || amount < 0) { toast.error("Enter a valid gross salary"); return; }
+    if (!Number.isFinite(amount) || amount < 0) { toast.error("Enter a valid gross salary"); return false; }
     setSavingGrossSalary(true);
     try {
       const { error } = await supabase.from("profiles").update({ base_salary: amount }).eq("id", id);
-      if (error) { toast.error(error.message); return; }
+      if (error) { toast.error(error.message); return false; }
       setProfile((p) => (p ? { ...p, base_salary: amount } : p));
       toast.success("Gross salary updated");
+      return true;
     } finally {
       setSavingGrossSalary(false);
     }
