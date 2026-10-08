@@ -128,3 +128,18 @@ export const computeFinalSalary = (input: FinalSalaryInput): FinalSalaryResult =
   const final = input.gross + input.otPaymentTotal - input.dueDeductionTotal - input.recoveryTotal - advanceDeductionTotal;
   return { netAdjustment, currentApplicable, final, deductionsExceedCap };
 };
+
+/** Every "yyyy-MM" month between two "yyyy-MM-dd" dates, inclusive. */
+export const monthsInRange = (fromISO: string, toISO: string): string[] => {
+  if (!fromISO || !toISO) return [];
+  const [fy, fm] = fromISO.split("-").map(Number);
+  const [ty, tm] = toISO.split("-").map(Number);
+  const months: string[] = [];
+  let y = fy, m = fm;
+  while (y < ty || (y === ty && m <= tm)) {
+    months.push(`${y}-${String(m).padStart(2, "0")}`);
+    m += 1;
+    if (m > 12) { m = 1; y += 1; }
+  }
+  return months;
+};

@@ -243,7 +243,7 @@ export const PayrollAdjustments = ({ isAdmin }: { isAdmin: boolean }) => {
     <div className="space-y-4">
       <Card>
         <CardHeader>
-          <CardTitle>Payroll</CardTitle>
+          <CardTitle>Salary</CardTitle>
           <CardDescription>
             {isAdmin ? "OT/Due adjustments, expense recovery and HR warnings — Admin only edits." : "Your payroll breakdown, decisions and warnings — read only."}
           </CardDescription>
