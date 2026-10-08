@@ -15,6 +15,9 @@ import { salaryBreakdown, perMinuteRate, computeFinalSalary } from "@/lib/payrol
 
 type Schedule = WorkSchedule & OfficeTime & { company_wing?: string | null };
 
+/** No My Payments settlement recorded yet; recorded but Net Hours carried to next month; or fully recorded. */
+export type PaymentStatus = "not_paid" | "partial" | "paid";
+
 export type SalaryMonthRow = {
   userId: string;
   name: string;
@@ -30,6 +33,9 @@ export type SalaryMonthRow = {
   netAdjustment: number;
   recoveryTotal: number;
   final: number;
+  /** Loan (personal advance) amount actually deducted this month. */
+  loanPaid: number;
+  paymentStatus: PaymentStatus;
 };
 
 /**
@@ -49,12 +55,15 @@ export const computeMonthlySalaryRows = async (
   const [ey, em] = sortedMonths[sortedMonths.length - 1].split("-").map(Number);
   const rangeEnd = format(new Date(ey, em, 0), "yyyy-MM-dd");
 
-  const [{ data: profiles }, { data: attRows }, { data: holidayRows }, { data: leaveRows }, { data: recoveryRows }] = await Promise.all([
+  const monthDates = sortedMonths.map((m) => `${m}-01`);
+  const [{ data: profiles }, { data: attRows }, { data: holidayRows }, { data: leaveRows }, { data: recoveryRows }, { data: loanActionRows }, { data: settlementRows }] = await Promise.all([
     supabase.from("profiles").select("id, full_name, email, base_salary, office_start_time, late_grace_minutes, standard_daily_hours, unpaid_break_minutes, working_days, company_wing").in("id", targetIds),
     supabase.from("attendance_logs").select("id, user_id, date, clock_in, clock_out, break_minutes, late_minutes, penalty_minutes, penalty_reviewed").in("user_id", targetIds).gte("date", rangeStart).lte("date", rangeEnd),
     supabase.from("holidays").select("holiday_date, name, wing"),
     supabase.from("leave_requests").select("user_id, start_date, end_date").in("user_id", targetIds).eq("status", "approved"),
-    supabase.from("expense_recovery_actions").select("user_id, amount, action_type, month").in("user_id", targetIds).in("month", sortedMonths.map((m) => `${m}-01`)),
+    supabase.from("expense_recovery_actions").select("user_id, amount, action_type, month").in("user_id", targetIds).in("month", monthDates),
+    supabase.from("personal_advance_actions").select("user_id, amount, action_type, month").in("user_id", targetIds).eq("action_type", "payroll_deduction").in("month", monthDates),
+    supabase.from("payroll_settlements").select("user_id, month, net_hours_paid").in("user_id", targetIds).in("month", monthDates),
   ]);
 
   type ProfileRow = Schedule & { id: string; full_name: string | null; email: string | null; base_salary: number | null };
@@ -121,6 +130,18 @@ export const computeMonthlySalaryRows = async (
     recoveryTotals.set(key, (recoveryTotals.get(key) || 0) + Number(r.amount));
   });
 
+  const loanPaidTotals = new Map<string, number>();
+  ((loanActionRows || []) as { user_id: string; amount: number; month: string }[]).forEach((r) => {
+    const key = `${r.user_id}|${String(r.month).slice(0, 7)}`;
+    loanPaidTotals.set(key, (loanPaidTotals.get(key) || 0) + Number(r.amount));
+  });
+
+  const paymentStatusByKey = new Map<string, PaymentStatus>();
+  ((settlementRows || []) as { user_id: string; month: string; net_hours_paid: boolean }[]).forEach((r) => {
+    const key = `${r.user_id}|${String(r.month).slice(0, 7)}`;
+    paymentStatusByKey.set(key, r.net_hours_paid ? "paid" : "partial");
+  });
+
   const rows: SalaryMonthRow[] = [];
   targetIds.forEach((id) => {
     const p = profileMap.get(id);
@@ -145,6 +166,8 @@ export const computeMonthlySalaryRows = async (
         netAdjustment: finalSalary.netAdjustment,
         recoveryTotal,
         final: finalSalary.final as number,
+        loanPaid: loanPaidTotals.get(key) || 0,
+        paymentStatus: paymentStatusByKey.get(key) || "not_paid",
       });
     });
   });
