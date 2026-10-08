@@ -79,7 +79,7 @@ type Evaluation = {
   created_at: string;
 };
 
-const emptyRequestForm = () => ({ employee_id: "", evaluator_id: "", period_from: "", period_to: "" });
+const emptyRequestForm = () => ({ employee_id: "", evaluator_ids: [] as string[], period_from: "", period_to: "" });
 
 const emptyAnswerForm = (): { designation: string; relationship: string; scores: CriterionScore[]; justification: string } => ({
   designation: "",
@@ -148,30 +148,42 @@ const PerformanceEvaluation = () => {
 
   useEffect(() => { fetchAll(); }, [fetchAll]);
 
+  const toggleRequestEvaluator = (id: string) =>
+    setRequestForm((f) => ({
+      ...f,
+      evaluator_ids: f.evaluator_ids.includes(id) ? f.evaluator_ids.filter((x) => x !== id) : [...f.evaluator_ids, id],
+    }));
+
   const submitRequest = async () => {
-    if (!user || !requestForm.employee_id || !requestForm.evaluator_id) {
-      toast.error("Employee and evaluator are required");
+    if (!user || !requestForm.employee_id || requestForm.evaluator_ids.length === 0) {
+      toast.error("Employee and at least one evaluator are required");
       return;
     }
     setSaving(true);
-    const { error } = await supabase.from("performance_evaluation_requests").insert({
-      employee_id: requestForm.employee_id,
-      evaluator_id: requestForm.evaluator_id,
-      requested_by: user.id,
-      period_from: requestForm.period_from || null,
-      period_to: requestForm.period_to || null,
-    });
+    const { error } = await supabase.from("performance_evaluation_requests").insert(
+      requestForm.evaluator_ids.map((evaluatorId) => ({
+        employee_id: requestForm.employee_id,
+        evaluator_id: evaluatorId,
+        requested_by: user.id,
+        period_from: requestForm.period_from || null,
+        period_to: requestForm.period_to || null,
+      })),
+    );
     setSaving(false);
     if (error) { toast.error(error.message); return; }
     const employeeName = profileMap[requestForm.employee_id]?.full_name || "an employee";
-    await notifyEmployee(
-      requestForm.evaluator_id,
-      "Performance Evaluation Requested",
-      `You've been asked to evaluate ${employeeName}'s performance.`,
-      undefined,
-      { route: "/performance-evaluation", type: "performance_evaluation" },
+    await Promise.all(
+      requestForm.evaluator_ids.map((evaluatorId) =>
+        notifyEmployee(
+          evaluatorId,
+          "Performance Evaluation Requested",
+          `You've been asked to evaluate ${employeeName}'s performance.`,
+          undefined,
+          { route: "/performance-evaluation", type: "performance_evaluation" },
+        ),
+      ),
     );
-    toast.success("Evaluation requested");
+    toast.success(`Evaluation requested from ${requestForm.evaluator_ids.length} evaluator${requestForm.evaluator_ids.length === 1 ? "" : "s"}`);
     setRequestOpen(false);
     setRequestForm(emptyRequestForm());
     fetchAll();
@@ -321,13 +333,21 @@ const PerformanceEvaluation = () => {
                   </Select>
                 </div>
                 <div>
-                  <Label>Evaluator (manager or admin)</Label>
-                  <Select value={requestForm.evaluator_id} onValueChange={(v) => setRequestForm((f) => ({ ...f, evaluator_id: v }))}>
-                    <SelectTrigger className="mt-1"><SelectValue placeholder="Select evaluator" /></SelectTrigger>
-                    <SelectContent>
-                      {evaluators.map((p) => <SelectItem key={p.id} value={p.id}>{p.full_name || p.email}</SelectItem>)}
-                    </SelectContent>
-                  </Select>
+                  <Label>Evaluators ({requestForm.evaluator_ids.length} selected)</Label>
+                  <div className="mt-1 rounded-md border p-2 max-h-40 overflow-y-auto space-y-1">
+                    {evaluators.length === 0 ? (
+                      <p className="text-xs text-muted-foreground px-1 py-0.5">No managers or admins available.</p>
+                    ) : evaluators.map((p) => (
+                      <label key={p.id} className="flex items-center gap-2 text-sm px-1 py-0.5">
+                        <Checkbox
+                          checked={requestForm.evaluator_ids.includes(p.id)}
+                          onCheckedChange={() => toggleRequestEvaluator(p.id)}
+                        />
+                        {p.full_name || p.email}
+                      </label>
+                    ))}
+                  </div>
+                  <p className="text-xs text-muted-foreground mt-1">Select more than one to require multiple evaluators — set each one's weight below once submitted.</p>
                 </div>
                 <div className="grid grid-cols-2 gap-4">
                   <div>
