@@ -220,7 +220,6 @@ const EmployeeProfile = () => {
 
   const isSelf = !!user && user.id === id;
   const isAdmin = viewerRole === "admin";
-  const canEditPayroll = viewerRole === "admin";
   const isDirectManager = viewerRole === "manager" && !!user && !!profile && (
     profile.reporting_manager_id === user.id
     || (profile.reporting_manager_ids || []).includes(user.id)
@@ -246,9 +245,6 @@ const EmployeeProfile = () => {
     overtime_scaling: "1", due_time_scaling: "1",
     working_days: [...DEFAULT_WORKING_DAYS] as number[],
   });
-
-  // ---- Editable "Financial" (Compensation) fields — admin only ----
-  const [compForm, setCompForm] = useState({ base_salary: "0", hourly_overtime_rate: "0", pf_contribution_pct: "0" });
 
   // ---- Editable "Projects & Tasks" assignment — admin only ----
   const [projects, setProjects] = useState<{ id: string; name: string; key: string }[]>([]);
@@ -281,28 +277,14 @@ const EmployeeProfile = () => {
     return true;
   };
 
-  const saveCompensationAll = async (): Promise<boolean> => {
-    if (!id || !canEditPayroll) return true;
-    const payload = {
-      base_salary: parseFloat(compForm.base_salary) || 0,
-      hourly_overtime_rate: parseFloat(compForm.hourly_overtime_rate) || 0,
-      pf_contribution_pct: parseFloat(compForm.pf_contribution_pct) || 0,
-    };
-    const { error } = await supabase.from("profiles").update(payload).eq("id", id);
-    if (error) { toast.error(error.message); return false; }
-    toast.success("Compensation updated");
-    return true;
-  };
-
   const saveAllInfo = async () => {
     setSavingAll(true);
     try {
       const r1 = canManageThisEmployee ? await saveOverview() : true;
       const r2 = (isSelf || isAdmin) ? await savePersonalInfoAll() : true;
-      const r3 = canEditPayroll ? await saveCompensationAll() : true;
       const r4 = isAdmin ? await saveProjectAssignment() : true;
       const r5 = isAdmin ? await saveLeaveDefaults() : true;
-      if (!(r1 && r2 && r3 && r4 && r5)) {
+      if (!(r1 && r2 && r4 && r5)) {
         // At least one section failed to save; the relevant toast already explains why.
       }
     } finally {
@@ -350,12 +332,6 @@ const EmployeeProfile = () => {
       late_grace_minutes: String(p.late_grace_minutes ?? DEFAULT_GRACE_MINUTES),
       working_days: p.working_days?.length ? p.working_days.map(Number) : [...DEFAULT_WORKING_DAYS],
     });
-    setCompForm({
-      base_salary: String(p.base_salary ?? 0),
-      hourly_overtime_rate: String(p.hourly_overtime_rate ?? 0),
-      pf_contribution_pct: String(p.pf_contribution_pct ?? 0),
-    });
-
     const [mgrRes, incRes, repRes, taskRes] = await Promise.all([
       p.reporting_manager_id
         ? supabase.from("profiles").select("id, full_name, email").eq("id", p.reporting_manager_id).maybeSingle()
@@ -1075,37 +1051,6 @@ const EmployeeProfile = () => {
               </ol>
             </CardContent>
           </Card>
-
-          {canEditPayroll && (
-            <Card>
-              <CardHeader>
-                <div className="flex items-center justify-between flex-wrap gap-2">
-                  <CardTitle className="text-base">Compensation</CardTitle>
-                  <Badge variant="outline" className="text-[10px]">Admin only</Badge>
-                </div>
-                <CardDescription>Update base salary on promotion or revision. Changes take effect on the next payroll generation.</CardDescription>
-              </CardHeader>
-              <CardContent className="space-y-3">
-                <div className="grid grid-cols-3 gap-3">
-                  <div>
-                    <Label className="text-xs">Base Salary (monthly)</Label>
-                    <Input type="number" step="0.01" min="0" value={compForm.base_salary}
-                      onChange={(e) => setCompForm((f) => ({ ...f, base_salary: e.target.value }))} />
-                  </div>
-                  <div>
-                    <Label className="text-xs">Hourly OT Rate</Label>
-                    <Input type="number" step="0.01" min="0" value={compForm.hourly_overtime_rate}
-                      onChange={(e) => setCompForm((f) => ({ ...f, hourly_overtime_rate: e.target.value }))} />
-                  </div>
-                  <div>
-                    <Label className="text-xs">PF Contribution (%)</Label>
-                    <Input type="number" step="0.01" min="0" max="100" value={compForm.pf_contribution_pct}
-                      onChange={(e) => setCompForm((f) => ({ ...f, pf_contribution_pct: e.target.value }))} />
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
-          )}
 
           <Card>
             <CardHeader>

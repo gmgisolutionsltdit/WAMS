@@ -16,7 +16,7 @@ import { toast } from "sonner";
 import { format } from "date-fns";
 import {
   EVALUATION_SECTIONS, TOTAL_CRITERIA_COUNT, summarizeScores, weightedFinalCategory,
-  CATEGORY_BADGE_CLASS, salaryCategoryForGross, SALARY_CATEGORY_LABEL, recommendedIncrementRange,
+  CATEGORY_BADGE_CLASS, salaryCategoryForGross, SALARY_CATEGORY_LABEL, recommendedIncrementRange, SCORE_SCALE,
   type CriterionScore, type EvaluationCategory, type SalaryCategory,
 } from "@/lib/performanceEvaluation";
 import {
@@ -79,11 +79,9 @@ type Evaluation = {
   created_at: string;
 };
 
-const emptyRequestForm = () => ({ employee_id: "", evaluator_id: "", period_from: "", period_to: "" });
+const emptyRequestForm = () => ({ employee_id: "", evaluator_ids: [] as string[], period_from: "", period_to: "" });
 
-const emptyAnswerForm = (): { designation: string; relationship: string; scores: CriterionScore[]; justification: string } => ({
-  designation: "",
-  relationship: "Direct Supervisor",
+const emptyAnswerForm = (): { scores: CriterionScore[]; justification: string } => ({
   scores: EVALUATION_SECTIONS.flatMap((s) => s.criteria.map((criterion) => ({ section: s.key, criterion, score: 3, comment: "" }))),
   justification: "",
 });
@@ -148,30 +146,42 @@ const PerformanceEvaluation = () => {
 
   useEffect(() => { fetchAll(); }, [fetchAll]);
 
+  const toggleRequestEvaluator = (id: string) =>
+    setRequestForm((f) => ({
+      ...f,
+      evaluator_ids: f.evaluator_ids.includes(id) ? f.evaluator_ids.filter((x) => x !== id) : [...f.evaluator_ids, id],
+    }));
+
   const submitRequest = async () => {
-    if (!user || !requestForm.employee_id || !requestForm.evaluator_id) {
-      toast.error("Employee and evaluator are required");
+    if (!user || !requestForm.employee_id || requestForm.evaluator_ids.length === 0) {
+      toast.error("Employee and at least one evaluator are required");
       return;
     }
     setSaving(true);
-    const { error } = await supabase.from("performance_evaluation_requests").insert({
-      employee_id: requestForm.employee_id,
-      evaluator_id: requestForm.evaluator_id,
-      requested_by: user.id,
-      period_from: requestForm.period_from || null,
-      period_to: requestForm.period_to || null,
-    });
+    const { error } = await supabase.from("performance_evaluation_requests").insert(
+      requestForm.evaluator_ids.map((evaluatorId) => ({
+        employee_id: requestForm.employee_id,
+        evaluator_id: evaluatorId,
+        requested_by: user.id,
+        period_from: requestForm.period_from || null,
+        period_to: requestForm.period_to || null,
+      })),
+    );
     setSaving(false);
     if (error) { toast.error(error.message); return; }
     const employeeName = profileMap[requestForm.employee_id]?.full_name || "an employee";
-    await notifyEmployee(
-      requestForm.evaluator_id,
-      "Performance Evaluation Requested",
-      `You've been asked to evaluate ${employeeName}'s performance.`,
-      undefined,
-      { route: "/performance-evaluation", type: "performance_evaluation" },
+    await Promise.all(
+      requestForm.evaluator_ids.map((evaluatorId) =>
+        notifyEmployee(
+          evaluatorId,
+          "Performance Evaluation Requested",
+          `You've been asked to evaluate ${employeeName}'s performance.`,
+          undefined,
+          { route: "/performance-evaluation", type: "performance_evaluation" },
+        ),
+      ),
     );
-    toast.success("Evaluation requested");
+    toast.success(`Evaluation requested from ${requestForm.evaluator_ids.length} evaluator${requestForm.evaluator_ids.length === 1 ? "" : "s"}`);
     setRequestOpen(false);
     setRequestForm(emptyRequestForm());
     fetchAll();
@@ -202,8 +212,6 @@ const PerformanceEvaluation = () => {
       request_id: answerRequest.id,
       employee_id: answerRequest.employee_id,
       evaluator_id: user.id,
-      evaluator_designation: answerForm.designation.trim() || null,
-      relationship: answerForm.relationship,
       scores: answerForm.scores,
       criteria_count: TOTAL_CRITERIA_COUNT,
       total_score: summary.total,
@@ -321,13 +329,21 @@ const PerformanceEvaluation = () => {
                   </Select>
                 </div>
                 <div>
-                  <Label>Evaluator (manager or admin)</Label>
-                  <Select value={requestForm.evaluator_id} onValueChange={(v) => setRequestForm((f) => ({ ...f, evaluator_id: v }))}>
-                    <SelectTrigger className="mt-1"><SelectValue placeholder="Select evaluator" /></SelectTrigger>
-                    <SelectContent>
-                      {evaluators.map((p) => <SelectItem key={p.id} value={p.id}>{p.full_name || p.email}</SelectItem>)}
-                    </SelectContent>
-                  </Select>
+                  <Label>Evaluators ({requestForm.evaluator_ids.length} selected)</Label>
+                  <div className="mt-1 rounded-md border p-2 max-h-40 overflow-y-auto space-y-1">
+                    {evaluators.length === 0 ? (
+                      <p className="text-xs text-muted-foreground px-1 py-0.5">No managers or admins available.</p>
+                    ) : evaluators.map((p) => (
+                      <label key={p.id} className="flex items-center gap-2 text-sm px-1 py-0.5">
+                        <Checkbox
+                          checked={requestForm.evaluator_ids.includes(p.id)}
+                          onCheckedChange={() => toggleRequestEvaluator(p.id)}
+                        />
+                        {p.full_name || p.email}
+                      </label>
+                    ))}
+                  </div>
+                  <p className="text-xs text-muted-foreground mt-1">Select more than one to require multiple evaluators — set each one's weight below once submitted.</p>
                 </div>
                 <div className="grid grid-cols-2 gap-4">
                   <div>
@@ -526,24 +542,20 @@ const PerformanceEvaluation = () => {
             </DialogTitle>
           </DialogHeader>
           <div className="space-y-5">
-            <div className="grid grid-cols-2 gap-4">
-              <div>
-                <Label>Your Designation</Label>
-                <Input value={answerForm.designation} onChange={(e) => setAnswerForm((f) => ({ ...f, designation: e.target.value }))} />
-              </div>
-              <div>
-                <Label>Relationship with Employee</Label>
-                <Select value={answerForm.relationship} onValueChange={(v) => setAnswerForm((f) => ({ ...f, relationship: v }))}>
-                  <SelectTrigger className="mt-1"><SelectValue /></SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="Direct Supervisor">Direct Supervisor</SelectItem>
-                    <SelectItem value="Project Supervisor">Project Supervisor</SelectItem>
-                    <SelectItem value="Founder">Founder</SelectItem>
-                    <SelectItem value="Other">Other</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-            </div>
+            <Table>
+              <TableHeader>
+                <TableRow><TableHead className="w-12">Score</TableHead><TableHead className="w-32">Meaning</TableHead><TableHead>Description</TableHead></TableRow>
+              </TableHeader>
+              <TableBody>
+                {SCORE_SCALE.map((s) => (
+                  <TableRow key={s.score}>
+                    <TableCell className="font-mono font-semibold">{s.score}</TableCell>
+                    <TableCell className="font-medium">{s.label}</TableCell>
+                    <TableCell className="text-xs text-muted-foreground">{s.description}</TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
 
             {EVALUATION_SECTIONS.map((section) => (
               <div key={section.key} className="space-y-2">
