@@ -213,7 +213,7 @@ const Payment = () => {
           <TabsTrigger value="loans">Loans</TabsTrigger>
           <TabsTrigger value="salary">Salary</TabsTrigger>
           <TabsTrigger value="expense">Expense</TabsTrigger>
-          {isAdmin && <TabsTrigger value="my-payments">My Payments</TabsTrigger>}
+          <TabsTrigger value="my-payments">My Payments</TabsTrigger>
         </TabsList>
 
         <TabsContent value="loans" className="space-y-4">
@@ -263,11 +263,9 @@ const Payment = () => {
           <ExpenseClaimsTab />
         </TabsContent>
 
-        {isAdmin && (
-          <TabsContent value="my-payments">
-            <MyPaymentsTab />
-          </TabsContent>
-        )}
+        <TabsContent value="my-payments">
+          {isAdmin ? <MyPaymentsTab /> : <MyPaymentsSummary />}
+        </TabsContent>
       </Tabs>
 
       {/* Record This Month's Deduction dialog */}
@@ -644,6 +642,132 @@ function MyPaymentsTab() {
 }
 
 /* =======================================================================
+ * My Payments — employee's own read-only view of what admin has recorded
+ * via MyPaymentsTab above: this month's Net Hours/Expense/Loan figures plus
+ * a history of past settlements. No edit controls — admin is the only one
+ * who records a settlement.
+ * ===================================================================== */
+
+function MyPaymentsSummary() {
+  const { user } = useAuth();
+  const [month, setMonth] = useState(() => format(new Date(), "yyyy-MM"));
+  const [loading, setLoading] = useState(false);
+  const [netHours, setNetHours] = useState(0);
+  const [loan, setLoan] = useState<{ monthly_deduction: number; remaining_balance: number } | null>(null);
+  const [expenseOutstanding, setExpenseOutstanding] = useState(0);
+  const [settlement, setSettlement] = useState<any>(null);
+  const [history, setHistory] = useState<any[]>([]);
+
+  useEffect(() => {
+    if (!user?.id || !month) return;
+    setLoading(true);
+    (async () => {
+      const [rows, { data: loanRow }, { data: settlementRow }, { data: claims }, { data: priorSettlements }, { data: historyRows }] = await Promise.all([
+        computeMonthlySalaryRows([user.id], [month]),
+        supabase.from("personal_advances").select("monthly_deduction, remaining_balance")
+          .eq("user_id", user.id).eq("status", "approved").gt("remaining_balance", 0)
+          .order("created_at", { ascending: true }).limit(1).maybeSingle(),
+        supabase.from("payroll_settlements").select("*").eq("user_id", user.id).eq("month", `${month}-01`).maybeSingle(),
+        supabase.from("expense_claims").select("amount, entry_type, recovered_amount").eq("user_id", user.id).eq("status", "approved"),
+        supabase.from("payroll_settlements").select("expense_amount_paid").eq("user_id", user.id),
+        supabase.from("payroll_settlements").select("*").eq("user_id", user.id).order("month", { ascending: false }).limit(12),
+      ]);
+
+      const row = rows[0];
+      setNetHours(row ? row.netAdjustment : 0);
+      setLoan(loanRow || null);
+      setSettlement(settlementRow || null);
+
+      const expenseTotal = (claims || []).filter((c) => c.entry_type !== "advance").reduce((s, c) => s + Number(c.amount), 0);
+      const advanceOutstanding = (claims || []).filter((c) => c.entry_type === "advance").reduce((s, c) => s + Math.max(0, Number(c.amount) - Number(c.recovered_amount || 0)), 0);
+      const paidSoFar = (priorSettlements || []).reduce((s, p) => s + Number(p.expense_amount_paid || 0), 0);
+      setExpenseOutstanding(expenseTotal - advanceOutstanding - paidSoFar);
+
+      setHistory(historyRows || []);
+      setLoading(false);
+    })();
+  }, [user?.id, month]);
+
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle>My Payments</CardTitle>
+        <CardDescription>What's been recorded for your Net Hours, Expense balance and Loan due — read only.</CardDescription>
+        <div className="flex flex-wrap items-end gap-3 pt-2">
+          <div className="space-y-1">
+            <Label className="text-xs">Month</Label>
+            <Input type="month" value={month} onChange={(e) => setMonth(e.target.value)} />
+          </div>
+        </div>
+      </CardHeader>
+      <CardContent className="space-y-4">
+        {loading ? (
+          <p className="text-sm text-muted-foreground">Loading…</p>
+        ) : (
+          <>
+            <div className="grid gap-4 md:grid-cols-3">
+              <div className="rounded-md border p-3 space-y-2">
+                <div className="text-sm font-medium">Net Hours</div>
+                <div className="text-lg font-semibold">{fmtBDT(netHours)}</div>
+                <Badge variant="outline">
+                  {!settlement ? "Not recorded yet" : settlement.net_hours_paid ? "Paid" : "Carried to next month"}
+                </Badge>
+              </div>
+              <div className="rounded-md border p-3 space-y-2">
+                <div className="text-sm font-medium">Expense Balance</div>
+                <div className="text-lg font-semibold">{fmtBDT(expenseOutstanding)}</div>
+                <Badge variant="outline">{settlement ? `Paid ${fmtBDT(settlement.expense_amount_paid)}` : "Not recorded yet"}</Badge>
+              </div>
+              <div className="rounded-md border p-3 space-y-2">
+                <div className="text-sm font-medium">Loan Due</div>
+                <div className="text-lg font-semibold">
+                  {loan ? fmtBDT(Math.min(Number(loan.monthly_deduction), Number(loan.remaining_balance))) : "No active loan"}
+                </div>
+                <Badge variant="outline">{settlement ? `Paid ${fmtBDT(settlement.loan_amount_paid)}` : "Not recorded yet"}</Badge>
+                {loan && <p className="text-xs text-muted-foreground">{fmtBDT(loan.remaining_balance)} remaining balance</p>}
+              </div>
+            </div>
+            {settlement?.note && (
+              <p className="text-sm text-muted-foreground"><span className="font-medium">Note:</span> {settlement.note}</p>
+            )}
+
+            <div>
+              <p className="text-sm font-medium mb-2">History</p>
+              <div className="overflow-x-auto">
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>Month</TableHead>
+                      <TableHead>Net Hours</TableHead>
+                      <TableHead className="text-right">Expense Paid</TableHead>
+                      <TableHead className="text-right">Loan Paid</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {history.length === 0 ? (
+                      <TableRow><TableCell colSpan={4} className="text-center text-muted-foreground py-6">No payments recorded yet</TableCell></TableRow>
+                    ) : history.map((h) => (
+                      <TableRow key={h.id}>
+                        <TableCell className="whitespace-nowrap">{format(new Date(h.month), "MMM yyyy")}</TableCell>
+                        <TableCell>
+                          <Badge variant="outline">{h.net_hours_paid ? `Paid ${fmtBDT(h.net_hours_amount)}` : "Carried forward"}</Badge>
+                        </TableCell>
+                        <TableCell className="text-right">{fmtBDT(h.expense_amount_paid)}</TableCell>
+                        <TableCell className="text-right">{fmtBDT(h.loan_amount_paid)}</TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              </div>
+            </div>
+          </>
+        )}
+      </CardContent>
+    </Card>
+  );
+}
+
+/* =======================================================================
  * Salary tab (formerly Payroll) — moved from the former src/pages/Payroll.tsx
  * (now deleted). Self-contained: reads its own auth/role so its internals
  * never leak into (or collide with) Payment's own state/handlers.
@@ -668,8 +792,14 @@ function PayrollTab() {
 
 const fmtMonthLabel = (month: string) => format(new Date(`${month}-01T00:00:00`), "MMM yyyy");
 
+const PAYMENT_STATUS_LABEL: Record<SalaryMonthRow["paymentStatus"], string> = {
+  not_paid: "Not Paid",
+  partial: "Partially Paid",
+  paid: "Paid",
+};
+
 function SalaryMonthlyTableView({ rows, showEmployee, loading }: { rows: SalaryMonthRow[]; showEmployee: boolean; loading: boolean }) {
-  const colCount = showEmployee ? 12 : 10;
+  const colCount = (showEmployee ? 12 : 10) + 2;
   return (
     <div className="overflow-x-auto">
       <Table>
@@ -687,6 +817,8 @@ function SalaryMonthlyTableView({ rows, showEmployee, loading }: { rows: SalaryM
             <TableHead className="text-right">Net Adjustment</TableHead>
             <TableHead className="text-right">- Expense</TableHead>
             <TableHead className="text-right">Final</TableHead>
+            <TableHead className="text-right">Loan</TableHead>
+            <TableHead>Payment Status</TableHead>
           </TableRow>
         </TableHeader>
         <TableBody>
@@ -708,6 +840,10 @@ function SalaryMonthlyTableView({ rows, showEmployee, loading }: { rows: SalaryM
               <TableCell className="text-right">{fmtBDT(r.netAdjustment)}</TableCell>
               <TableCell className="text-right">{fmtBDT(-r.recoveryTotal)}</TableCell>
               <TableCell className="text-right font-semibold">{fmtBDT(r.final)}</TableCell>
+              <TableCell className="text-right">{fmtBDT(r.loanPaid)}</TableCell>
+              <TableCell>
+                <Badge variant={r.paymentStatus === "paid" ? "default" : "outline"}>{PAYMENT_STATUS_LABEL[r.paymentStatus]}</Badge>
+              </TableCell>
             </TableRow>
           ))}
         </TableBody>
