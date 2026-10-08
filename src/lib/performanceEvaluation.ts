@@ -48,6 +48,15 @@ export const EVALUATION_SECTIONS: { key: string; title: string; criteria: string
 
 export const TOTAL_CRITERIA_COUNT = EVALUATION_SECTIONS.reduce((n, s) => n + s.criteria.length, 0);
 
+/** What each 1-5 score means when rating a single criterion. */
+export const SCORE_SCALE: { score: number; label: string; description: string }[] = [
+  { score: 1, label: "Poor", description: "Consistently fails to meet expectations" },
+  { score: 2, label: "Below Average", description: "Occasionally meets expectations; needs improvement" },
+  { score: 3, label: "Satisfactory", description: "Meets expectations consistently" },
+  { score: 4, label: "Good", description: "Frequently exceeds expectations" },
+  { score: 5, label: "Excellent", description: "Consistently exceeds expectations" },
+];
+
 export type CriterionScore = {
   section: string;
   criterion: string;

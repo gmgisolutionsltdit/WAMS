@@ -16,7 +16,7 @@ import { toast } from "sonner";
 import { format } from "date-fns";
 import {
   EVALUATION_SECTIONS, TOTAL_CRITERIA_COUNT, summarizeScores, weightedFinalCategory,
-  CATEGORY_BADGE_CLASS, salaryCategoryForGross, SALARY_CATEGORY_LABEL, recommendedIncrementRange,
+  CATEGORY_BADGE_CLASS, salaryCategoryForGross, SALARY_CATEGORY_LABEL, recommendedIncrementRange, SCORE_SCALE,
   type CriterionScore, type EvaluationCategory, type SalaryCategory,
 } from "@/lib/performanceEvaluation";
 import {
@@ -81,9 +81,7 @@ type Evaluation = {
 
 const emptyRequestForm = () => ({ employee_id: "", evaluator_ids: [] as string[], period_from: "", period_to: "" });
 
-const emptyAnswerForm = (): { designation: string; relationship: string; scores: CriterionScore[]; justification: string } => ({
-  designation: "",
-  relationship: "Direct Supervisor",
+const emptyAnswerForm = (): { scores: CriterionScore[]; justification: string } => ({
   scores: EVALUATION_SECTIONS.flatMap((s) => s.criteria.map((criterion) => ({ section: s.key, criterion, score: 3, comment: "" }))),
   justification: "",
 });
@@ -214,8 +212,6 @@ const PerformanceEvaluation = () => {
       request_id: answerRequest.id,
       employee_id: answerRequest.employee_id,
       evaluator_id: user.id,
-      evaluator_designation: answerForm.designation.trim() || null,
-      relationship: answerForm.relationship,
       scores: answerForm.scores,
       criteria_count: TOTAL_CRITERIA_COUNT,
       total_score: summary.total,
@@ -546,24 +542,20 @@ const PerformanceEvaluation = () => {
             </DialogTitle>
           </DialogHeader>
           <div className="space-y-5">
-            <div className="grid grid-cols-2 gap-4">
-              <div>
-                <Label>Your Designation</Label>
-                <Input value={answerForm.designation} onChange={(e) => setAnswerForm((f) => ({ ...f, designation: e.target.value }))} />
-              </div>
-              <div>
-                <Label>Relationship with Employee</Label>
-                <Select value={answerForm.relationship} onValueChange={(v) => setAnswerForm((f) => ({ ...f, relationship: v }))}>
-                  <SelectTrigger className="mt-1"><SelectValue /></SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="Direct Supervisor">Direct Supervisor</SelectItem>
-                    <SelectItem value="Project Supervisor">Project Supervisor</SelectItem>
-                    <SelectItem value="Founder">Founder</SelectItem>
-                    <SelectItem value="Other">Other</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-            </div>
+            <Table>
+              <TableHeader>
+                <TableRow><TableHead className="w-12">Score</TableHead><TableHead className="w-32">Meaning</TableHead><TableHead>Description</TableHead></TableRow>
+              </TableHeader>
+              <TableBody>
+                {SCORE_SCALE.map((s) => (
+                  <TableRow key={s.score}>
+                    <TableCell className="font-mono font-semibold">{s.score}</TableCell>
+                    <TableCell className="font-medium">{s.label}</TableCell>
+                    <TableCell className="text-xs text-muted-foreground">{s.description}</TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
 
             {EVALUATION_SECTIONS.map((section) => (
               <div key={section.key} className="space-y-2">
