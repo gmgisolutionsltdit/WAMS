@@ -405,16 +405,19 @@ export type Database = {
       expense_types: {
         Row: {
           created_at: string
+          entry_type: string
           id: string
           name: string
         }
         Insert: {
           created_at?: string
+          entry_type?: string
           id?: string
           name: string
         }
         Update: {
           created_at?: string
+          entry_type?: string
           id?: string
           name?: string
         }
@@ -868,6 +871,53 @@ export type Database = {
             columns: ["due_adjustment_id"]
             isOneToOne: false
             referencedRelation: "payroll_due_adjustments"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      payroll_settlements: {
+        Row: {
+          created_at: string
+          expense_amount_paid: number
+          id: string
+          loan_amount_paid: number
+          month: string
+          net_hours_amount: number
+          net_hours_paid: boolean
+          note: string | null
+          paid_by: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          expense_amount_paid?: number
+          id?: string
+          loan_amount_paid?: number
+          month: string
+          net_hours_amount?: number
+          net_hours_paid?: boolean
+          note?: string | null
+          paid_by: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          expense_amount_paid?: number
+          id?: string
+          loan_amount_paid?: number
+          month?: string
+          net_hours_amount?: number
+          net_hours_paid?: boolean
+          note?: string | null
+          paid_by?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "payroll_settlements_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
             referencedColumns: ["id"]
           },
         ]

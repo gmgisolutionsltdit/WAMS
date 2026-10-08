@@ -21,246 +21,98 @@ import { PayrollAdjustments } from "@/components/PayrollAdjustments";
 import { monthsInRange, fmtBDT } from "@/lib/payrollAdjustments";
 import { computeMonthlySalaryRows, type SalaryMonthRow } from "@/lib/salaryMonthly";
 
-type AdvanceKind = "personal" | "expense";
-
-type UnifiedAdvance = {
-  kind: AdvanceKind;
-  raw: any;
-};
-
-const todayISO = () => format(new Date(), "yyyy-MM-dd");
-
 const Payment = () => {
   const { user, role } = useAuth();
   const isAdmin = role === "admin";
   // canApprove per-row is determined by can_approve() via RLS visibility — for
   // showing approve/reject buttons client-side, treat any row visible in the
-  // "Pending Approval" tab as approvable by the current viewer (RLS already
-  // filtered what they can see/update), same pattern as Expenses.tsx's
-  // `canApprove = role === "admin" || role === "manager"` gate for the tab itself.
+  // approvable list as approvable by the current viewer (RLS already filtered
+  // what they can see/update).
   const canApprove = role === "admin" || role === "manager";
 
-  const [personalAdvances, setPersonalAdvances] = useState<any[]>([]);
-  const [expenseAdvances, setExpenseAdvances] = useState<any[]>([]);
-  const [uploading, setUploading] = useState(false);
+  const [loans, setLoans] = useState<any[]>([]);
 
-  // Expense Advance request only — Personal Advance requests stay removed.
   const [requestOpen, setRequestOpen] = useState(false);
-  const [expenseRequestForm, setExpenseRequestForm] = useState({ amount: "", purpose: "", settle_by: "" });
-
-  const [settleDialogId, setSettleDialogId] = useState<string | null>(null);
-  const [settleReceipts, setSettleReceipts] = useState<{ amount: string; url: string }[]>([{ amount: "", url: "" }]);
-  const [settling, setSettling] = useState(false);
+  const [loanRequestForm, setLoanRequestForm] = useState({ amount: "", reason: "", installments: "1" });
 
   const [deductDialogId, setDeductDialogId] = useState<string | null>(null);
   const [recording, setRecording] = useState(false);
 
   const fetchAll = async () => {
-    const [{ data: pa, error: paErr }, { data: ea, error: eaErr }] = await Promise.all([
-      supabase.from("personal_advances").select("*, profiles!personal_advances_user_id_fkey(full_name,email,photo_url,employee_status)").order("created_at", { ascending: false }),
-      supabase.from("expense_advances").select("*, profiles!expense_advances_user_id_fkey(full_name,email,photo_url,employee_status)").order("created_at", { ascending: false }),
-    ]);
-    if (paErr) { toast.error(paErr.message); return; }
-    if (eaErr) { toast.error(eaErr.message); return; }
-
-    // Lazy settle_by conversion: any approved expense advance past its
-    // settle_by deadline is converted into a Personal Advance for payroll
-    // deduction. Only rows already visible to this viewer (RLS-filtered)
-    // are considered, and only still-'approved' rows are acted on, so a
-    // row already 'converted' is skipped naturally on a later fetch.
-    const overdue = (ea || []).filter((row: any) => row.status === "approved" && row.settle_by < todayISO());
-    for (const row of overdue) {
-      try {
-        const amount = Number(row.amount);
-        const { data: newAdvance, error: insErr } = await supabase.from("personal_advances").insert({
-          user_id: row.user_id,
-          amount,
-          reason: `Auto-converted from unsettled Expense Advance (purpose: ${row.purpose || "—"})`,
-          installments: 1,
-          monthly_deduction: amount,
-          remaining_balance: amount,
-          status: "approved",
-          approved_by: null,
-          approver_note: "Auto-converted on missed settle_by deadline",
-          approved_at: new Date().toISOString(),
-        }).select().single();
-        if (insErr || !newAdvance) continue;
-        await supabase.from("personal_advance_actions").insert({
-          personal_advance_id: newAdvance.id,
-          user_id: row.user_id,
-          action_type: "issued",
-          amount,
-          remaining_after: amount,
-          note: "Created by auto-conversion",
-          created_by: user?.id,
-        });
-        await supabase.from("expense_advances").update({
-          status: "converted",
-          converted_to_personal_advance_id: newAdvance.id,
-        }).eq("id", row.id);
-        await supabase.from("expense_advance_actions").insert({
-          expense_advance_id: row.id,
-          user_id: row.user_id,
-          action_type: "converted_to_personal_advance",
-          amount,
-          created_by: user?.id,
-        });
-        await notifyEmployee(
-          row.user_id,
-          "Expense Advance Converted",
-          `Your unsettled expense advance of ${amount} was converted to a Personal Advance for payroll deduction.`,
-          newAdvance.id,
-          { route: "/payment", type: "expense_advance_converted" },
-        );
-      } catch {
-        // best-effort; leave the row for the next fetch to retry
-      }
-    }
-
-    setPersonalAdvances(pa || []);
-    if (overdue.length > 0) {
-      const { data: ea2 } = await supabase.from("expense_advances").select("*, profiles!expense_advances_user_id_fkey(full_name,email,photo_url,employee_status)").order("created_at", { ascending: false });
-      setExpenseAdvances(ea2 || []);
-    } else {
-      setExpenseAdvances(ea || []);
-    }
+    const { data, error } = await supabase
+      .from("personal_advances")
+      .select("*, profiles!personal_advances_user_id_fkey(full_name,email,photo_url,employee_status)")
+      .order("created_at", { ascending: false });
+    if (error) { toast.error(error.message); return; }
+    setLoans(data || []);
   };
 
   useEffect(() => { fetchAll(); }, []);
 
-  const unified: UnifiedAdvance[] = [
-    ...personalAdvances.map((raw) => ({ kind: "personal" as const, raw })),
-    ...expenseAdvances.map((raw) => ({ kind: "expense" as const, raw })),
-  ].sort((a, b) => new Date(b.raw.created_at).getTime() - new Date(a.raw.created_at).getTime());
+  const mine = loans.filter((l) => l.user_id === user?.id);
+  // Loans tab: an approver sees everyone's requests (with approve/reject
+  // built into each row); everyone else sees only their own.
+  const loanRows = canApprove ? loans : mine;
 
-  const mine = unified.filter((u) => u.raw.user_id === user?.id);
-  // Unified Advance tab: an approver sees everyone's requests (with
-  // approve/reject built into each row) instead of separate Pending
-  // Approval / Team History tabs; everyone else sees only their own.
-  const advanceRows = canApprove ? unified : mine;
+  const hasActiveLoan = loans.some((l) => l.user_id === user?.id && ["pending", "approved"].includes(l.status));
 
-  const hasActiveExpense = expenseAdvances.some((r) => r.user_id === user?.id && ["pending", "approved"].includes(r.status));
-
-  const submitExpenseAdvanceRequest = async () => {
+  const submitLoanRequest = async () => {
     if (!user) return;
-    const amount = Number(expenseRequestForm.amount);
+    const amount = Number(loanRequestForm.amount);
+    const installments = Math.max(1, Math.round(Number(loanRequestForm.installments) || 1));
     if (!amount || amount <= 0) return toast.error("Amount must be greater than 0");
-    if (!expenseRequestForm.settle_by) return toast.error("Settle By date is required");
-    if (expenseRequestForm.settle_by <= todayISO()) return toast.error("Settle By must be a future date");
-    if (hasActiveExpense) return toast.error("You already have an active Expense Advance request.");
-    const { data: inserted, error } = await supabase.from("expense_advances").insert({
+    if (hasActiveLoan) return toast.error("You already have an active loan request.");
+    const monthlyDeduction = Math.round((amount / installments) * 100) / 100;
+    const { data: inserted, error } = await supabase.from("personal_advances").insert({
       user_id: user.id,
       amount,
-      purpose: expenseRequestForm.purpose || null,
-      settle_by: expenseRequestForm.settle_by,
+      reason: loanRequestForm.reason || null,
+      installments,
+      monthly_deduction: monthlyDeduction,
+      remaining_balance: amount,
     }).select().single();
     if (error) {
-      if ((error as any).code === "23505") return toast.error("You already have an active Expense Advance request.");
+      if ((error as any).code === "23505") return toast.error("You already have an active loan request.");
       return toast.error(error.message);
     }
-    toast.success("Expense Advance requested");
+    toast.success("Loan requested");
     setRequestOpen(false);
-    setExpenseRequestForm({ amount: "", purpose: "", settle_by: "" });
+    setLoanRequestForm({ amount: "", reason: "", installments: "1" });
     await notifyManagersAndAdmins(
-      "Expense Advance Requested",
-      `${user.email} requested an Expense Advance of ${amount}.`,
+      "Loan Requested",
+      `${user.email} requested a loan of ${amount}.`,
       inserted?.id,
-      { route: "/payment", type: "expense_advance", requesterId: user.id },
+      { route: "/payment", type: "personal_advance", requesterId: user.id },
     );
     fetchAll();
   };
 
-  const decide = async (item: UnifiedAdvance, status: "approved" | "rejected") => {
+  const decide = async (loan: any, status: "approved" | "rejected") => {
     if (!user) return;
-    const { kind, raw } = item;
-    const table = kind === "personal" ? "personal_advances" : "expense_advances";
-    const { error } = await supabase.from(table).update({
+    const { error } = await supabase.from("personal_advances").update({
       status, approved_by: user.id, approved_at: new Date().toISOString(),
-    }).eq("id", raw.id);
+    }).eq("id", loan.id);
     if (error) return toast.error(error.message);
 
-    if (kind === "personal" && status === "approved") {
+    if (status === "approved") {
       await supabase.from("personal_advance_actions").insert({
-        personal_advance_id: raw.id, user_id: raw.user_id, action_type: "issued",
-        amount: raw.amount, remaining_after: raw.amount, created_by: user.id,
-      });
-    } else if (kind === "expense") {
-      await supabase.from("expense_advance_actions").insert({
-        expense_advance_id: raw.id, user_id: raw.user_id,
-        action_type: status === "approved" ? "approved" : "rejected",
-        amount: raw.amount, created_by: user.id,
+        personal_advance_id: loan.id, user_id: loan.user_id, action_type: "issued",
+        amount: loan.amount, remaining_after: loan.amount, created_by: user.id,
       });
     }
-    // Personal Advance rejection: no ledger row. Rejecting is terminal and no
-    // balance ever existed, so an 'issued' row would misrepresent the event,
-    // and 'rejected' is not among the documented personal_advance_actions
-    // action_type values — skipped rather than inventing an undocumented one.
+    // Rejection: no ledger row — rejecting is terminal and no balance ever
+    // existed, so an 'issued' row would misrepresent the event, and
+    // 'rejected' is not among the documented personal_advance_actions
+    // action_type values.
 
-    toast.success(`${kind === "personal" ? "Personal" : "Expense"} Advance ${status}`);
+    toast.success(`Loan ${status}`);
     await notifyEmployee(
-      raw.user_id,
-      `${kind === "personal" ? "Personal" : "Expense"} Advance ${status === "approved" ? "Approved" : "Rejected"}`,
-      `Your ${kind === "personal" ? "Personal" : "Expense"} Advance of ${raw.amount} was ${status}.`,
-      raw.id,
-      { route: "/payment", type: `${kind}_advance_update` },
+      loan.user_id,
+      `Loan ${status === "approved" ? "Approved" : "Rejected"}`,
+      `Your loan request of ${loan.amount} was ${status}.`,
+      loan.id,
+      { route: "/payment", type: "personal_advance_update" },
     );
-    fetchAll();
-  };
-
-  const uploadSettleReceipt = async (idx: number, file: File) => {
-    if (!user) return;
-    setUploading(true);
-    const ext = file.name.split(".").pop();
-    const path = `${user.id}/${Date.now()}_${idx}.${ext}`;
-    const { error } = await supabase.storage.from("task-attachments").upload(path, file);
-    if (error) { toast.error(error.message); setUploading(false); return; }
-    const { data } = await supabase.storage.from("task-attachments").createSignedUrl(path, 60 * 60 * 24 * 365);
-    setSettleReceipts((rows) => rows.map((r, i) => i === idx ? { ...r, url: data?.signedUrl || "" } : r));
-    setUploading(false);
-  };
-
-  const submitSettlement = async () => {
-    if (!settleDialogId) return;
-    const advance = expenseAdvances.find((r) => r.id === settleDialogId);
-    if (!advance) return;
-    const validReceipts = settleReceipts.filter((r) => r.amount && Number(r.amount) > 0);
-    if (validReceipts.length === 0) return toast.error("Add at least one receipt with an amount");
-    const spentTotal = validReceipts.reduce((s, r) => s + Number(r.amount), 0);
-    const amount = Number(advance.amount);
-    let settlementDirection: "refund_to_company" | "reimburse_to_employee" | null = null;
-    let settlementAmount = 0;
-    if (spentTotal < amount) {
-      settlementDirection = "refund_to_company";
-      settlementAmount = amount - spentTotal;
-    } else if (spentTotal > amount) {
-      settlementDirection = "reimburse_to_employee";
-      settlementAmount = spentTotal - amount;
-    } else {
-      settlementDirection = null;
-      settlementAmount = 0;
-    }
-    setSettling(true);
-    const newReceipts = [
-      ...(advance.receipts || []),
-      ...validReceipts.map((r) => ({ url: r.url, amount: Number(r.amount), uploaded_at: new Date().toISOString() })),
-    ];
-    const { error } = await supabase.from("expense_advances").update({
-      receipts: newReceipts,
-      spent_total: spentTotal,
-      settlement_direction: settlementDirection,
-      settlement_amount: settlementAmount,
-      settled_at: new Date().toISOString(),
-      status: "settled",
-    }).eq("id", advance.id);
-    setSettling(false);
-    if (error) return toast.error(error.message);
-    await supabase.from("expense_advance_actions").insert({
-      expense_advance_id: advance.id, user_id: advance.user_id,
-      action_type: "settled", amount: settlementAmount, created_by: user?.id,
-    });
-    toast.success("Expense Advance settled");
-    setSettleDialogId(null);
-    setSettleReceipts([{ amount: "", url: "" }]);
     fetchAll();
   };
 
@@ -269,14 +121,14 @@ const Payment = () => {
   // (see applyDuePersonalAdvanceDeduction, called from PayrollTab below).
   // Both paths share that same function, so whichever runs first for a given
   // month "wins" and the other becomes a no-op — never a double deduction.
-  const recordDeduction = async (advance: any) => {
+  const recordDeduction = async (loan: any) => {
     if (!user) return;
     setRecording(true);
     try {
       const { data: profileRow, error: profErr } = await supabase
         .from("profiles")
         .select("id, full_name, email, designation, department, company_wing, joining_date, base_salary, hourly_overtime_rate, pf_contribution_pct, employee_status")
-        .eq("id", advance.user_id)
+        .eq("id", loan.user_id)
         .single();
       if (profErr || !profileRow) { toast.error(profErr?.message || "Employee profile not found"); return; }
       const now = new Date();
@@ -288,7 +140,7 @@ const Payment = () => {
         return;
       }
       if (result.status === "no_active_advance") {
-        toast.error("No active Personal Advance found for this employee.");
+        toast.error("No active loan found for this employee.");
         return;
       }
       if (result.status === "nothing_due") {
@@ -305,96 +157,79 @@ const Payment = () => {
     }
   };
 
-  const isResigned = (item: UnifiedAdvance) => item.raw.profiles?.employee_status === "Resigned";
-  const hasOutstanding = (item: UnifiedAdvance) =>
-    item.kind === "personal" ? Number(item.raw.remaining_balance) > 0 : item.raw.status === "approved";
+  const isResigned = (loan: any) => loan.profiles?.employee_status === "Resigned";
 
-  const renderRow = (item: UnifiedAdvance, showEmployee: boolean) => {
-    const { kind, raw } = item;
-    return (
-      <TableRow key={`${kind}-${raw.id}`}>
-        {showEmployee && <TableCell>{raw.profiles?.full_name || raw.profiles?.email || "—"}</TableCell>}
-        <TableCell><Badge variant="outline">{kind === "personal" ? "Personal Advance" : "Expense Advance"}</Badge></TableCell>
-        <TableCell>{format(new Date(raw.created_at), "MMM d, yyyy")}</TableCell>
-        <TableCell className="font-semibold">{Number(raw.amount).toLocaleString()}</TableCell>
-        <TableCell className="text-xs text-muted-foreground max-w-[200px] truncate">
-          {kind === "personal" ? (raw.reason || "—") : (raw.purpose || "—")}
-        </TableCell>
-        <TableCell>
-          {kind === "personal" ? (
-            <span>{Number(raw.remaining_balance).toLocaleString()} left</span>
-          ) : (
-            <span>Settle by {raw.settle_by}</span>
+  const renderRow = (loan: any, showEmployee: boolean) => (
+    <TableRow key={loan.id}>
+      {showEmployee && <TableCell>{loan.profiles?.full_name || loan.profiles?.email || "—"}</TableCell>}
+      <TableCell>{format(new Date(loan.created_at), "MMM d, yyyy")}</TableCell>
+      <TableCell className="font-semibold">{Number(loan.amount).toLocaleString()}</TableCell>
+      <TableCell className="text-xs text-muted-foreground max-w-[200px] truncate">{loan.reason || "—"}</TableCell>
+      <TableCell>{loan.installments} installment{loan.installments === 1 ? "" : "s"} · {Number(loan.monthly_deduction).toLocaleString()}/mo</TableCell>
+      <TableCell>{Number(loan.remaining_balance).toLocaleString()} left</TableCell>
+      <TableCell>
+        <div className="flex items-center gap-1 flex-wrap">
+          <Badge className={
+            loan.status === "approved" ? "bg-success text-white" :
+            loan.status === "rejected" ? "bg-destructive text-white" : ""
+          } variant={loan.status === "pending" ? "outline" : undefined}>{loan.status}</Badge>
+          {loan.admin_flag && (
+            <Badge variant="destructive" className="gap-1"><AlertTriangle className="h-3 w-3" />Flagged</Badge>
           )}
-        </TableCell>
-        <TableCell>
-          <div className="flex items-center gap-1 flex-wrap">
-            <Badge className={
-              raw.status === "approved" ? "bg-success text-white" :
-              raw.status === "rejected" ? "bg-destructive text-white" :
-              raw.status === "closed" || raw.status === "settled" ? "" : ""
-            } variant={raw.status === "pending" ? "outline" : undefined}>{raw.status}</Badge>
-            {kind === "personal" && raw.admin_flag && (
-              <Badge variant="destructive" className="gap-1"><AlertTriangle className="h-3 w-3" />Flagged</Badge>
-            )}
-            {isResigned(item) && hasOutstanding(item) && (
-              <Badge variant="destructive">Outstanding — employee resigned</Badge>
-            )}
-          </div>
-        </TableCell>
-        <TableCell>
-          <div className="flex gap-1">
-            {canApprove && raw.status === "pending" && raw.user_id !== user?.id && (
-              <>
-                <Button size="icon" variant="outline" onClick={() => decide(item, "approved")}><Check className="h-4 w-4 text-success" /></Button>
-                <Button size="icon" variant="outline" onClick={() => decide(item, "rejected")}><X className="h-4 w-4 text-destructive" /></Button>
-              </>
-            )}
-            {kind === "expense" && raw.status === "approved" && raw.user_id === user?.id && (
-              <Button size="sm" variant="outline" onClick={() => { setSettleDialogId(raw.id); setSettleReceipts([{ amount: "", url: "" }]); }}>Settle</Button>
-            )}
-            {kind === "personal" && raw.status === "approved" && Number(raw.remaining_balance) > 0 && canApprove && raw.user_id !== user?.id && (
-              <Button size="sm" variant="outline" onClick={() => setDeductDialogId(raw.id)}>Record This Month's Deduction</Button>
-            )}
-          </div>
-        </TableCell>
-      </TableRow>
-    );
-  };
+          {isResigned(loan) && Number(loan.remaining_balance) > 0 && (
+            <Badge variant="destructive">Outstanding — employee resigned</Badge>
+          )}
+        </div>
+      </TableCell>
+      <TableCell>
+        <div className="flex gap-1">
+          {canApprove && loan.status === "pending" && loan.user_id !== user?.id && (
+            <>
+              <Button size="icon" variant="outline" onClick={() => decide(loan, "approved")}><Check className="h-4 w-4 text-success" /></Button>
+              <Button size="icon" variant="outline" onClick={() => decide(loan, "rejected")}><X className="h-4 w-4 text-destructive" /></Button>
+            </>
+          )}
+          {loan.status === "approved" && Number(loan.remaining_balance) > 0 && canApprove && loan.user_id !== user?.id && (
+            <Button size="sm" variant="outline" onClick={() => setDeductDialogId(loan.id)}>Record This Month's Deduction</Button>
+          )}
+        </div>
+      </TableCell>
+    </TableRow>
+  );
 
-  const settleAdvance = settleDialogId ? expenseAdvances.find((r) => r.id === settleDialogId) : null;
-  const deductAdvance = deductDialogId ? personalAdvances.find((r) => r.id === deductDialogId) : null;
+  const deductLoan = deductDialogId ? loans.find((l) => l.id === deductDialogId) : null;
 
   return (
     <div className="space-y-6">
       <div className="flex justify-between items-center flex-wrap gap-4">
         <div>
           <h1 className="text-2xl font-display font-bold">Payment</h1>
-          <p className="text-sm text-muted-foreground">Request and manage Personal and Expense Advances.</p>
+          <p className="text-sm text-muted-foreground">Loans, Salary and Expense — one place for payment and payroll.</p>
         </div>
       </div>
 
-      <Tabs defaultValue="advance">
+      <Tabs defaultValue="loans">
         <TabsList>
-          <TabsTrigger value="advance">Advance</TabsTrigger>
+          <TabsTrigger value="loans">Loans</TabsTrigger>
           <TabsTrigger value="salary">Salary</TabsTrigger>
           <TabsTrigger value="expense">Expense</TabsTrigger>
+          {isAdmin && <TabsTrigger value="my-payments">My Payments</TabsTrigger>}
         </TabsList>
 
-        <TabsContent value="advance" className="space-y-4">
+        <TabsContent value="loans" className="space-y-4">
           <div className="flex justify-end">
-            <Dialog open={requestOpen} onOpenChange={(o) => { setRequestOpen(o); if (!o) setExpenseRequestForm({ amount: "", purpose: "", settle_by: "" }); }}>
-              <DialogTrigger asChild><Button><Plus className="h-4 w-4 mr-1" />New Expense Advance</Button></DialogTrigger>
+            <Dialog open={requestOpen} onOpenChange={(o) => { setRequestOpen(o); if (!o) setLoanRequestForm({ amount: "", reason: "", installments: "1" }); }}>
+              <DialogTrigger asChild><Button><Plus className="h-4 w-4 mr-1" />Request Loan</Button></DialogTrigger>
               <DialogContent>
-                <DialogHeader><DialogTitle>Request Expense Advance</DialogTitle></DialogHeader>
+                <DialogHeader><DialogTitle>Request a Loan</DialogTitle></DialogHeader>
                 <div className="space-y-3">
                   <div className="grid grid-cols-2 gap-3">
-                    <div><Label>Amount</Label><Input type="number" value={expenseRequestForm.amount} onChange={(e) => setExpenseRequestForm((f) => ({ ...f, amount: e.target.value }))} /></div>
-                    <div><Label>Settle By</Label><Input type="date" value={expenseRequestForm.settle_by} onChange={(e) => setExpenseRequestForm((f) => ({ ...f, settle_by: e.target.value }))} /></div>
+                    <div><Label>Amount</Label><Input type="number" value={loanRequestForm.amount} onChange={(e) => setLoanRequestForm((f) => ({ ...f, amount: e.target.value }))} /></div>
+                    <div><Label>Installments</Label><Input type="number" min="1" value={loanRequestForm.installments} onChange={(e) => setLoanRequestForm((f) => ({ ...f, installments: e.target.value }))} /></div>
                   </div>
-                  <div><Label>Purpose</Label><Textarea value={expenseRequestForm.purpose} onChange={(e) => setExpenseRequestForm((f) => ({ ...f, purpose: e.target.value }))} /></div>
+                  <div><Label>Reason</Label><Textarea value={loanRequestForm.reason} onChange={(e) => setLoanRequestForm((f) => ({ ...f, reason: e.target.value }))} /></div>
                 </div>
-                <DialogFooter><Button onClick={submitExpenseAdvanceRequest}>Submit</Button></DialogFooter>
+                <DialogFooter><Button onClick={submitLoanRequest}>Submit</Button></DialogFooter>
               </DialogContent>
             </Dialog>
           </div>
@@ -404,18 +239,20 @@ const Payment = () => {
                 <TableHeader>
                   <TableRow>
                     {canApprove && <TableHead>Employee</TableHead>}
-                    <TableHead>Type</TableHead><TableHead>Date</TableHead><TableHead>Amount</TableHead>
-                    <TableHead>Details</TableHead><TableHead>Balance / Settle By</TableHead><TableHead>Status</TableHead><TableHead></TableHead>
+                    <TableHead>Date</TableHead><TableHead>Amount</TableHead>
+                    <TableHead>Reason</TableHead><TableHead>Installments</TableHead><TableHead>Balance</TableHead><TableHead>Status</TableHead><TableHead></TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {advanceRows.length === 0 ? (
-                    <TableRow><TableCell colSpan={canApprove ? 8 : 7} className="text-center text-muted-foreground">No payment requests</TableCell></TableRow>
-                  ) : advanceRows.map((item) => renderRow(item, canApprove))}
+                  {loanRows.length === 0 ? (
+                    <TableRow><TableCell colSpan={canApprove ? 8 : 7} className="text-center text-muted-foreground">No loan requests</TableCell></TableRow>
+                  ) : loanRows.map((loan) => renderRow(loan, canApprove))}
                 </TableBody>
               </Table>
             </CardContent>
           </Card>
+
+          {isAdmin && <AdminLoanSituationTable />}
         </TabsContent>
 
         <TabsContent value="salary">
@@ -425,48 +262,27 @@ const Payment = () => {
         <TabsContent value="expense">
           <ExpenseClaimsTab />
         </TabsContent>
-      </Tabs>
 
-      {/* Settle Expense Advance dialog */}
-      <Dialog open={!!settleDialogId} onOpenChange={(o) => { if (!o) { setSettleDialogId(null); setSettleReceipts([{ amount: "", url: "" }]); } }}>
-        <DialogContent>
-          <DialogHeader><DialogTitle>Settle Expense Advance</DialogTitle></DialogHeader>
-          {settleAdvance && (
-            <div className="space-y-3">
-              <p className="text-sm text-muted-foreground">Advance amount: {Number(settleAdvance.amount).toLocaleString()}</p>
-              {settleReceipts.map((r, idx) => (
-                <div key={idx} className="grid grid-cols-2 gap-3 items-end">
-                  <div><Label>Receipt Amount</Label><Input type="number" value={r.amount} onChange={(e) => setSettleReceipts((rows) => rows.map((row, i) => i === idx ? { ...row, amount: e.target.value } : row))} /></div>
-                  <div>
-                    <Label>Receipt File</Label>
-                    <Input type="file" accept="image/*,application/pdf" disabled={uploading} onChange={(e) => e.target.files?.[0] && uploadSettleReceipt(idx, e.target.files[0])} />
-                    {r.url && <a className="text-xs text-primary underline" href={r.url} target="_blank" rel="noreferrer">View attached</a>}
-                  </div>
-                </div>
-              ))}
-              <Button size="sm" variant="outline" onClick={() => setSettleReceipts((rows) => [...rows, { amount: "", url: "" }])}>Add Another Receipt</Button>
-              <p className="text-sm font-medium">
-                Total spent: {settleReceipts.reduce((s, r) => s + (Number(r.amount) || 0), 0).toLocaleString()}
-              </p>
-            </div>
-          )}
-          <DialogFooter><Button onClick={submitSettlement} disabled={settling || uploading}>{settling ? "Submitting..." : "Submit Settlement"}</Button></DialogFooter>
-        </DialogContent>
-      </Dialog>
+        {isAdmin && (
+          <TabsContent value="my-payments">
+            <MyPaymentsTab />
+          </TabsContent>
+        )}
+      </Tabs>
 
       {/* Record This Month's Deduction dialog */}
       <Dialog open={!!deductDialogId} onOpenChange={(o) => { if (!o) setDeductDialogId(null); }}>
         <DialogContent>
           <DialogHeader><DialogTitle>Record This Month's Deduction</DialogTitle></DialogHeader>
-          {deductAdvance && (
+          {deductLoan && (
             <div className="space-y-2 text-sm">
               <p>Month: {format(new Date(), "MMMM yyyy")}</p>
-              <p>Monthly deduction: {Number(deductAdvance.monthly_deduction).toLocaleString()}</p>
-              <p>Remaining balance: {Number(deductAdvance.remaining_balance).toLocaleString()}</p>
-              <p className="text-muted-foreground">Proposed amount: {Math.min(Number(deductAdvance.monthly_deduction), Number(deductAdvance.remaining_balance)).toLocaleString()} (may be further capped by this month's net pay)</p>
+              <p>Monthly deduction: {Number(deductLoan.monthly_deduction).toLocaleString()}</p>
+              <p>Remaining balance: {Number(deductLoan.remaining_balance).toLocaleString()}</p>
+              <p className="text-muted-foreground">Proposed amount: {Math.min(Number(deductLoan.monthly_deduction), Number(deductLoan.remaining_balance)).toLocaleString()} (may be further capped by this month's net pay)</p>
             </div>
           )}
-          <DialogFooter><Button onClick={() => deductAdvance && recordDeduction(deductAdvance)} disabled={recording}>{recording ? "Recording..." : "Record Deduction"}</Button></DialogFooter>
+          <DialogFooter><Button onClick={() => deductLoan && recordDeduction(deductLoan)} disabled={recording}>{recording ? "Recording..." : "Record Deduction"}</Button></DialogFooter>
         </DialogContent>
       </Dialog>
     </div>
@@ -474,6 +290,358 @@ const Payment = () => {
 };
 
 export default Payment;
+
+/* =======================================================================
+ * Loan Situation — admin-only summary of every employee's loan activity
+ * (issued/repaid within a filtered range, plus current outstanding
+ * balance), shown below the Loans table.
+ * ===================================================================== */
+
+type LoanSituationRow = {
+  userId: string;
+  name: string;
+  issuedInRange: number;
+  repaidInRange: number;
+  currentRemaining: number;
+};
+
+function AdminLoanSituationTable() {
+  const [employees, setEmployees] = useState<{ id: string; full_name: string | null; email: string | null }[]>([]);
+  const [selectedIds, setSelectedIds] = useState<string[]>([]);
+  const [monthFrom, setMonthFrom] = useState("");
+  const [monthTo, setMonthTo] = useState("");
+  const [dateFrom, setDateFrom] = useState("");
+  const [dateTo, setDateTo] = useState("");
+  const [rows, setRows] = useState<LoanSituationRow[]>([]);
+  const [loading, setLoading] = useState(true);
+  const fetchSeq = useRef(0);
+
+  useEffect(() => {
+    (async () => {
+      const { data } = await supabase.from("profiles").select("id, full_name, email").order("full_name");
+      setEmployees(data || []);
+      setSelectedIds((data || []).map((e) => e.id));
+    })();
+  }, []);
+
+  // An explicit date range is more specific than Month From/To, same
+  // convention as the Expense tab's own filter.
+  const effectiveRange = useMemo(() => {
+    if (dateFrom || dateTo) return { from: dateFrom, to: dateTo };
+    return monthFilterToRange(monthFrom, monthTo);
+  }, [monthFrom, monthTo, dateFrom, dateTo]);
+
+  useEffect(() => {
+    if (selectedIds.length === 0) { setRows([]); setLoading(false); return; }
+    const seq = ++fetchSeq.current;
+    setLoading(true);
+    (async () => {
+      const [{ data: advances }, { data: actions }] = await Promise.all([
+        supabase.from("personal_advances").select("user_id, remaining_balance").in("user_id", selectedIds).eq("status", "approved"),
+        (() => {
+          let q = supabase.from("personal_advance_actions").select("user_id, action_type, amount, created_at").in("user_id", selectedIds);
+          if (effectiveRange.from) q = q.gte("created_at", `${effectiveRange.from}T00:00:00`);
+          if (effectiveRange.to) q = q.lte("created_at", `${effectiveRange.to}T23:59:59`);
+          return q;
+        })(),
+      ]);
+      if (seq !== fetchSeq.current) return;
+
+      const remainingByUser = new Map<string, number>();
+      (advances || []).forEach((a) => remainingByUser.set(a.user_id, (remainingByUser.get(a.user_id) || 0) + Number(a.remaining_balance)));
+
+      const issuedByUser = new Map<string, number>();
+      const repaidByUser = new Map<string, number>();
+      (actions || []).forEach((a) => {
+        if (a.action_type === "issued") issuedByUser.set(a.user_id, (issuedByUser.get(a.user_id) || 0) + Number(a.amount));
+        if (a.action_type === "payroll_deduction") repaidByUser.set(a.user_id, (repaidByUser.get(a.user_id) || 0) + Number(a.amount));
+      });
+
+      const employeeMap = new Map(employees.map((e) => [e.id, e]));
+      const result: LoanSituationRow[] = selectedIds
+        .map((id) => {
+          const e = employeeMap.get(id);
+          return {
+            userId: id,
+            name: e?.full_name || e?.email || "—",
+            issuedInRange: issuedByUser.get(id) || 0,
+            repaidInRange: repaidByUser.get(id) || 0,
+            currentRemaining: remainingByUser.get(id) || 0,
+          };
+        })
+        .filter((r) => r.issuedInRange > 0 || r.repaidInRange > 0 || r.currentRemaining > 0);
+
+      setRows(result.sort((a, b) => a.name.localeCompare(b.name)));
+      setLoading(false);
+    })();
+  }, [selectedIds, effectiveRange, employees]);
+
+  const toggleEmployee = (id: string) =>
+    setSelectedIds((ids) => (ids.includes(id) ? ids.filter((x) => x !== id) : [...ids, id]));
+
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle className="text-base">Loan Situation — All Employees</CardTitle>
+        <CardDescription>Issued and repaid within the selected range, plus each employee's current outstanding balance.</CardDescription>
+        <div className="flex flex-wrap items-start gap-3 pt-2">
+          <div className="space-y-1"><Label className="text-xs">Month From</Label><Input type="month" value={monthFrom} disabled={!!(dateFrom || dateTo)} onChange={(e) => setMonthFrom(e.target.value)} /></div>
+          <div className="space-y-1"><Label className="text-xs">Month To</Label><Input type="month" value={monthTo} disabled={!!(dateFrom || dateTo)} onChange={(e) => setMonthTo(e.target.value)} /></div>
+          <div className="space-y-1"><Label className="text-xs">From Date</Label><Input type="date" value={dateFrom} onChange={(e) => setDateFrom(e.target.value)} /></div>
+          <div className="space-y-1"><Label className="text-xs">To Date</Label><Input type="date" value={dateTo} onChange={(e) => setDateTo(e.target.value)} /></div>
+          {(monthFrom || monthTo || dateFrom || dateTo) && (
+            <Button size="sm" variant="ghost" className="self-end" onClick={() => { setMonthFrom(""); setMonthTo(""); setDateFrom(""); setDateTo(""); }}>Clear</Button>
+          )}
+          <div className="space-y-1">
+            <Label className="text-xs">Employees ({selectedIds.length} selected)</Label>
+            <div className="rounded-md border p-2 max-h-36 w-64 overflow-y-auto space-y-1">
+              <label className="flex items-center gap-2 text-sm px-1 py-0.5 font-medium border-b pb-1 mb-1">
+                <Checkbox
+                  checked={employees.length > 0 && selectedIds.length === employees.length}
+                  onCheckedChange={() => setSelectedIds(selectedIds.length === employees.length ? [] : employees.map((e) => e.id))}
+                />
+                Select all
+              </label>
+              {employees.map((e) => (
+                <label key={e.id} className="flex items-center gap-2 text-sm px-1 py-0.5">
+                  <Checkbox checked={selectedIds.includes(e.id)} onCheckedChange={() => toggleEmployee(e.id)} />
+                  {e.full_name || e.email}
+                </label>
+              ))}
+            </div>
+          </div>
+        </div>
+      </CardHeader>
+      <CardContent>
+        <div className="overflow-x-auto">
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead>Employee</TableHead>
+                <TableHead className="text-right">Issued (range)</TableHead>
+                <TableHead className="text-right">Repaid (range)</TableHead>
+                <TableHead className="text-right">Current Balance</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {loading ? (
+                <TableRow><TableCell colSpan={4} className="text-center text-muted-foreground py-8"><Loader2 className="h-4 w-4 animate-spin inline mr-2" />Loading…</TableCell></TableRow>
+              ) : rows.length === 0 ? (
+                <TableRow><TableCell colSpan={4} className="text-center text-muted-foreground py-8">No loan activity</TableCell></TableRow>
+              ) : rows.map((r) => (
+                <TableRow key={r.userId}>
+                  <TableCell className="font-medium">{r.name}</TableCell>
+                  <TableCell className="text-right">{r.issuedInRange.toLocaleString()}</TableCell>
+                  <TableCell className="text-right">{r.repaidInRange.toLocaleString()}</TableCell>
+                  <TableCell className="text-right font-semibold">{r.currentRemaining.toLocaleString()}</TableCell>
+                </TableRow>
+              ))}
+            </TableBody>
+          </Table>
+        </div>
+      </CardContent>
+    </Card>
+  );
+}
+
+/* =======================================================================
+ * My Payments — admin's disbursement tab. Combines this month's Net Hours
+ * payment, outstanding Expense balance and Loan due into one decision per
+ * employee: how much of each to pay now vs leave outstanding. Net Hours is
+ * a binary pay-now/carry-forward choice (matching the "Carry Forward"
+ * option OT/Due decisions already have in the Salary tab); Expense and
+ * Loan amounts can be paid in full or in part.
+ *
+ * Recording a settlement here reduces the Loan's remaining_balance through
+ * the same personal_advance_actions ledger "Record This Month's Deduction"
+ * already uses, and the Expense balance shown is always net of every prior
+ * settlement's expense_amount_paid for that employee - so once paid, it
+ * drops out of what's still owed the next time this tab is opened, for
+ * both admin and the employee.
+ * ===================================================================== */
+
+function MyPaymentsTab() {
+  const { user } = useAuth();
+  const [employees, setEmployees] = useState<{ id: string; full_name: string | null; email: string | null }[]>([]);
+  const [selectedUserId, setSelectedUserId] = useState("");
+  const [month, setMonth] = useState(() => format(new Date(), "yyyy-MM"));
+  const [loading, setLoading] = useState(false);
+  const [saving, setSaving] = useState(false);
+
+  const [netHours, setNetHours] = useState(0);
+  const [loan, setLoan] = useState<{ id: string; monthly_deduction: number; remaining_balance: number } | null>(null);
+  const [expenseOutstanding, setExpenseOutstanding] = useState(0);
+  const [existingSettlement, setExistingSettlement] = useState<any>(null);
+
+  const [netHoursPaidNow, setNetHoursPaidNow] = useState(true);
+  const [expenseAmount, setExpenseAmount] = useState("0");
+  const [loanAmount, setLoanAmount] = useState("0");
+  const [note, setNote] = useState("");
+
+  useEffect(() => {
+    (async () => {
+      const { data } = await supabase.from("profiles").select("id, full_name, email").order("full_name");
+      setEmployees(data || []);
+      if (data && data.length > 0) setSelectedUserId((v) => v || data[0].id);
+    })();
+  }, []);
+
+  useEffect(() => {
+    if (!selectedUserId || !month) return;
+    setLoading(true);
+    (async () => {
+      const [rows, { data: loanRow }, { data: settlement }, { data: claims }, { data: priorSettlements }] = await Promise.all([
+        computeMonthlySalaryRows([selectedUserId], [month]),
+        supabase.from("personal_advances").select("id, monthly_deduction, remaining_balance")
+          .eq("user_id", selectedUserId).eq("status", "approved").gt("remaining_balance", 0)
+          .order("created_at", { ascending: true }).limit(1).maybeSingle(),
+        supabase.from("payroll_settlements").select("*").eq("user_id", selectedUserId).eq("month", `${month}-01`).maybeSingle(),
+        supabase.from("expense_claims").select("amount, entry_type, recovered_amount").eq("user_id", selectedUserId).eq("status", "approved"),
+        supabase.from("payroll_settlements").select("expense_amount_paid").eq("user_id", selectedUserId),
+      ]);
+
+      const row = rows[0];
+      setNetHours(row ? row.netAdjustment : 0);
+      setLoan(loanRow || null);
+      setExistingSettlement(settlement || null);
+      setNetHoursPaidNow(settlement ? settlement.net_hours_paid : true);
+      const loanDue = Math.min(Number(loanRow?.monthly_deduction || 0), Number(loanRow?.remaining_balance || 0));
+      setLoanAmount(String(settlement ? settlement.loan_amount_paid : loanDue));
+
+      // Lifetime Expense net balance (every approved claim, not just this
+      // month) minus every prior settlement's expense_amount_paid - so a
+      // partial payment last month reduces what's still outstanding now.
+      const expenseTotal = (claims || []).filter((c) => c.entry_type !== "advance").reduce((s, c) => s + Number(c.amount), 0);
+      const advanceOutstanding = (claims || []).filter((c) => c.entry_type === "advance").reduce((s, c) => s + Math.max(0, Number(c.amount) - Number(c.recovered_amount || 0)), 0);
+      const paidSoFar = (priorSettlements || []).reduce((s, p) => s + Number(p.expense_amount_paid || 0), 0);
+      const outstanding = expenseTotal - advanceOutstanding - paidSoFar;
+      setExpenseOutstanding(outstanding);
+      setExpenseAmount(String(settlement ? settlement.expense_amount_paid : Math.max(0, outstanding)));
+      setNote(settlement?.note || "");
+      setLoading(false);
+    })();
+  }, [selectedUserId, month]);
+
+  const submit = async () => {
+    if (!user || !selectedUserId) return;
+    setSaving(true);
+    try {
+      const loanPaid = Math.max(0, Number(loanAmount) || 0);
+      const expensePaid = Math.max(0, Number(expenseAmount) || 0);
+      const { error } = await supabase.from("payroll_settlements").upsert({
+        user_id: selectedUserId,
+        month: `${month}-01`,
+        net_hours_amount: netHours,
+        net_hours_paid: netHoursPaidNow,
+        expense_amount_paid: expensePaid,
+        loan_amount_paid: loanPaid,
+        note: note || null,
+        paid_by: user.id,
+      }, { onConflict: "user_id,month" });
+      if (error) throw error;
+
+      // Apply the loan portion to the ledger immediately, same mechanism as
+      // the existing "Record This Month's Deduction" flow - only the delta
+      // vs what this settlement already recorded, so re-saving the same
+      // month doesn't double-deduct.
+      const alreadyRecorded = Number(existingSettlement?.loan_amount_paid || 0);
+      const delta = loanPaid - alreadyRecorded;
+      if (delta !== 0 && loan) {
+        const newRemaining = Math.max(0, Number(loan.remaining_balance) - delta);
+        await supabase.from("personal_advances").update({
+          remaining_balance: newRemaining, status: newRemaining === 0 ? "closed" : "approved",
+        }).eq("id", loan.id);
+        await supabase.from("personal_advance_actions").insert({
+          personal_advance_id: loan.id, user_id: selectedUserId, action_type: "payroll_deduction",
+          amount: delta, remaining_after: newRemaining, month: `${month}-01`, created_by: user.id,
+          note: "Recorded via My Payments",
+        });
+      }
+
+      toast.success("Payment recorded");
+      await notifyEmployee(
+        selectedUserId,
+        "Payment Recorded",
+        `Your ${format(new Date(`${month}-01`), "MMMM yyyy")} payment was recorded: Net Hours ${netHoursPaidNow ? "paid" : "carried to next month"}, Expense ${fmtBDT(expensePaid)}, Loan ${fmtBDT(loanPaid)}.`,
+        undefined,
+        { route: "/payment", type: "payroll_settlement" },
+      );
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Failed to record payment");
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const employeeName = employees.find((e) => e.id === selectedUserId)?.full_name || employees.find((e) => e.id === selectedUserId)?.email;
+
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle>My Payments</CardTitle>
+        <CardDescription>Decide how much of this month's Net Hours, Expense balance and Loan due to pay now.</CardDescription>
+        <div className="flex flex-wrap items-end gap-3 pt-2">
+          <div className="space-y-1">
+            <Label className="text-xs">Employee</Label>
+            <Select value={selectedUserId} onValueChange={setSelectedUserId}>
+              <SelectTrigger className="w-[220px]"><SelectValue placeholder="Select employee" /></SelectTrigger>
+              <SelectContent>{employees.map((e) => <SelectItem key={e.id} value={e.id}>{e.full_name || e.email}</SelectItem>)}</SelectContent>
+            </Select>
+          </div>
+          <div className="space-y-1">
+            <Label className="text-xs">Month</Label>
+            <Input type="month" value={month} onChange={(e) => setMonth(e.target.value)} />
+          </div>
+        </div>
+      </CardHeader>
+      <CardContent>
+        {loading ? (
+          <p className="text-sm text-muted-foreground">Loading…</p>
+        ) : !selectedUserId ? (
+          <p className="text-sm text-muted-foreground">Select an employee.</p>
+        ) : (
+          <div className="space-y-4">
+            {existingSettlement && (
+              <p className="text-xs text-muted-foreground">
+                A payment for {format(new Date(`${month}-01`), "MMMM yyyy")} was already recorded — saving again updates it.
+              </p>
+            )}
+            <div className="grid gap-4 md:grid-cols-3">
+              <div className="rounded-md border p-3 space-y-2">
+                <div className="text-sm font-medium">Net Hours{employeeName ? "" : ""}</div>
+                <div className="text-lg font-semibold">{fmtBDT(netHours)}</div>
+                <label className="flex items-center gap-2 text-sm">
+                  <Checkbox checked={netHoursPaidNow} onCheckedChange={(v) => setNetHoursPaidNow(!!v)} />
+                  Pay now (unchecked = carry to next month)
+                </label>
+              </div>
+              <div className="rounded-md border p-3 space-y-2">
+                <div className="text-sm font-medium">Expense Balance</div>
+                <div className="text-lg font-semibold">{fmtBDT(expenseOutstanding)}</div>
+                <Label className="text-xs">Pay now</Label>
+                <Input type="number" value={expenseAmount} onChange={(e) => setExpenseAmount(e.target.value)} />
+              </div>
+              <div className="rounded-md border p-3 space-y-2">
+                <div className="text-sm font-medium">Loan Due</div>
+                <div className="text-lg font-semibold">
+                  {loan ? fmtBDT(Math.min(Number(loan.monthly_deduction), Number(loan.remaining_balance))) : "No active loan"}
+                </div>
+                <Label className="text-xs">Pay now</Label>
+                <Input type="number" value={loanAmount} onChange={(e) => setLoanAmount(e.target.value)} disabled={!loan} />
+                {loan && <p className="text-xs text-muted-foreground">{fmtBDT(loan.remaining_balance)} remaining balance</p>}
+              </div>
+            </div>
+            <div>
+              <Label className="text-xs">Note (optional)</Label>
+              <Textarea value={note} onChange={(e) => setNote(e.target.value)} />
+            </div>
+            <Button onClick={submit} disabled={saving}>{saving ? "Recording..." : "Record Payment"}</Button>
+          </div>
+        )}
+      </CardContent>
+    </Card>
+  );
+}
 
 /* =======================================================================
  * Salary tab (formerly Payroll) — moved from the former src/pages/Payroll.tsx
@@ -689,11 +857,11 @@ function AdminSalaryMonthlyTable() {
  * leak into (or collide with) Payment's own state/handlers.
  * ===================================================================== */
 
-const FALLBACK_CATEGORIES = ["Travel", "Meals", "Office Supplies", "Software", "Training", "Client Entertainment", "Other"];
-
-const DIRECTIONS = [
-  { value: "company_pays_employee", label: "Company Pays Employee" },
-  { value: "employee_owes_company", label: "Employee Owes Company" },
+const FALLBACK_CATEGORIES: ExpenseType[] = [
+  { name: "Travel", entry_type: "expense" }, { name: "Meals", entry_type: "expense" },
+  { name: "Office Supplies", entry_type: "expense" }, { name: "Software", entry_type: "expense" },
+  { name: "Training", entry_type: "expense" }, { name: "Client Entertainment", entry_type: "expense" },
+  { name: "Other", entry_type: "expense" },
 ];
 
 const ENTRY_TYPES = [
@@ -701,17 +869,22 @@ const ENTRY_TYPES = [
   { value: "advance", label: "Advance" },
 ];
 
+type ExpenseType = { name: string; entry_type: "expense" | "advance" };
+
 function ExpenseClaimsTab() {
   const { user, role } = useAuth();
   const isAdmin = role === "admin";
   const canApprove = role === "admin" || role === "manager";
   const [claims, setClaims] = useState<any[]>([]);
-  const [categories, setCategories] = useState<string[]>(FALLBACK_CATEGORIES);
+  const [expenseTypes, setExpenseTypes] = useState<ExpenseType[]>(FALLBACK_CATEGORIES);
   const [newCategory, setNewCategory] = useState("");
+  const [newCategoryType, setNewCategoryType] = useState<"expense" | "advance">("expense");
   const [open, setOpen] = useState(false);
+  // Entry Type comes first - it decides which category list applies, so the
+  // category must be picked (or re-picked) after it, not independently.
   const [form, setForm] = useState({
-    category: "Travel", amount: "", claim_date: format(new Date(), "yyyy-MM-dd"), description: "", receipt_url: "",
-    direction: "company_pays_employee", entry_type: "expense",
+    entry_type: "expense" as "expense" | "advance", category: "Travel",
+    amount: "", claim_date: format(new Date(), "yyyy-MM-dd"), description: "", receipt_url: "",
   });
   const [uploading, setUploading] = useState(false);
   const [filterMonth, setFilterMonth] = useState<string>("all");
@@ -720,22 +893,34 @@ function ExpenseClaimsTab() {
   const [filterToDate, setFilterToDate] = useState<string>("");
 
   const fetchClaims = async () => {
-    const { data, error } = await supabase.from("expense_claims").select("*, profiles!expense_claims_user_id_fkey(full_name,email,photo_url)").order("created_at", { ascending: false });
+    const { data, error } = await supabase.from("expense_claims").select(
+      "*, profiles!expense_claims_user_id_fkey(full_name,email,photo_url), approver:profiles!expense_claims_approver_id_fkey(full_name,email)"
+    ).order("created_at", { ascending: false });
     if (error) { toast.error(error.message); return; }
     setClaims(data || []);
   };
 
   const fetchCategories = async () => {
-    const { data } = await supabase.from("expense_types").select("name").order("created_at", { ascending: true });
-    if (data && data.length > 0) setCategories(data.map((d) => d.name));
+    const { data } = await supabase.from("expense_types").select("name, entry_type").order("created_at", { ascending: true });
+    if (data && data.length > 0) setExpenseTypes(data as ExpenseType[]);
   };
 
   useEffect(() => { fetchClaims(); fetchCategories(); }, []);
 
+  const categoriesForType = useMemo(
+    () => expenseTypes.filter((t) => t.entry_type === form.entry_type).map((t) => t.name),
+    [expenseTypes, form.entry_type],
+  );
+
+  const setEntryType = (entry_type: "expense" | "advance") => {
+    const list = expenseTypes.filter((t) => t.entry_type === entry_type).map((t) => t.name);
+    setForm((f) => ({ ...f, entry_type, category: list[0] || "" }));
+  };
+
   const addCategory = async () => {
     const name = newCategory.trim();
     if (!name) return;
-    const { error } = await supabase.from("expense_types").insert({ name });
+    const { error } = await supabase.from("expense_types").insert({ name, entry_type: newCategoryType });
     if (error) { toast.error(error.message); return; }
     toast.success("Expense type added");
     setNewCategory("");
@@ -756,7 +941,12 @@ function ExpenseClaimsTab() {
 
   const submit = async () => {
     if (!form.amount) return toast.error("Amount required");
+    if (!form.category) return toast.error("Category required");
     const amount = Number(form.amount);
+    // Direction used to be a separate field the employee picked by hand; it's
+    // now implied by Entry Type - an Advance is cash given up front that the
+    // employee owes back, an Expense is a reimbursement the company owes them.
+    const direction = form.entry_type === "advance" ? "employee_owes_company" : "company_pays_employee";
     const { data: inserted, error } = await supabase.from("expense_claims").insert({
       user_id: user?.id,
       category: form.category,
@@ -764,14 +954,14 @@ function ExpenseClaimsTab() {
       claim_date: form.claim_date,
       description: form.description,
       receipt_url: form.receipt_url || null,
-      direction: form.direction,
+      direction,
       entry_type: form.entry_type,
-      recoverable_total: form.direction === "employee_owes_company" ? amount : null,
+      recoverable_total: direction === "employee_owes_company" ? amount : null,
     }).select().single();
     if (error) return toast.error(error.message);
     toast.success("Expense submitted");
     setOpen(false);
-    setForm({ category: "Travel", amount: "", claim_date: format(new Date(), "yyyy-MM-dd"), description: "", receipt_url: "", direction: "company_pays_employee", entry_type: "expense" });
+    setForm({ entry_type: "expense", category: categoriesForType[0] || "Travel", amount: "", claim_date: format(new Date(), "yyyy-MM-dd"), description: "", receipt_url: "" });
     await notifyManagersAndAdmins(
       "Expense Claim Submitted",
       `${user?.email} submitted a ${form.category} claim for ${form.amount}.`,
@@ -827,7 +1017,7 @@ function ExpenseClaimsTab() {
   const pendingApprovals = filteredClaims.filter(c => c.status === "pending" && c.user_id !== user?.id);
   const allOthers = filteredClaims.filter(c => c.user_id !== user?.id);
 
-  const totals = categories.map(cat => ({
+  const totals = expenseTypes.map(({ name: cat }) => ({
     cat,
     total: filteredClaims.filter(c => c.category === cat && c.status === "approved").reduce((s,c)=>s+Number(c.amount), 0)
   })).filter(t => t.total > 0);
@@ -848,22 +1038,20 @@ function ExpenseClaimsTab() {
           <DialogContent>
             <DialogHeader><DialogTitle>Submit Expense Claim</DialogTitle></DialogHeader>
             <div className="space-y-3">
-              <div><Label>Category</Label>
-                <Select value={form.category} onValueChange={(v)=>setForm({...form, category: v})}>
-                  <SelectTrigger><SelectValue /></SelectTrigger>
-                  <SelectContent>{categories.map(c => <SelectItem key={c} value={c}>{c}</SelectItem>)}</SelectContent>
-                </Select>
-              </div>
               <div><Label>Entry Type</Label>
-                <Select value={form.entry_type} onValueChange={(v)=>setForm({...form, entry_type: v})}>
+                <Select value={form.entry_type} onValueChange={(v) => setEntryType(v as "expense" | "advance")}>
                   <SelectTrigger><SelectValue /></SelectTrigger>
                   <SelectContent>{ENTRY_TYPES.map(t => <SelectItem key={t.value} value={t.value}>{t.label}</SelectItem>)}</SelectContent>
                 </Select>
               </div>
-              <div><Label>Direction</Label>
-                <Select value={form.direction} onValueChange={(v)=>setForm({...form, direction: v})}>
+              <div><Label>Category</Label>
+                <Select value={form.category} onValueChange={(v)=>setForm({...form, category: v})}>
                   <SelectTrigger><SelectValue /></SelectTrigger>
-                  <SelectContent>{DIRECTIONS.map(d => <SelectItem key={d.value} value={d.value}>{d.label}</SelectItem>)}</SelectContent>
+                  <SelectContent>
+                    {categoriesForType.length === 0 ? (
+                      <SelectItem value="none" disabled>No categories for this entry type yet</SelectItem>
+                    ) : categoriesForType.map(c => <SelectItem key={c} value={c}>{c}</SelectItem>)}
+                  </SelectContent>
                 </Select>
               </div>
               <div className="grid grid-cols-2 gap-3">
@@ -884,8 +1072,12 @@ function ExpenseClaimsTab() {
 
       {isAdmin && (
         <div className="flex items-center gap-2">
-          <Input className="max-w-[220px]" placeholder="New expense type" value={newCategory} onChange={(e) => setNewCategory(e.target.value)} />
-          <Button size="sm" variant="outline" onClick={addCategory}>Add Expense Type</Button>
+          <Input className="max-w-[220px]" placeholder="New category name" value={newCategory} onChange={(e) => setNewCategory(e.target.value)} />
+          <Select value={newCategoryType} onValueChange={(v) => setNewCategoryType(v as "expense" | "advance")}>
+            <SelectTrigger className="w-[140px]"><SelectValue /></SelectTrigger>
+            <SelectContent>{ENTRY_TYPES.map(t => <SelectItem key={t.value} value={t.value}>{t.label}</SelectItem>)}</SelectContent>
+          </Select>
+          <Button size="sm" variant="outline" onClick={addCategory}>Add Category</Button>
         </div>
       )}
 
@@ -963,12 +1155,12 @@ const ClaimTable = ({ claims, showEmployee, onApprove, onReject, onTogglePaid, i
         <TableHeader>
           <TableRow>
             {showEmployee && <TableHead>Employee</TableHead>}
-            <TableHead>Date</TableHead><TableHead>Category</TableHead><TableHead>Entry Type</TableHead><TableHead>Direction</TableHead><TableHead>Amount</TableHead><TableHead>Description</TableHead><TableHead>Receipt</TableHead><TableHead>Status</TableHead>
+            <TableHead>Date</TableHead><TableHead>Category</TableHead><TableHead>Entry Type</TableHead><TableHead>Direction</TableHead><TableHead>Amount</TableHead><TableHead>Description</TableHead><TableHead>Receipt</TableHead><TableHead>Status</TableHead><TableHead>Approved/Rejected By</TableHead>
             {(onApprove || onReject) && <TableHead></TableHead>}
           </TableRow>
         </TableHeader>
         <TableBody>
-          {claims.length === 0 ? <TableRow><TableCell colSpan={showEmployee ? 10 : 9} className="text-center text-muted-foreground">No claims</TableCell></TableRow> :
+          {claims.length === 0 ? <TableRow><TableCell colSpan={showEmployee ? 11 : 10} className="text-center text-muted-foreground">No claims</TableCell></TableRow> :
             claims.map((c: any) => (
               <TableRow key={c.id}>
                 {showEmployee && <TableCell>{c.profiles?.full_name || c.profiles?.email || "—"}</TableCell>}
@@ -992,6 +1184,9 @@ const ClaimTable = ({ claims, showEmployee, onApprove, onReject, onTogglePaid, i
                 <TableCell>{c.receipt_url ? <a href={c.receipt_url} target="_blank" rel="noreferrer" className="text-primary"><FileText className="h-4 w-4 inline" /></a> : "—"}</TableCell>
                 <TableCell>
                   <Badge className={c.status === "approved" ? "bg-success text-white" : c.status === "rejected" ? "bg-destructive text-white" : ""} variant={c.status === "pending" ? "outline" : undefined}>{c.status}</Badge>
+                </TableCell>
+                <TableCell className="text-xs text-muted-foreground">
+                  {c.status === "pending" ? "—" : (c.approver?.full_name || c.approver?.email || "—")}
                 </TableCell>
                 {(onApprove || onReject) && (
                   <TableCell>
