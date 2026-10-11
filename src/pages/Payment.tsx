@@ -33,7 +33,7 @@ const Payment = () => {
   const [loans, setLoans] = useState<any[]>([]);
 
   const [requestOpen, setRequestOpen] = useState(false);
-  const [loanRequestForm, setLoanRequestForm] = useState({ amount: "", reason: "", installments: "1" });
+  const [loanRequestForm, setLoanRequestForm] = useState({ amount: "", reason: "", installments: "1", month: format(new Date(), "yyyy-MM") });
 
   const [deductDialogId, setDeductDialogId] = useState<string | null>(null);
   const [recording, setRecording] = useState(false);
@@ -70,6 +70,7 @@ const Payment = () => {
       installments,
       monthly_deduction: monthlyDeduction,
       remaining_balance: amount,
+      month: loanRequestForm.month ? `${loanRequestForm.month}-01` : null,
     }).select().single();
     if (error) {
       if ((error as any).code === "23505") return toast.error("You already have an active loan request.");
@@ -77,7 +78,7 @@ const Payment = () => {
     }
     toast.success("Loan requested");
     setRequestOpen(false);
-    setLoanRequestForm({ amount: "", reason: "", installments: "1" });
+    setLoanRequestForm({ amount: "", reason: "", installments: "1", month: format(new Date(), "yyyy-MM") });
     await notifyManagersAndAdmins(
       "Loan Requested",
       `${user.email} requested a loan of ${amount}.`,
@@ -218,7 +219,7 @@ const Payment = () => {
 
         <TabsContent value="loans" className="space-y-4">
           <div className="flex justify-end">
-            <Dialog open={requestOpen} onOpenChange={(o) => { setRequestOpen(o); if (!o) setLoanRequestForm({ amount: "", reason: "", installments: "1" }); }}>
+            <Dialog open={requestOpen} onOpenChange={(o) => { setRequestOpen(o); if (!o) setLoanRequestForm({ amount: "", reason: "", installments: "1", month: format(new Date(), "yyyy-MM") }); }}>
               <DialogTrigger asChild><Button><Plus className="h-4 w-4 mr-1" />Request Loan</Button></DialogTrigger>
               <DialogContent>
                 <DialogHeader><DialogTitle>Request a Loan</DialogTitle></DialogHeader>
@@ -227,6 +228,7 @@ const Payment = () => {
                     <div><Label>Amount</Label><Input type="number" value={loanRequestForm.amount} onChange={(e) => setLoanRequestForm((f) => ({ ...f, amount: e.target.value }))} /></div>
                     <div><Label>Installments</Label><Input type="number" min="1" value={loanRequestForm.installments} onChange={(e) => setLoanRequestForm((f) => ({ ...f, installments: e.target.value }))} /></div>
                   </div>
+                  <div><Label>Month</Label><Input type="month" value={loanRequestForm.month} onChange={(e) => setLoanRequestForm((f) => ({ ...f, month: e.target.value }))} /></div>
                   <div><Label>Reason</Label><Textarea value={loanRequestForm.reason} onChange={(e) => setLoanRequestForm((f) => ({ ...f, reason: e.target.value }))} /></div>
                 </div>
                 <DialogFooter><Button onClick={submitLoanRequest}>Submit</Button></DialogFooter>
