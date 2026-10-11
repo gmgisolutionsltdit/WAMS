@@ -39,7 +39,9 @@ const Approvals = () => {
   const [lateHistory, setLateHistory] = useState<any[]>([]);
   const [leavePending, setLeavePending] = useState<any[]>([]);
   const [leaveHistory, setLeaveHistory] = useState<any[]>([]);
+  const [loanPending, setLoanPending] = useState<any[]>([]);
   const [loanHistory, setLoanHistory] = useState<any[]>([]);
+  const [expensePending, setExpensePending] = useState<any[]>([]);
   const [expenseHistory, setExpenseHistory] = useState<any[]>([]);
   const [leaveTypeNames, setLeaveTypeNames] = useState<Record<string, string>>({});
   const [names, setNames] = useState<Record<string, string>>({});
@@ -52,7 +54,7 @@ const Approvals = () => {
 
   const fetchData = useCallback(async () => {
     if (!user) return;
-    const [{ data: requests }, { data: resolved }, { data: manualReqs }, { data: lateReqs }, { data: lateHist }, { data: leaveReqs }, { data: leaveHist }, { data: leaveTypes }, { data: loanHist }, { data: expenseHist }] = await Promise.all([
+    const [{ data: requests }, { data: resolved }, { data: manualReqs }, { data: lateReqs }, { data: lateHist }, { data: leaveReqs }, { data: leaveHist }, { data: leaveTypes }, { data: loanPend }, { data: loanHist }, { data: expensePend }, { data: expenseHist }] = await Promise.all([
       supabase
         .from("overtime_requests")
         .select("*, profiles!overtime_requests_user_id_fkey(full_name, email)")
@@ -70,7 +72,9 @@ const Approvals = () => {
       supabase.from("leave_requests").select("*").eq("status", "pending").order("created_at", { ascending: false }),
       supabase.from("leave_requests").select("*").neq("status", "pending").order("updated_at", { ascending: false }).limit(20),
       supabase.from("leave_types").select("id, name"),
+      supabase.from("personal_advances").select("*").eq("status", "pending").order("created_at", { ascending: false }),
       supabase.from("personal_advances").select("*").neq("status", "pending").order("approved_at", { ascending: false }).limit(20),
+      supabase.from("expense_claims").select("*").eq("status", "pending").order("created_at", { ascending: false }),
       supabase.from("expense_claims").select("*").neq("status", "pending").order("approved_at", { ascending: false }).limit(20),
     ]);
     setPending(requests || []);
@@ -80,14 +84,16 @@ const Approvals = () => {
     setLateHistory(lateHist || []);
     setLeavePending(leaveReqs || []);
     setLeaveHistory(leaveHist || []);
+    setLoanPending(loanPend || []);
     setLoanHistory(loanHist || []);
+    setExpensePending(expensePend || []);
     setExpenseHistory(expenseHist || []);
     const ltNames: Record<string, string> = {};
     (leaveTypes || []).forEach((lt: { id: string; name: string }) => { ltNames[lt.id] = lt.name; });
     setLeaveTypeNames(ltNames);
 
     const ids = Array.from(new Set(
-      [...(manualReqs || []), ...(lateReqs || []), ...(lateHist || []), ...(leaveReqs || []), ...(leaveHist || []), ...(loanHist || []), ...(expenseHist || [])]
+      [...(manualReqs || []), ...(lateReqs || []), ...(lateHist || []), ...(leaveReqs || []), ...(leaveHist || []), ...(loanPend || []), ...(loanHist || []), ...(expensePend || []), ...(expenseHist || [])]
         .flatMap((r: any) => [r.user_id, r.approved_by, r.approver_id])
         .filter(Boolean)
     ));
@@ -269,6 +275,66 @@ const Approvals = () => {
     fetchData();
   };
 
+  const decideLoan = async (loan: any, status: "approved" | "rejected") => {
+    if (!user) return;
+    const { data, error } = await supabase.from("personal_advances").update({
+      status, approved_by: user.id, approved_at: new Date().toISOString(),
+    }).eq("id", loan.id).select("id");
+    if (error) { toast.error(error.message); return; }
+    if (!data?.length) { toast.error(NOT_ALLOWED); return; }
+    if (status === "approved") {
+      await supabase.from("personal_advance_actions").insert({
+        personal_advance_id: loan.id, user_id: loan.user_id, action_type: "issued",
+        amount: loan.amount, remaining_after: loan.amount, created_by: user.id,
+      });
+    }
+    toast.success(`Loan ${status}`);
+    await notifyEmployee(
+      loan.user_id,
+      `Loan ${status === "approved" ? "Approved" : "Rejected"}`,
+      `Your loan request of ${loan.amount} was ${status}.`,
+      loan.id,
+      { route: "/payment", type: "personal_advance_update" },
+    );
+    fetchData();
+  };
+
+  const deleteLoanHistory = async (loan: any) => {
+    if (!window.confirm("Delete this loan record? This cannot be undone.")) return;
+    const { data, error } = await supabase.from("personal_advances").delete().eq("id", loan.id).select("id");
+    if (error) { toast.error(error.message); return; }
+    if (!data?.length) { toast.error(NOT_ALLOWED); return; }
+    toast.success("Loan record deleted");
+    fetchData();
+  };
+
+  const decideExpense = async (claim: any, status: "approved" | "rejected") => {
+    if (!user) return;
+    const { data, error } = await supabase.from("expense_claims").update({
+      status, approver_id: user.id, approved_at: new Date().toISOString(),
+    }).eq("id", claim.id).select("id");
+    if (error) { toast.error(error.message); return; }
+    if (!data?.length) { toast.error(NOT_ALLOWED); return; }
+    toast.success(`Claim ${status}`);
+    await notifyEmployee(
+      claim.user_id,
+      `Expense Claim ${status.charAt(0).toUpperCase() + status.slice(1)}`,
+      `Your ${claim.category} claim for ${claim.amount} was ${status}.`,
+      claim.id,
+      { route: "/expenses", type: "expense_claim_update" },
+    );
+    fetchData();
+  };
+
+  const deleteExpenseHistory = async (claim: any) => {
+    if (!window.confirm("Delete this expense claim? This cannot be undone.")) return;
+    const { data, error } = await supabase.from("expense_claims").delete().eq("id", claim.id).select("id");
+    if (error) { toast.error(error.message); return; }
+    if (!data?.length) { toast.error(NOT_ALLOWED); return; }
+    toast.success("Expense claim deleted");
+    fetchData();
+  };
+
   const openEdit = (req: any) => {
     setEditReq(req);
     setEditHours(String(req.requested_hours));
@@ -329,235 +395,305 @@ const Approvals = () => {
       </div>
 
       <Card>
-        <CardHeader><CardTitle>Pending Approvals</CardTitle></CardHeader>
-        <CardContent>
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>Employee</TableHead>
-                <TableHead>Date</TableHead>
-                <TableHead>Hours</TableHead>
-                <TableHead>Reason</TableHead>
-                <TableHead>Actions</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {pending.length === 0 ? (
-                <TableRow><TableCell colSpan={5} className="text-center text-muted-foreground">No pending requests</TableCell></TableRow>
-              ) : pending.map((req) => (
-                <TableRow key={req.id}>
-                  <TableCell className="font-medium">{(req.profiles as any)?.full_name || (req.profiles as any)?.email || "Unknown"}</TableCell>
-                  <TableCell>{format(new Date(req.date), "MMM d, yyyy")}</TableCell>
-                  <TableCell><Badge>{req.requested_hours}h</Badge></TableCell>
-                  <TableCell className="max-w-48 truncate">
-                    {req.reason}
-                    <AttachmentThumbnails urls={req.attachments} />
-                  </TableCell>
-                  <TableCell className="space-x-1">
-                    <Button size="sm" className="bg-lime-500 hover:bg-lime-600 text-white" onClick={() => handleAction(req, "approved")}>
-                      <Check className="h-4 w-4 mr-1" /> Approve
-                    </Button>
-                    <Button size="sm" className="bg-[#FF6347] hover:bg-[#E5533D] text-white" onClick={() => handleAction(req, "rejected")}>
-                      <X className="h-4 w-4 mr-1" /> Reject
-                    </Button>
-                    <Button size="sm" variant="outline" onClick={() => openEdit(req)}>
-                      <Pencil className="h-4 w-4 mr-1" /> Modify
-                    </Button>
-                    <Button size="sm" variant="ghost" className="text-destructive hover:text-destructive" onClick={() => deleteOT(req)}>
-                      <Trash2 className="h-4 w-4 mr-1" /> Delete
-                    </Button>
-                  </TableCell>
-                </TableRow>
-              ))}
-            </TableBody>
-          </Table>
-        </CardContent>
-      </Card>
-
-      {/* Manual Time Requests */}
-      <Card>
         <CardHeader>
-          <CardTitle>Pending Manual Time Requests</CardTitle>
-          <CardDescription>Approved entries are written straight into the employee's attendance record.</CardDescription>
+          <CardTitle>Pending Approvals</CardTitle>
+          <CardDescription>Everything waiting on a decision, grouped by type.</CardDescription>
         </CardHeader>
         <CardContent>
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>Employee</TableHead>
-                <TableHead>Date</TableHead>
-                <TableHead>In / Out</TableHead>
-                <TableHead>Total</TableHead>
-                <TableHead>Approve OT (h)</TableHead>
-                <TableHead>Reason / Task</TableHead>
-                <TableHead>Note</TableHead>
-                <TableHead>Actions</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {manualPending.length === 0 ? (
-                <TableRow><TableCell colSpan={8} className="text-center text-muted-foreground">No pending manual time requests</TableCell></TableRow>
-              ) : manualPending.map((req) => (
-                <TableRow key={req.id}>
-                  <TableCell className="font-medium">{names[req.user_id] || "Unknown"}</TableCell>
-                  <TableCell className="whitespace-nowrap">{format(new Date(req.date), "MMM d, yyyy")}</TableCell>
-                  <TableCell className="whitespace-nowrap text-xs font-mono">
-                    {format(new Date(req.clock_in), "HH:mm")} – {format(new Date(req.clock_out), "HH:mm")}
-                    {Number(req.break_minutes) > 0 && <span className="text-muted-foreground"> (−{req.break_minutes}m)</span>}
-                  </TableCell>
-                  <TableCell>
-                    <Badge>{Number(req.total_hours).toFixed(2)}h</Badge>
-                  </TableCell>
-                  <TableCell>
-                    <Input
-                      type="number"
-                      step="0.5"
-                      min="0"
-                      placeholder={Number(req.overtime_hours).toFixed(2)}
-                      value={manualOT[req.id] ?? ""}
-                      onChange={(e) => setManualOT((m) => ({ ...m, [req.id]: e.target.value }))}
-                      className="h-8 w-24 font-mono"
-                    />
-                  </TableCell>
-                  <TableCell className="max-w-48 truncate">{req.task_note || req.reason || "—"}</TableCell>
-                  <TableCell>
-                    <Input
-                      placeholder="Optional note"
-                      value={notes[req.id] || ""}
-                      onChange={(e) => setNotes((n) => ({ ...n, [req.id]: e.target.value }))}
-                      className="h-8 w-40"
-                    />
-                  </TableCell>
-                  <TableCell className="space-x-1 whitespace-nowrap">
-                    <Button size="sm" className="bg-lime-500 hover:bg-lime-600 text-white" onClick={() => decideManual(req, "approved")}>
-                      <Check className="h-4 w-4 mr-1" /> Approve
-                    </Button>
-                    <Button size="sm" className="bg-[#FF6347] hover:bg-[#E5533D] text-white" onClick={() => decideManual(req, "rejected")}>
-                      <X className="h-4 w-4 mr-1" /> Reject
-                    </Button>
-                  </TableCell>
-                </TableRow>
-              ))}
-            </TableBody>
-          </Table>
-        </CardContent>
-      </Card>
+          <Tabs defaultValue="overtime">
+            <TabsList className="flex-wrap h-auto">
+              <TabsTrigger value="overtime">Overtime ({pending.length})</TabsTrigger>
+              <TabsTrigger value="manual">Manual Time ({manualPending.length})</TabsTrigger>
+              <TabsTrigger value="late">Late Time ({latePending.length})</TabsTrigger>
+              <TabsTrigger value="leave">Leave ({leavePending.length})</TabsTrigger>
+              <TabsTrigger value="loan">Loan ({loanPending.length})</TabsTrigger>
+              <TabsTrigger value="expense">Expense ({expensePending.length})</TabsTrigger>
+            </TabsList>
 
-      {/* Late Time Requests */}
-      <Card>
-        <CardHeader>
-          <CardTitle>Pending Late Time Requests</CardTitle>
-          <CardDescription>Late penalty adjustments and approved office-time changes.</CardDescription>
-        </CardHeader>
-        <CardContent>
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>Employee</TableHead>
-                <TableHead>Type</TableHead>
-                <TableHead>Effective</TableHead>
-                <TableHead>Details</TableHead>
-                <TableHead>Reason</TableHead>
-                <TableHead>Note</TableHead>
-                <TableHead>Actions</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {latePending.length === 0 ? (
-                <TableRow><TableCell colSpan={7} className="text-center text-muted-foreground">No pending late time requests</TableCell></TableRow>
-              ) : latePending.map((req) => (
-                <TableRow key={req.id}>
-                  <TableCell className="font-medium">{names[req.user_id] || "Unknown"}</TableCell>
-                  <TableCell>
-                    <Badge variant="outline">{req.request_type === "office_time_change" ? "Office time change" : "Late adjustment"}</Badge>
-                  </TableCell>
-                  <TableCell className="whitespace-nowrap">{format(new Date(req.effective_date), "MMM d, yyyy")}</TableCell>
-                  <TableCell className="text-xs whitespace-nowrap">
-                    {req.request_type === "office_time_change"
-                      ? `${String(req.requested_start_time).slice(0, 5)} – ${String(req.requested_end_time).slice(0, 5)}`
-                      : `Late ${humanMinutes(Number(req.late_minutes) || 0)} · waive ${humanMinutes(Number(req.adjustment_minutes) || 0)}`}
-                  </TableCell>
-                  <TableCell className="max-w-48 truncate">
-                    {req.reason || "—"}
-                    <AttachmentThumbnails urls={req.attachments} />
-                  </TableCell>
-                  <TableCell>
-                    <Input
-                      placeholder="Optional note"
-                      value={notes[req.id] || ""}
-                      onChange={(e) => setNotes((n) => ({ ...n, [req.id]: e.target.value }))}
-                      className="h-8 w-40"
-                    />
-                  </TableCell>
-                  <TableCell className="space-x-1 whitespace-nowrap">
-                    <Button size="sm" className="bg-lime-500 hover:bg-lime-600 text-white" onClick={() => decideLate(req, "approved")}>
-                      <Check className="h-4 w-4 mr-1" /> Approve
-                    </Button>
-                    <Button size="sm" className="bg-[#FF6347] hover:bg-[#E5533D] text-white" onClick={() => decideLate(req, "rejected")}>
-                      <X className="h-4 w-4 mr-1" /> Reject
-                    </Button>
-                  </TableCell>
-                </TableRow>
-              ))}
-            </TableBody>
-          </Table>
-        </CardContent>
-      </Card>
+            <TabsContent value="overtime">
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Employee</TableHead>
+                    <TableHead>Date</TableHead>
+                    <TableHead>Hours</TableHead>
+                    <TableHead>Reason</TableHead>
+                    <TableHead>Actions</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {pending.length === 0 ? (
+                    <TableRow><TableCell colSpan={5} className="text-center text-muted-foreground">No pending requests</TableCell></TableRow>
+                  ) : pending.map((req) => (
+                    <TableRow key={req.id}>
+                      <TableCell className="font-medium">{(req.profiles as any)?.full_name || (req.profiles as any)?.email || "Unknown"}</TableCell>
+                      <TableCell>{format(new Date(req.date), "MMM d, yyyy")}</TableCell>
+                      <TableCell><Badge>{req.requested_hours}h</Badge></TableCell>
+                      <TableCell className="max-w-48 truncate">
+                        {req.reason}
+                        <AttachmentThumbnails urls={req.attachments} />
+                      </TableCell>
+                      <TableCell className="space-x-1">
+                        <Button size="sm" className="bg-lime-500 hover:bg-lime-600 text-white" onClick={() => handleAction(req, "approved")}>
+                          <Check className="h-4 w-4 mr-1" /> Approve
+                        </Button>
+                        <Button size="sm" className="bg-[#FF6347] hover:bg-[#E5533D] text-white" onClick={() => handleAction(req, "rejected")}>
+                          <X className="h-4 w-4 mr-1" /> Reject
+                        </Button>
+                        <Button size="sm" variant="outline" onClick={() => openEdit(req)}>
+                          <Pencil className="h-4 w-4 mr-1" /> Modify
+                        </Button>
+                        <Button size="sm" variant="ghost" className="text-destructive hover:text-destructive" onClick={() => deleteOT(req)}>
+                          <Trash2 className="h-4 w-4 mr-1" /> Delete
+                        </Button>
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </TabsContent>
 
-      {/* Leave Requests */}
-      <Card>
-        <CardHeader>
-          <CardTitle>Pending Leave Requests</CardTitle>
-          <CardDescription>Approving debits the employee's leave balance for the year.</CardDescription>
-        </CardHeader>
-        <CardContent>
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>Employee</TableHead>
-                <TableHead>Type</TableHead>
-                <TableHead>Dates</TableHead>
-                <TableHead>Days</TableHead>
-                <TableHead>Reason</TableHead>
-                <TableHead>Note</TableHead>
-                <TableHead>Actions</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {leavePending.length === 0 ? (
-                <TableRow><TableCell colSpan={7} className="text-center text-muted-foreground">No pending leave requests</TableCell></TableRow>
-              ) : leavePending.map((req) => (
-                <TableRow key={req.id}>
-                  <TableCell className="font-medium">{names[req.user_id] || "Unknown"}</TableCell>
-                  <TableCell><Badge variant="outline">{leaveTypeNames[req.leave_type_id] || "—"}</Badge></TableCell>
-                  <TableCell className="whitespace-nowrap text-xs">
-                    {format(new Date(req.start_date), "MMM d")} – {format(new Date(req.end_date), "MMM d, yyyy")}
-                  </TableCell>
-                  <TableCell><Badge>{req.total_days}d</Badge></TableCell>
-                  <TableCell className="max-w-48 truncate">
-                    {req.reason || "—"}
-                    <AttachmentThumbnails urls={req.attachments} />
-                  </TableCell>
-                  <TableCell>
-                    <Input
-                      placeholder="Optional note"
-                      value={notes[req.id] || ""}
-                      onChange={(e) => setNotes((n) => ({ ...n, [req.id]: e.target.value }))}
-                      className="h-8 w-40"
-                    />
-                  </TableCell>
-                  <TableCell className="space-x-1 whitespace-nowrap">
-                    <Button size="sm" className="bg-lime-500 hover:bg-lime-600 text-white" onClick={() => decideLeave(req, "approved")}>
-                      <Check className="h-4 w-4 mr-1" /> Approve
-                    </Button>
-                    <Button size="sm" className="bg-[#FF6347] hover:bg-[#E5533D] text-white" onClick={() => decideLeave(req, "rejected")}>
-                      <X className="h-4 w-4 mr-1" /> Reject
-                    </Button>
-                  </TableCell>
-                </TableRow>
-              ))}
-            </TableBody>
-          </Table>
+            <TabsContent value="manual">
+              <p className="text-xs text-muted-foreground mb-2">Approved entries are written straight into the employee's attendance record.</p>
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Employee</TableHead>
+                    <TableHead>Date</TableHead>
+                    <TableHead>In / Out</TableHead>
+                    <TableHead>Total</TableHead>
+                    <TableHead>Approve OT (h)</TableHead>
+                    <TableHead>Reason / Task</TableHead>
+                    <TableHead>Note</TableHead>
+                    <TableHead>Actions</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {manualPending.length === 0 ? (
+                    <TableRow><TableCell colSpan={8} className="text-center text-muted-foreground">No pending manual time requests</TableCell></TableRow>
+                  ) : manualPending.map((req) => (
+                    <TableRow key={req.id}>
+                      <TableCell className="font-medium">{names[req.user_id] || "Unknown"}</TableCell>
+                      <TableCell className="whitespace-nowrap">{format(new Date(req.date), "MMM d, yyyy")}</TableCell>
+                      <TableCell className="whitespace-nowrap text-xs font-mono">
+                        {format(new Date(req.clock_in), "HH:mm")} – {format(new Date(req.clock_out), "HH:mm")}
+                        {Number(req.break_minutes) > 0 && <span className="text-muted-foreground"> (−{req.break_minutes}m)</span>}
+                      </TableCell>
+                      <TableCell>
+                        <Badge>{Number(req.total_hours).toFixed(2)}h</Badge>
+                      </TableCell>
+                      <TableCell>
+                        <Input
+                          type="number"
+                          step="0.5"
+                          min="0"
+                          placeholder={Number(req.overtime_hours).toFixed(2)}
+                          value={manualOT[req.id] ?? ""}
+                          onChange={(e) => setManualOT((m) => ({ ...m, [req.id]: e.target.value }))}
+                          className="h-8 w-24 font-mono"
+                        />
+                      </TableCell>
+                      <TableCell className="max-w-48 truncate">{req.task_note || req.reason || "—"}</TableCell>
+                      <TableCell>
+                        <Input
+                          placeholder="Optional note"
+                          value={notes[req.id] || ""}
+                          onChange={(e) => setNotes((n) => ({ ...n, [req.id]: e.target.value }))}
+                          className="h-8 w-40"
+                        />
+                      </TableCell>
+                      <TableCell className="space-x-1 whitespace-nowrap">
+                        <Button size="sm" className="bg-lime-500 hover:bg-lime-600 text-white" onClick={() => decideManual(req, "approved")}>
+                          <Check className="h-4 w-4 mr-1" /> Approve
+                        </Button>
+                        <Button size="sm" className="bg-[#FF6347] hover:bg-[#E5533D] text-white" onClick={() => decideManual(req, "rejected")}>
+                          <X className="h-4 w-4 mr-1" /> Reject
+                        </Button>
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </TabsContent>
+
+            <TabsContent value="late">
+              <p className="text-xs text-muted-foreground mb-2">Late penalty adjustments and approved office-time changes.</p>
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Employee</TableHead>
+                    <TableHead>Type</TableHead>
+                    <TableHead>Effective</TableHead>
+                    <TableHead>Details</TableHead>
+                    <TableHead>Reason</TableHead>
+                    <TableHead>Note</TableHead>
+                    <TableHead>Actions</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {latePending.length === 0 ? (
+                    <TableRow><TableCell colSpan={7} className="text-center text-muted-foreground">No pending late time requests</TableCell></TableRow>
+                  ) : latePending.map((req) => (
+                    <TableRow key={req.id}>
+                      <TableCell className="font-medium">{names[req.user_id] || "Unknown"}</TableCell>
+                      <TableCell>
+                        <Badge variant="outline">{req.request_type === "office_time_change" ? "Office time change" : "Late adjustment"}</Badge>
+                      </TableCell>
+                      <TableCell className="whitespace-nowrap">{format(new Date(req.effective_date), "MMM d, yyyy")}</TableCell>
+                      <TableCell className="text-xs whitespace-nowrap">
+                        {req.request_type === "office_time_change"
+                          ? `${String(req.requested_start_time).slice(0, 5)} – ${String(req.requested_end_time).slice(0, 5)}`
+                          : `Late ${humanMinutes(Number(req.late_minutes) || 0)} · waive ${humanMinutes(Number(req.adjustment_minutes) || 0)}`}
+                      </TableCell>
+                      <TableCell className="max-w-48 truncate">
+                        {req.reason || "—"}
+                        <AttachmentThumbnails urls={req.attachments} />
+                      </TableCell>
+                      <TableCell>
+                        <Input
+                          placeholder="Optional note"
+                          value={notes[req.id] || ""}
+                          onChange={(e) => setNotes((n) => ({ ...n, [req.id]: e.target.value }))}
+                          className="h-8 w-40"
+                        />
+                      </TableCell>
+                      <TableCell className="space-x-1 whitespace-nowrap">
+                        <Button size="sm" className="bg-lime-500 hover:bg-lime-600 text-white" onClick={() => decideLate(req, "approved")}>
+                          <Check className="h-4 w-4 mr-1" /> Approve
+                        </Button>
+                        <Button size="sm" className="bg-[#FF6347] hover:bg-[#E5533D] text-white" onClick={() => decideLate(req, "rejected")}>
+                          <X className="h-4 w-4 mr-1" /> Reject
+                        </Button>
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </TabsContent>
+
+            <TabsContent value="leave">
+              <p className="text-xs text-muted-foreground mb-2">Approving debits the employee's leave balance for the year.</p>
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Employee</TableHead>
+                    <TableHead>Type</TableHead>
+                    <TableHead>Dates</TableHead>
+                    <TableHead>Days</TableHead>
+                    <TableHead>Reason</TableHead>
+                    <TableHead>Note</TableHead>
+                    <TableHead>Actions</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {leavePending.length === 0 ? (
+                    <TableRow><TableCell colSpan={7} className="text-center text-muted-foreground">No pending leave requests</TableCell></TableRow>
+                  ) : leavePending.map((req) => (
+                    <TableRow key={req.id}>
+                      <TableCell className="font-medium">{names[req.user_id] || "Unknown"}</TableCell>
+                      <TableCell><Badge variant="outline">{leaveTypeNames[req.leave_type_id] || "—"}</Badge></TableCell>
+                      <TableCell className="whitespace-nowrap text-xs">
+                        {format(new Date(req.start_date), "MMM d")} – {format(new Date(req.end_date), "MMM d, yyyy")}
+                      </TableCell>
+                      <TableCell><Badge>{req.total_days}d</Badge></TableCell>
+                      <TableCell className="max-w-48 truncate">
+                        {req.reason || "—"}
+                        <AttachmentThumbnails urls={req.attachments} />
+                      </TableCell>
+                      <TableCell>
+                        <Input
+                          placeholder="Optional note"
+                          value={notes[req.id] || ""}
+                          onChange={(e) => setNotes((n) => ({ ...n, [req.id]: e.target.value }))}
+                          className="h-8 w-40"
+                        />
+                      </TableCell>
+                      <TableCell className="space-x-1 whitespace-nowrap">
+                        <Button size="sm" className="bg-lime-500 hover:bg-lime-600 text-white" onClick={() => decideLeave(req, "approved")}>
+                          <Check className="h-4 w-4 mr-1" /> Approve
+                        </Button>
+                        <Button size="sm" className="bg-[#FF6347] hover:bg-[#E5533D] text-white" onClick={() => decideLeave(req, "rejected")}>
+                          <X className="h-4 w-4 mr-1" /> Reject
+                        </Button>
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </TabsContent>
+
+            <TabsContent value="loan">
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Employee</TableHead>
+                    <TableHead>Date</TableHead>
+                    <TableHead>Amount</TableHead>
+                    <TableHead>Reason</TableHead>
+                    <TableHead>Installments</TableHead>
+                    <TableHead>Actions</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {loanPending.length === 0 ? (
+                    <TableRow><TableCell colSpan={6} className="text-center text-muted-foreground">No pending loan requests</TableCell></TableRow>
+                  ) : loanPending.map((loan) => (
+                    <TableRow key={loan.id}>
+                      <TableCell className="font-medium">{names[loan.user_id] || "Unknown"}</TableCell>
+                      <TableCell className="whitespace-nowrap">{format(new Date(loan.created_at), "MMM d, yyyy")}</TableCell>
+                      <TableCell className="font-semibold">{Number(loan.amount).toLocaleString()}</TableCell>
+                      <TableCell className="max-w-48 truncate text-xs text-muted-foreground">{loan.reason || "—"}</TableCell>
+                      <TableCell>{loan.installments} installment{loan.installments === 1 ? "" : "s"} · {Number(loan.monthly_deduction).toLocaleString()}/mo</TableCell>
+                      <TableCell className="space-x-1 whitespace-nowrap">
+                        <Button size="sm" className="bg-lime-500 hover:bg-lime-600 text-white" onClick={() => decideLoan(loan, "approved")}>
+                          <Check className="h-4 w-4 mr-1" /> Approve
+                        </Button>
+                        <Button size="sm" className="bg-[#FF6347] hover:bg-[#E5533D] text-white" onClick={() => decideLoan(loan, "rejected")}>
+                          <X className="h-4 w-4 mr-1" /> Reject
+                        </Button>
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </TabsContent>
+
+            <TabsContent value="expense">
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Employee</TableHead>
+                    <TableHead>Date</TableHead>
+                    <TableHead>Category</TableHead>
+                    <TableHead>Amount</TableHead>
+                    <TableHead>Description</TableHead>
+                    <TableHead>Actions</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {expensePending.length === 0 ? (
+                    <TableRow><TableCell colSpan={6} className="text-center text-muted-foreground">No pending expense claims</TableCell></TableRow>
+                  ) : expensePending.map((claim) => (
+                    <TableRow key={claim.id}>
+                      <TableCell className="font-medium">{names[claim.user_id] || "Unknown"}</TableCell>
+                      <TableCell className="whitespace-nowrap">{format(new Date(claim.claim_date), "MMM d, yyyy")}</TableCell>
+                      <TableCell><Badge variant="outline">{claim.category}</Badge></TableCell>
+                      <TableCell className="font-semibold">{Number(claim.amount).toLocaleString()}</TableCell>
+                      <TableCell className="max-w-48 truncate text-xs text-muted-foreground">{claim.description || "—"}</TableCell>
+                      <TableCell className="space-x-1 whitespace-nowrap">
+                        <Button size="sm" className="bg-lime-500 hover:bg-lime-600 text-white" onClick={() => decideExpense(claim, "approved")}>
+                          <Check className="h-4 w-4 mr-1" /> Approve
+                        </Button>
+                        <Button size="sm" className="bg-[#FF6347] hover:bg-[#E5533D] text-white" onClick={() => decideExpense(claim, "rejected")}>
+                          <X className="h-4 w-4 mr-1" /> Reject
+                        </Button>
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </TabsContent>
+          </Tabs>
         </CardContent>
       </Card>
 
@@ -708,11 +844,12 @@ const Approvals = () => {
                     <TableHead>Balance</TableHead>
                     <TableHead>Status</TableHead>
                     <TableHead>Decided By</TableHead>
+                    <TableHead>Actions</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
                   {loanHistory.length === 0 ? (
-                    <TableRow><TableCell colSpan={6} className="text-center text-muted-foreground">No loan history yet</TableCell></TableRow>
+                    <TableRow><TableCell colSpan={7} className="text-center text-muted-foreground">No loan history yet</TableCell></TableRow>
                   ) : loanHistory.map((loan) => (
                     <TableRow key={loan.id}>
                       <TableCell className="font-medium">{names[loan.user_id] || "Unknown"}</TableCell>
@@ -723,6 +860,11 @@ const Approvals = () => {
                         <Badge className={loan.status === "approved" || loan.status === "closed" ? "bg-success text-white" : loan.status === "rejected" ? "bg-destructive text-white" : ""}>{loan.status}</Badge>
                       </TableCell>
                       <TableCell className="text-xs text-muted-foreground">{loan.approved_by ? names[loan.approved_by] || "—" : "—"}</TableCell>
+                      <TableCell>
+                        <Button size="sm" variant="ghost" className="text-destructive hover:text-destructive" onClick={() => deleteLoanHistory(loan)}>
+                          <Trash2 className="h-4 w-4" />
+                        </Button>
+                      </TableCell>
                     </TableRow>
                   ))}
                 </TableBody>
@@ -739,11 +881,12 @@ const Approvals = () => {
                     <TableHead>Amount</TableHead>
                     <TableHead>Status</TableHead>
                     <TableHead>Decided By</TableHead>
+                    <TableHead>Actions</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
                   {expenseHistory.length === 0 ? (
-                    <TableRow><TableCell colSpan={6} className="text-center text-muted-foreground">No expense history yet</TableCell></TableRow>
+                    <TableRow><TableCell colSpan={7} className="text-center text-muted-foreground">No expense history yet</TableCell></TableRow>
                   ) : expenseHistory.map((claim) => (
                     <TableRow key={claim.id}>
                       <TableCell className="font-medium">{names[claim.user_id] || "Unknown"}</TableCell>
@@ -754,6 +897,11 @@ const Approvals = () => {
                         <Badge className={claim.status === "approved" ? "bg-success text-white" : claim.status === "rejected" ? "bg-destructive text-white" : ""}>{claim.status}</Badge>
                       </TableCell>
                       <TableCell className="text-xs text-muted-foreground">{claim.approver_id ? names[claim.approver_id] || "—" : "—"}</TableCell>
+                      <TableCell>
+                        <Button size="sm" variant="ghost" className="text-destructive hover:text-destructive" onClick={() => deleteExpenseHistory(claim)}>
+                          <Trash2 className="h-4 w-4" />
+                        </Button>
+                      </TableCell>
                     </TableRow>
                   ))}
                 </TableBody>
