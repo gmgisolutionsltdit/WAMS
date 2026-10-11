@@ -66,6 +66,8 @@ type IncrementEval = {
   created_at: string;
 };
 
+type SalaryIncrementLink = { id: string; effective_from: string; cycle_label: string; base_salary: number };
+
 type EvalRequest = {
   id: string;
   employee_id: string;
@@ -121,8 +123,10 @@ const PerformanceEvaluation = () => {
   const [answerForm, setAnswerForm] = useState(emptyAnswerForm());
 
   const [incrementDialogFinalization, setIncrementDialogFinalization] = useState<Finalization | null>(null);
+  const [editingIncrementEval, setEditingIncrementEval] = useState<IncrementEval | null>(null);
   const [viewEvaluation, setViewEvaluation] = useState<Evaluation | null>(null);
   const [viewFinalizationDetails, setViewFinalizationDetails] = useState<Finalization | null>(null);
+  const [salaryIncrementMap, setSalaryIncrementMap] = useState<Record<string, SalaryIncrementLink>>({});
 
   const profileMap = useMemo(() => {
     const m: Record<string, Profile> = {};
@@ -158,6 +162,16 @@ const PerformanceEvaluation = () => {
       setProfiles((pf || []) as Profile[]);
       setFinalizations((finals || []) as unknown as Finalization[]);
       setIncrementEvals((incEvals || []) as IncrementEval[]);
+
+      const incrementIds = Array.from(new Set((incEvals || []).map((e) => e.salary_increment_id).filter(Boolean))) as string[];
+      if (incrementIds.length > 0) {
+        const { data: links } = await supabase.from("salary_increments").select("id, effective_from, cycle_label, base_salary").in("id", incrementIds);
+        const map: Record<string, SalaryIncrementLink> = {};
+        (links || []).forEach((l) => { map[l.id] = l as SalaryIncrementLink; });
+        setSalaryIncrementMap(map);
+      } else {
+        setSalaryIncrementMap({});
+      }
     } else {
       // Non-admin (manager-evaluator): fetch just the employee profiles
       // named in this user's own requests, so names render instead of
@@ -736,14 +750,29 @@ const PerformanceEvaluation = () => {
                   <p className="text-xs text-muted-foreground">Finalized {format(new Date(finalization.created_at), "MMM d, yyyy")}</p>
                 </div>
 
-                {incrementEval ? (
+                {incrementEval ? (() => {
+                  const link = incrementEval.salary_increment_id ? salaryIncrementMap[incrementEval.salary_increment_id] : undefined;
+                  const basicBefore = basicFromGross(incrementEval.gross_salary_before);
+                  const performancePct = Math.round((incrementEval.final_increment_pct - (incrementEval.retention_pct || 0)) * 100) / 100;
+                  const performanceAmount = incrementAmountFromBasic(basicBefore, performancePct);
+                  const totalAmount = incrementAmountFromBasic(basicBefore, incrementEval.final_increment_pct);
+                  return (
                   <>
                     <div className="rounded-md bg-muted/40 p-3 space-y-1">
+                      <div className="flex items-center justify-between">
+                        <p className="font-medium">Decided Increment</p>
+                        <Button size="sm" variant="outline" onClick={() => { setViewFinalizationDetails(null); setEditingIncrementEval(incrementEval); setIncrementDialogFinalization(finalization); }}>
+                          Edit
+                        </Button>
+                      </div>
                       <p>Company Scenario: <span className="font-medium">{companyScenario(incrementEval.company_scenario).label}</span></p>
                       <p>Approved Increment Factor: <span className="font-mono">{incrementEval.approved_increment_factor_pct}%</span></p>
                       <p>Average Recommended %: <span className="font-mono">{incrementEval.average_recommended_pct}%</span></p>
+                      <p>Basic Salary: <span className="font-mono">{basicBefore.toLocaleString()}</span> BDT</p>
+                      <p>Performance Increment: <span className="font-mono">{performancePct}%</span> (<span className="font-mono">{performanceAmount.toLocaleString()}</span> BDT)</p>
                       <p>Gross Salary: <span className="font-mono">{incrementEval.gross_salary_before.toLocaleString()}</span> → <span className="font-mono">{incrementEval.gross_salary_after.toLocaleString()}</span> BDT</p>
-                      <p>Final Increment % (incl. retention): <span className="font-mono font-semibold">{incrementEval.final_increment_pct}%</span></p>
+                      <p>Final Increment % (incl. retention): <span className="font-mono font-semibold">{incrementEval.final_increment_pct}%</span> (<span className="font-mono">{totalAmount.toLocaleString()}</span> BDT)</p>
+                      {link && <p>Effective From: {format(new Date(link.effective_from), "MMM yyyy")} · Cycle: {link.cycle_label}</p>}
                       {incrementEval.salary_increment_id && <p className="text-success-foreground">Applied to Salary Increments</p>}
                     </div>
 
@@ -781,9 +810,10 @@ const PerformanceEvaluation = () => {
                     )}
                     <p className="text-xs text-muted-foreground">Decided {format(new Date(incrementEval.created_at), "MMM d, yyyy")}</p>
                   </>
-                ) : (
+                  );
+                })() : (
                   <Button
-                    onClick={() => { setViewFinalizationDetails(null); setIncrementDialogFinalization(finalization); }}
+                    onClick={() => { setViewFinalizationDetails(null); setEditingIncrementEval(null); setIncrementDialogFinalization(finalization); }}
                   >
                     <TrendingUp className="h-3.5 w-3.5 mr-1" /> Create Increment Recommendation
                   </Button>
@@ -798,8 +828,10 @@ const PerformanceEvaluation = () => {
         <IncrementEvaluationDialog
           finalization={incrementDialogFinalization}
           employeeName={profileMap[incrementDialogFinalization.employee_id]?.full_name || profileMap[incrementDialogFinalization.employee_id]?.email || "this employee"}
-          onClose={() => setIncrementDialogFinalization(null)}
-          onSaved={() => { setIncrementDialogFinalization(null); fetchAll(); }}
+          existing={editingIncrementEval}
+          existingEffectiveFrom={editingIncrementEval?.salary_increment_id ? salaryIncrementMap[editingIncrementEval.salary_increment_id]?.effective_from : undefined}
+          onClose={() => { setIncrementDialogFinalization(null); setEditingIncrementEval(null); }}
+          onSaved={() => { setIncrementDialogFinalization(null); setEditingIncrementEval(null); fetchAll(); }}
         />
       )}
     </div>
@@ -812,33 +844,55 @@ const nextMonthValue = () => {
   return format(d, "yyyy-MM");
 };
 
-const emptyIncrementForm = (finalization: Finalization) => ({
-  company_scenario: "average" as CompanyScenario,
-  approved_increment_factor_pct: companyScenario("average").range?.max ?? 0,
-  average_recommended_pct: finalization.recommended_max_pct,
-  effective_from_month: nextMonthValue(),
-  retention_recommended: false,
-  retention_checklist: [] as string[],
-  retention_pct: "",
-  retention_amount: "",
-  retention_period: "",
-  retention_condition: "",
-  retention_justification: "",
-  final_approved_retention_pct: "",
-  final_approved_bonus_amount: "",
-  final_notes: "",
-});
+const emptyIncrementForm = (finalization: Finalization, existing?: IncrementEval | null, existingEffectiveFrom?: string) => {
+  if (existing) {
+    return {
+      company_scenario: existing.company_scenario,
+      approved_increment_factor_pct: existing.approved_increment_factor_pct,
+      average_recommended_pct: existing.average_recommended_pct,
+      effective_from_month: existingEffectiveFrom ? existingEffectiveFrom.slice(0, 7) : nextMonthValue(),
+      retention_recommended: existing.retention_recommended,
+      retention_checklist: existing.retention_checklist || [],
+      retention_pct: existing.retention_pct != null ? String(existing.retention_pct) : "",
+      retention_amount: existing.retention_amount != null ? String(existing.retention_amount) : "",
+      retention_period: existing.retention_period || "",
+      retention_condition: existing.retention_condition || "",
+      retention_justification: existing.retention_justification || "",
+      final_approved_retention_pct: existing.final_approved_retention_pct != null ? String(existing.final_approved_retention_pct) : "",
+      final_approved_bonus_amount: existing.final_approved_bonus_amount != null ? String(existing.final_approved_bonus_amount) : "",
+      final_notes: existing.final_notes || "",
+    };
+  }
+  return {
+    company_scenario: "average" as CompanyScenario,
+    approved_increment_factor_pct: companyScenario("average").range?.max ?? 0,
+    average_recommended_pct: finalization.recommended_max_pct,
+    effective_from_month: nextMonthValue(),
+    retention_recommended: false,
+    retention_checklist: [] as string[],
+    retention_pct: "",
+    retention_amount: "",
+    retention_period: "",
+    retention_condition: "",
+    retention_justification: "",
+    final_approved_retention_pct: "",
+    final_approved_bonus_amount: "",
+    final_notes: "",
+  };
+};
 
 const IncrementEvaluationDialog = ({
-  finalization, employeeName, onClose, onSaved,
+  finalization, employeeName, existing, existingEffectiveFrom, onClose, onSaved,
 }: {
   finalization: Finalization;
   employeeName: string;
+  existing?: IncrementEval | null;
+  existingEffectiveFrom?: string;
   onClose: () => void;
   onSaved: () => void;
 }) => {
   const { user } = useAuth();
-  const [form, setForm] = useState(emptyIncrementForm(finalization));
+  const [form, setForm] = useState(() => emptyIncrementForm(finalization, existing, existingEffectiveFrom));
   const [saving, setSaving] = useState(false);
 
   const scenario = companyScenario(form.company_scenario);
@@ -895,9 +949,7 @@ const IncrementEvaluationDialog = ({
     }
     setSaving(true);
     try {
-      const { data: incEval, error: incError } = await supabase.from("increment_evaluations").insert({
-        finalization_id: finalization.id,
-        employee_id: finalization.employee_id,
+      const incrementEvalPayload = {
         company_scenario: form.company_scenario,
         approved_increment_factor_pct: form.approved_increment_factor_pct,
         average_recommended_pct: form.average_recommended_pct,
@@ -914,13 +966,8 @@ const IncrementEvaluationDialog = ({
         final_approved_retention_pct: form.final_approved_retention_pct ? parseFloat(form.final_approved_retention_pct) : null,
         final_approved_bonus_amount: form.final_approved_bonus_amount ? parseFloat(form.final_approved_bonus_amount) : null,
         final_notes: form.final_notes.trim() || null,
-        created_by: user.id,
-      }).select().single();
-      if (incError) throw incError;
-
-      const { data: increment, error: incrError } = await supabase.from("salary_increments").insert({
-        user_id: finalization.employee_id,
-        cycle_label: `Performance Review ${format(new Date(), "MMM yyyy")}`,
+      };
+      const salaryIncrementPayload = {
         effective_from: `${form.effective_from_month}-01`,
         base_salary: basicBefore,
         increment_amount: totalAmount,
@@ -930,14 +977,38 @@ const IncrementEvaluationDialog = ({
         gross_salary_before: finalization.gross_salary,
         gross_salary_after: grossAfter,
         reason: `Performance: ${finalization.final_category} (weighted avg ${finalization.weighted_average}/5)${retentionAmount > 0 ? "; includes a retention increment" : ""}.`,
-        approved_by: user.id,
-      }).select().single();
-      if (incrError) throw incrError;
+      };
 
-      const { error: linkError } = await supabase.from("increment_evaluations").update({ salary_increment_id: increment.id }).eq("id", incEval.id);
-      if (linkError) throw linkError;
+      if (existing) {
+        const { error: incError } = await supabase.from("increment_evaluations").update(incrementEvalPayload).eq("id", existing.id);
+        if (incError) throw incError;
+        if (existing.salary_increment_id) {
+          const { error: incrError } = await supabase.from("salary_increments").update(salaryIncrementPayload).eq("id", existing.salary_increment_id);
+          if (incrError) throw incrError;
+        }
+        toast.success("Increment decision updated");
+      } else {
+        const { data: incEval, error: incError } = await supabase.from("increment_evaluations").insert({
+          ...incrementEvalPayload,
+          finalization_id: finalization.id,
+          employee_id: finalization.employee_id,
+          created_by: user.id,
+        }).select().single();
+        if (incError) throw incError;
 
-      toast.success("Increment decided and applied to Salary Increments");
+        const { data: increment, error: incrError } = await supabase.from("salary_increments").insert({
+          ...salaryIncrementPayload,
+          user_id: finalization.employee_id,
+          cycle_label: `Performance Review ${format(new Date(), "MMM yyyy")}`,
+          approved_by: user.id,
+        }).select().single();
+        if (incrError) throw incrError;
+
+        const { error: linkError } = await supabase.from("increment_evaluations").update({ salary_increment_id: increment.id }).eq("id", incEval.id);
+        if (linkError) throw linkError;
+
+        toast.success("Increment decided and applied to Salary Increments");
+      }
       onSaved();
     } catch (e) {
       toast.error(e instanceof Error ? e.message : "Failed to save increment recommendation");
@@ -949,7 +1020,7 @@ const IncrementEvaluationDialog = ({
   return (
     <Dialog open onOpenChange={(o) => !o && onClose()}>
       <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
-        <DialogHeader><DialogTitle>Increment Evaluation — {employeeName}</DialogTitle></DialogHeader>
+        <DialogHeader><DialogTitle>{existing ? "Edit Increment Decision" : "Increment Evaluation"} — {employeeName}</DialogTitle></DialogHeader>
         <div className="space-y-5">
           <div className="rounded-md bg-muted/40 p-3 text-xs">
             {SALARY_CATEGORY_LABEL[finalization.salary_category]} · {finalization.final_category} · Policy range{" "}
@@ -1088,7 +1159,7 @@ const IncrementEvaluationDialog = ({
         </div>
         <DialogFooter>
           <Button onClick={save} disabled={saving} className="w-full">
-            {saving ? "Saving…" : "Decide Final Increment & Apply"}
+            {saving ? "Saving…" : existing ? "Save Changes" : "Decide Final Increment & Apply"}
           </Button>
         </DialogFooter>
       </DialogContent>
