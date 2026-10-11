@@ -8,6 +8,7 @@ import { Label } from "@/components/ui/label";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { toast } from "sonner";
 import { format } from "date-fns";
 import { Check, X, Clock, Users, Timer, Pencil, Trash2 } from "lucide-react";
@@ -38,6 +39,8 @@ const Approvals = () => {
   const [lateHistory, setLateHistory] = useState<any[]>([]);
   const [leavePending, setLeavePending] = useState<any[]>([]);
   const [leaveHistory, setLeaveHistory] = useState<any[]>([]);
+  const [loanHistory, setLoanHistory] = useState<any[]>([]);
+  const [expenseHistory, setExpenseHistory] = useState<any[]>([]);
   const [leaveTypeNames, setLeaveTypeNames] = useState<Record<string, string>>({});
   const [names, setNames] = useState<Record<string, string>>({});
   const [notes, setNotes] = useState<Record<string, string>>({});
@@ -49,7 +52,7 @@ const Approvals = () => {
 
   const fetchData = useCallback(async () => {
     if (!user) return;
-    const [{ data: requests }, { data: resolved }, { data: manualReqs }, { data: lateReqs }, { data: lateHist }, { data: leaveReqs }, { data: leaveHist }, { data: leaveTypes }] = await Promise.all([
+    const [{ data: requests }, { data: resolved }, { data: manualReqs }, { data: lateReqs }, { data: lateHist }, { data: leaveReqs }, { data: leaveHist }, { data: leaveTypes }, { data: loanHist }, { data: expenseHist }] = await Promise.all([
       supabase
         .from("overtime_requests")
         .select("*, profiles!overtime_requests_user_id_fkey(full_name, email)")
@@ -67,6 +70,8 @@ const Approvals = () => {
       supabase.from("leave_requests").select("*").eq("status", "pending").order("created_at", { ascending: false }),
       supabase.from("leave_requests").select("*").neq("status", "pending").order("updated_at", { ascending: false }).limit(20),
       supabase.from("leave_types").select("id, name"),
+      supabase.from("personal_advances").select("*").neq("status", "pending").order("approved_at", { ascending: false }).limit(20),
+      supabase.from("expense_claims").select("*").neq("status", "pending").order("approved_at", { ascending: false }).limit(20),
     ]);
     setPending(requests || []);
     setHistory(resolved || []);
@@ -75,12 +80,14 @@ const Approvals = () => {
     setLateHistory(lateHist || []);
     setLeavePending(leaveReqs || []);
     setLeaveHistory(leaveHist || []);
+    setLoanHistory(loanHist || []);
+    setExpenseHistory(expenseHist || []);
     const ltNames: Record<string, string> = {};
     (leaveTypes || []).forEach((lt: { id: string; name: string }) => { ltNames[lt.id] = lt.name; });
     setLeaveTypeNames(ltNames);
 
     const ids = Array.from(new Set(
-      [...(manualReqs || []), ...(lateReqs || []), ...(lateHist || []), ...(leaveReqs || []), ...(leaveHist || [])]
+      [...(manualReqs || []), ...(lateReqs || []), ...(lateHist || []), ...(leaveReqs || []), ...(leaveHist || []), ...(loanHist || []), ...(expenseHist || [])]
         .flatMap((r: any) => [r.user_id, r.approved_by, r.approver_id])
         .filter(Boolean)
     ));
@@ -105,6 +112,8 @@ const Approvals = () => {
   useRealtimeSubscription("manual_time_requests", fetchData, "approvals-manual");
   useRealtimeSubscription("late_time_requests", fetchData, "approvals-late");
   useRealtimeSubscription("leave_requests", fetchData, "approvals-leave");
+  useRealtimeSubscription("personal_advances", fetchData, "approvals-loans");
+  useRealtimeSubscription("expense_claims", fetchData, "approvals-expense");
 
   const decideManual = async (req: any, status: "approved" | "rejected") => {
     if (!user) return;
@@ -552,142 +561,205 @@ const Approvals = () => {
         </CardContent>
       </Card>
 
-      {/* Late Time Request Log */}
+      {/* History — every decided request, grouped into tabs by type */}
       <Card>
         <CardHeader>
-          <CardTitle>Late Time Request Log</CardTitle>
-          <CardDescription>Track every late-time request and how it was decided.</CardDescription>
+          <CardTitle>History</CardTitle>
+          <CardDescription>Track every decided request and how it was resolved.</CardDescription>
         </CardHeader>
         <CardContent>
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>Employee</TableHead>
-                <TableHead>Type</TableHead>
-                <TableHead>Effective</TableHead>
-                <TableHead>Details</TableHead>
-                <TableHead>Status</TableHead>
-                <TableHead>Decided By</TableHead>
-                <TableHead>Note</TableHead>
-                <TableHead>Actions</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {lateHistory.length === 0 ? (
-                <TableRow><TableCell colSpan={8} className="text-center text-muted-foreground">No late time request history yet</TableCell></TableRow>
-              ) : lateHistory.map((req) => (
-                <TableRow key={req.id}>
-                  <TableCell className="font-medium">{names[req.user_id] || "Unknown"}</TableCell>
-                  <TableCell>
-                    <Badge variant="outline">{req.request_type === "office_time_change" ? "Office time change" : "Late adjustment"}</Badge>
-                  </TableCell>
-                  <TableCell className="whitespace-nowrap">{format(new Date(req.effective_date), "MMM d, yyyy")}</TableCell>
-                  <TableCell className="text-xs whitespace-nowrap">
-                    {req.request_type === "office_time_change"
-                      ? `${String(req.requested_start_time).slice(0, 5)} – ${String(req.requested_end_time).slice(0, 5)}`
-                      : `Late ${humanMinutes(Number(req.late_minutes) || 0)} · waive ${humanMinutes(Number(req.adjustment_minutes) || 0)}`}
-                  </TableCell>
-                  <TableCell>
-                    <Badge className={otStatusStyle(req.status)}>{req.status}</Badge>
-                  </TableCell>
-                  <TableCell className="text-xs text-muted-foreground">{req.approved_by ? names[req.approved_by] || "—" : "—"}</TableCell>
-                  <TableCell className="max-w-48 truncate text-xs text-muted-foreground">{req.approver_note || "—"}</TableCell>
-                  <TableCell>
-                    <Button size="sm" variant="ghost" className="text-destructive hover:text-destructive" onClick={() => deleteLate(req)}>
-                      <Trash2 className="h-4 w-4" />
-                    </Button>
-                  </TableCell>
-                </TableRow>
-              ))}
-            </TableBody>
-          </Table>
-        </CardContent>
-      </Card>
+          <Tabs defaultValue="overtime">
+            <TabsList>
+              <TabsTrigger value="overtime">Overtime</TabsTrigger>
+              <TabsTrigger value="late">Late Time</TabsTrigger>
+              <TabsTrigger value="leave">Leave</TabsTrigger>
+              <TabsTrigger value="loan">Loan</TabsTrigger>
+              <TabsTrigger value="expense">Expense</TabsTrigger>
+            </TabsList>
 
-      {/* Leave Request Log */}
-      <Card>
-        <CardHeader>
-          <CardTitle>Leave Request Log</CardTitle>
-          <CardDescription>Track every leave request and how it was decided.</CardDescription>
-        </CardHeader>
-        <CardContent>
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>Employee</TableHead>
-                <TableHead>Type</TableHead>
-                <TableHead>Dates</TableHead>
-                <TableHead>Days</TableHead>
-                <TableHead>Status</TableHead>
-                <TableHead>Decided By</TableHead>
-                <TableHead>Note</TableHead>
-                <TableHead>Actions</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {leaveHistory.length === 0 ? (
-                <TableRow><TableCell colSpan={8} className="text-center text-muted-foreground">No leave request history yet</TableCell></TableRow>
-              ) : leaveHistory.map((req) => (
-                <TableRow key={req.id}>
-                  <TableCell className="font-medium">{names[req.user_id] || "Unknown"}</TableCell>
-                  <TableCell><Badge variant="outline">{leaveTypeNames[req.leave_type_id] || "—"}</Badge></TableCell>
-                  <TableCell className="whitespace-nowrap text-xs">
-                    {format(new Date(req.start_date), "MMM d")} – {format(new Date(req.end_date), "MMM d, yyyy")}
-                  </TableCell>
-                  <TableCell><Badge>{req.total_days}d</Badge></TableCell>
-                  <TableCell>
-                    <Badge className={otStatusStyle(req.status)}>{req.status}</Badge>
-                  </TableCell>
-                  <TableCell className="text-xs text-muted-foreground">{req.approver_id ? names[req.approver_id] || "—" : "—"}</TableCell>
-                  <TableCell className="max-w-48 truncate text-xs text-muted-foreground">{req.approver_note || "—"}</TableCell>
-                  <TableCell>
-                    <Button size="sm" variant="ghost" className="text-destructive hover:text-destructive" onClick={() => deleteLeave(req)}>
-                      <Trash2 className="h-4 w-4" />
-                    </Button>
-                  </TableCell>
-                </TableRow>
-              ))}
-            </TableBody>
-          </Table>
-        </CardContent>
-      </Card>
+            <TabsContent value="overtime">
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Employee</TableHead>
+                    <TableHead>Date</TableHead>
+                    <TableHead>Hours</TableHead>
+                    <TableHead>Status</TableHead>
+                    <TableHead>Actions</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {history.length === 0 ? (
+                    <TableRow><TableCell colSpan={5} className="text-center text-muted-foreground">No history yet</TableCell></TableRow>
+                  ) : history.map((req) => (
+                    <TableRow key={req.id}>
+                      <TableCell>{(req.profiles as any)?.full_name || (req.profiles as any)?.email || "Unknown"}</TableCell>
+                      <TableCell>{format(new Date(req.date), "MMM d, yyyy")}</TableCell>
+                      <TableCell>{req.requested_hours}h</TableCell>
+                      <TableCell>
+                        <Badge className={otStatusStyle(req.status)}>
+                          {req.status}
+                        </Badge>
+                      </TableCell>
+                      <TableCell>
+                        <Button size="sm" variant="ghost" className="text-destructive hover:text-destructive" onClick={() => deleteOT(req)}>
+                          <Trash2 className="h-4 w-4 mr-1" /> Delete
+                        </Button>
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </TabsContent>
 
-      {/* Approval History */}
-      <Card>
-        <CardHeader><CardTitle>Approval History</CardTitle></CardHeader>
-        <CardContent>
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>Employee</TableHead>
-                <TableHead>Date</TableHead>
-                <TableHead>Hours</TableHead>
-                <TableHead>Status</TableHead>
-                <TableHead>Actions</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {history.length === 0 ? (
-                <TableRow><TableCell colSpan={5} className="text-center text-muted-foreground">No history yet</TableCell></TableRow>
-              ) : history.map((req) => (
-                <TableRow key={req.id}>
-                  <TableCell>{(req.profiles as any)?.full_name || (req.profiles as any)?.email || "Unknown"}</TableCell>
-                  <TableCell>{format(new Date(req.date), "MMM d, yyyy")}</TableCell>
-                  <TableCell>{req.requested_hours}h</TableCell>
-                  <TableCell>
-                    <Badge className={otStatusStyle(req.status)}>
-                      {req.status}
-                    </Badge>
-                  </TableCell>
-                  <TableCell>
-                    <Button size="sm" variant="ghost" className="text-destructive hover:text-destructive" onClick={() => deleteOT(req)}>
-                      <Trash2 className="h-4 w-4 mr-1" /> Delete
-                    </Button>
-                  </TableCell>
-                </TableRow>
-              ))}
-            </TableBody>
-          </Table>
+            <TabsContent value="late">
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Employee</TableHead>
+                    <TableHead>Type</TableHead>
+                    <TableHead>Effective</TableHead>
+                    <TableHead>Details</TableHead>
+                    <TableHead>Status</TableHead>
+                    <TableHead>Decided By</TableHead>
+                    <TableHead>Note</TableHead>
+                    <TableHead>Actions</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {lateHistory.length === 0 ? (
+                    <TableRow><TableCell colSpan={8} className="text-center text-muted-foreground">No late time request history yet</TableCell></TableRow>
+                  ) : lateHistory.map((req) => (
+                    <TableRow key={req.id}>
+                      <TableCell className="font-medium">{names[req.user_id] || "Unknown"}</TableCell>
+                      <TableCell>
+                        <Badge variant="outline">{req.request_type === "office_time_change" ? "Office time change" : "Late adjustment"}</Badge>
+                      </TableCell>
+                      <TableCell className="whitespace-nowrap">{format(new Date(req.effective_date), "MMM d, yyyy")}</TableCell>
+                      <TableCell className="text-xs whitespace-nowrap">
+                        {req.request_type === "office_time_change"
+                          ? `${String(req.requested_start_time).slice(0, 5)} – ${String(req.requested_end_time).slice(0, 5)}`
+                          : `Late ${humanMinutes(Number(req.late_minutes) || 0)} · waive ${humanMinutes(Number(req.adjustment_minutes) || 0)}`}
+                      </TableCell>
+                      <TableCell>
+                        <Badge className={otStatusStyle(req.status)}>{req.status}</Badge>
+                      </TableCell>
+                      <TableCell className="text-xs text-muted-foreground">{req.approved_by ? names[req.approved_by] || "—" : "—"}</TableCell>
+                      <TableCell className="max-w-48 truncate text-xs text-muted-foreground">{req.approver_note || "—"}</TableCell>
+                      <TableCell>
+                        <Button size="sm" variant="ghost" className="text-destructive hover:text-destructive" onClick={() => deleteLate(req)}>
+                          <Trash2 className="h-4 w-4" />
+                        </Button>
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </TabsContent>
+
+            <TabsContent value="leave">
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Employee</TableHead>
+                    <TableHead>Type</TableHead>
+                    <TableHead>Dates</TableHead>
+                    <TableHead>Days</TableHead>
+                    <TableHead>Status</TableHead>
+                    <TableHead>Decided By</TableHead>
+                    <TableHead>Note</TableHead>
+                    <TableHead>Actions</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {leaveHistory.length === 0 ? (
+                    <TableRow><TableCell colSpan={8} className="text-center text-muted-foreground">No leave request history yet</TableCell></TableRow>
+                  ) : leaveHistory.map((req) => (
+                    <TableRow key={req.id}>
+                      <TableCell className="font-medium">{names[req.user_id] || "Unknown"}</TableCell>
+                      <TableCell><Badge variant="outline">{leaveTypeNames[req.leave_type_id] || "—"}</Badge></TableCell>
+                      <TableCell className="whitespace-nowrap text-xs">
+                        {format(new Date(req.start_date), "MMM d")} – {format(new Date(req.end_date), "MMM d, yyyy")}
+                      </TableCell>
+                      <TableCell><Badge>{req.total_days}d</Badge></TableCell>
+                      <TableCell>
+                        <Badge className={otStatusStyle(req.status)}>{req.status}</Badge>
+                      </TableCell>
+                      <TableCell className="text-xs text-muted-foreground">{req.approver_id ? names[req.approver_id] || "—" : "—"}</TableCell>
+                      <TableCell className="max-w-48 truncate text-xs text-muted-foreground">{req.approver_note || "—"}</TableCell>
+                      <TableCell>
+                        <Button size="sm" variant="ghost" className="text-destructive hover:text-destructive" onClick={() => deleteLeave(req)}>
+                          <Trash2 className="h-4 w-4" />
+                        </Button>
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </TabsContent>
+
+            <TabsContent value="loan">
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Employee</TableHead>
+                    <TableHead>Date</TableHead>
+                    <TableHead>Amount</TableHead>
+                    <TableHead>Balance</TableHead>
+                    <TableHead>Status</TableHead>
+                    <TableHead>Decided By</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {loanHistory.length === 0 ? (
+                    <TableRow><TableCell colSpan={6} className="text-center text-muted-foreground">No loan history yet</TableCell></TableRow>
+                  ) : loanHistory.map((loan) => (
+                    <TableRow key={loan.id}>
+                      <TableCell className="font-medium">{names[loan.user_id] || "Unknown"}</TableCell>
+                      <TableCell className="whitespace-nowrap">{format(new Date(loan.created_at), "MMM d, yyyy")}</TableCell>
+                      <TableCell>{Number(loan.amount).toLocaleString()}</TableCell>
+                      <TableCell>{Number(loan.remaining_balance).toLocaleString()}</TableCell>
+                      <TableCell>
+                        <Badge className={loan.status === "approved" || loan.status === "closed" ? "bg-success text-white" : loan.status === "rejected" ? "bg-destructive text-white" : ""}>{loan.status}</Badge>
+                      </TableCell>
+                      <TableCell className="text-xs text-muted-foreground">{loan.approved_by ? names[loan.approved_by] || "—" : "—"}</TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </TabsContent>
+
+            <TabsContent value="expense">
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Employee</TableHead>
+                    <TableHead>Date</TableHead>
+                    <TableHead>Category</TableHead>
+                    <TableHead>Amount</TableHead>
+                    <TableHead>Status</TableHead>
+                    <TableHead>Decided By</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {expenseHistory.length === 0 ? (
+                    <TableRow><TableCell colSpan={6} className="text-center text-muted-foreground">No expense history yet</TableCell></TableRow>
+                  ) : expenseHistory.map((claim) => (
+                    <TableRow key={claim.id}>
+                      <TableCell className="font-medium">{names[claim.user_id] || "Unknown"}</TableCell>
+                      <TableCell className="whitespace-nowrap">{format(new Date(claim.claim_date), "MMM d, yyyy")}</TableCell>
+                      <TableCell><Badge variant="outline">{claim.category}</Badge></TableCell>
+                      <TableCell>{Number(claim.amount).toLocaleString()}</TableCell>
+                      <TableCell>
+                        <Badge className={claim.status === "approved" ? "bg-success text-white" : claim.status === "rejected" ? "bg-destructive text-white" : ""}>{claim.status}</Badge>
+                      </TableCell>
+                      <TableCell className="text-xs text-muted-foreground">{claim.approver_id ? names[claim.approver_id] || "—" : "—"}</TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </TabsContent>
+          </Tabs>
         </CardContent>
       </Card>
 
