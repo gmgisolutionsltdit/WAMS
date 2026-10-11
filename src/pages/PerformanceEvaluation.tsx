@@ -324,8 +324,15 @@ const PerformanceEvaluation = () => {
     (employeeId: string) => finalizations.find((f) => f.employee_id === employeeId),
     [finalizations],
   );
+  // Matched by employee_id (not finalization_id) and picks the most recent:
+  // older test data can have more than one finalization row per employee
+  // from before finalize was made one-time-only, and an increment decided
+  // against an earlier finalization would otherwise never be found once
+  // latestFinalization() moved on to the newer row.
   const incrementEvalFor = useCallback(
-    (finalizationId: string) => incrementEvals.find((e) => e.finalization_id === finalizationId),
+    (employeeId: string) => incrementEvals
+      .filter((e) => e.employee_id === employeeId)
+      .sort((a, b) => b.created_at.localeCompare(a.created_at))[0],
     [incrementEvals],
   );
 
@@ -494,7 +501,7 @@ const PerformanceEvaluation = () => {
               <p className="text-sm text-muted-foreground">No evaluations requested yet.</p>
             ) : employeeGroups.map((g) => {
               const finalization = latestFinalization(g.employeeId);
-              const incrementEval = finalization ? incrementEvalFor(finalization.id) : undefined;
+              const incrementEval = finalization ? incrementEvalFor(g.employeeId) : undefined;
               const hasSubmitted = g.evaluations.length > 0;
               return (
               <div key={g.employeeId} className="rounded-lg border p-4 space-y-3">
@@ -738,7 +745,7 @@ const PerformanceEvaluation = () => {
           </DialogHeader>
           {viewFinalizationDetails && (() => {
             const finalization = viewFinalizationDetails;
-            const incrementEval = incrementEvalFor(finalization.id);
+            const incrementEval = incrementEvalFor(finalization.employee_id);
             return (
               <div className="space-y-4 text-sm">
                 <div className="rounded-md bg-muted/40 p-3 space-y-1">
