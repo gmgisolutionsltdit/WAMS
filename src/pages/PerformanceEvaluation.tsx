@@ -123,6 +123,7 @@ const PerformanceEvaluation = () => {
   const [incrementDialogFinalization, setIncrementDialogFinalization] = useState<Finalization | null>(null);
   const [viewEvaluation, setViewEvaluation] = useState<Evaluation | null>(null);
   const [viewIncrementEval, setViewIncrementEval] = useState<IncrementEval | null>(null);
+  const [viewFinalizationEmployeeId, setViewFinalizationEmployeeId] = useState<string | null>(null);
 
   const profileMap = useMemo(() => {
     const m: Record<string, Profile> = {};
@@ -158,6 +159,15 @@ const PerformanceEvaluation = () => {
       setProfiles((pf || []) as Profile[]);
       setFinalizations((finals || []) as unknown as Finalization[]);
       setIncrementEvals((incEvals || []) as IncrementEval[]);
+    } else {
+      // Non-admin (manager-evaluator): fetch just the employee profiles
+      // named in this user's own requests, so names render instead of
+      // falling back to "—" everywhere an employee is shown.
+      const employeeIds = Array.from(new Set((reqs || []).map((r) => r.employee_id)));
+      if (employeeIds.length > 0) {
+        const { data: pf } = await supabase.from("profiles").select("id, full_name, email").in("id", employeeIds);
+        setProfiles((pf || []) as Profile[]);
+      }
     }
   }, [user, isAdmin]);
 
@@ -263,6 +273,10 @@ const PerformanceEvaluation = () => {
   // can pick it up without recomputing it from scratch each time.
   const finalizeEmployee = async (employeeId: string, empRequests: EvalRequest[], final: { weightedAverage: number; category: EvaluationCategory }) => {
     if (!user) return;
+    if (latestFinalization(employeeId)) {
+      toast.error("Already finalized — this can only be done once per employee.");
+      return;
+    }
     // Read the gross salary fresh rather than from this page's local
     // profiles list, which was only fetched once on mount and can go stale
     // if the admin updates it (e.g. from the employee's Financial tab)
@@ -431,6 +445,7 @@ const PerformanceEvaluation = () => {
                   <TableHead>Employee</TableHead>
                   <TableHead>Average Score</TableHead>
                   <TableHead>Category</TableHead>
+                  <TableHead></TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -442,6 +457,7 @@ const PerformanceEvaluation = () => {
                       <TableCell>{profileMap[r.employee_id]?.full_name || profileMap[r.employee_id]?.email || "—"}</TableCell>
                       <TableCell className="font-mono text-xs">{ev.average_score} / 5</TableCell>
                       <TableCell><Badge className={CATEGORY_BADGE_CLASS[ev.category]}>{ev.category}</Badge></TableCell>
+                      <TableCell><Button size="sm" variant="outline" onClick={() => setViewEvaluation(ev)}>View Answers</Button></TableCell>
                     </TableRow>
                   );
                 })}
@@ -475,8 +491,8 @@ const PerformanceEvaluation = () => {
                     <div className="flex items-center gap-2 flex-wrap">
                       <span className="text-xs text-muted-foreground">Weighted average: {g.final.weightedAverage} / 5</span>
                       <Badge className={CATEGORY_BADGE_CLASS[g.final.category]}>{g.final.category}</Badge>
-                      <Button size="sm" variant="outline" disabled={!hasSubmitted} onClick={() => finalizeEmployee(g.employeeId, g.requests, g.final!)}>
-                        Finalize
+                      <Button size="sm" variant="outline" disabled={!hasSubmitted || !!finalization} onClick={() => finalizeEmployee(g.employeeId, g.requests, g.final!)}>
+                        {finalization ? "Finalized" : "Finalize"}
                       </Button>
                     </div>
                   )}
@@ -489,6 +505,8 @@ const PerformanceEvaluation = () => {
                       {finalization.final_category} → recommended annual increment{" "}
                       <span className="font-mono">{finalization.recommended_min_pct}% – {finalization.recommended_max_pct}%</span> of gross salary{" "}
                       <span className="font-mono">{finalization.gross_salary.toLocaleString()}</span> BDT.
+                      {" "}
+                      <Button size="sm" variant="outline" className="h-6" onClick={() => setViewFinalizationEmployeeId(g.employeeId)}>See Details</Button>
                     </p>
                     {incrementEval ? (
                       <div className="flex items-center gap-2 flex-wrap">
@@ -663,6 +681,21 @@ const PerformanceEvaluation = () => {
                 {" "}· Submitted {format(new Date(viewEvaluation.created_at), "MMM d, yyyy")}
               </div>
 
+              <Table>
+                <TableHeader>
+                  <TableRow><TableHead className="w-12">Score</TableHead><TableHead className="w-32">Meaning</TableHead><TableHead>Description</TableHead></TableRow>
+                </TableHeader>
+                <TableBody>
+                  {SCORE_SCALE.map((s) => (
+                    <TableRow key={s.score}>
+                      <TableCell className="font-mono font-semibold">{s.score}</TableCell>
+                      <TableCell className="font-medium">{s.label}</TableCell>
+                      <TableCell className="text-xs text-muted-foreground">{s.description}</TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+
               {EVALUATION_SECTIONS.map((section) => (
                 <div key={section.key} className="space-y-2">
                   <p className="text-sm font-medium">{section.key}. {section.title}</p>
@@ -687,6 +720,54 @@ const PerformanceEvaluation = () => {
               </div>
             </div>
           )}
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={!!viewFinalizationEmployeeId} onOpenChange={(o) => !o && setViewFinalizationEmployeeId(null)}>
+        <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>
+              Finalization Details — {viewFinalizationEmployeeId ? (profileMap[viewFinalizationEmployeeId]?.full_name || profileMap[viewFinalizationEmployeeId]?.email) : ""}
+            </DialogTitle>
+          </DialogHeader>
+          {(() => {
+            const g = employeeGroups.find((x) => x.employeeId === viewFinalizationEmployeeId);
+            if (!g) return null;
+            return (
+              <div className="space-y-3">
+                {g.final && (
+                  <div className="rounded-lg border bg-muted/40 p-3 text-sm">
+                    Weighted Average: <span className="font-mono">{g.final.weightedAverage} / 5</span>{" "}
+                    · Final Category: <Badge className={CATEGORY_BADGE_CLASS[g.final.category]}>{g.final.category}</Badge>
+                  </div>
+                )}
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>Evaluator</TableHead>
+                      <TableHead className="text-right">Average Score</TableHead>
+                      <TableHead>Category</TableHead>
+                      <TableHead className="text-right">Weight</TableHead>
+                      <TableHead></TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {g.evaluations.map(({ request, evaluation }) => (
+                      <TableRow key={request.id}>
+                        <TableCell>{profileMap[evaluation.evaluator_id]?.full_name || profileMap[evaluation.evaluator_id]?.email || "—"}</TableCell>
+                        <TableCell className="text-right font-mono text-xs">{evaluation.average_score} / 5</TableCell>
+                        <TableCell><Badge className={CATEGORY_BADGE_CLASS[evaluation.category]}>{evaluation.category}</Badge></TableCell>
+                        <TableCell className="text-right font-mono text-xs">{request.weight}</TableCell>
+                        <TableCell>
+                          <Button size="sm" variant="outline" onClick={() => setViewEvaluation(evaluation)}>View Answers</Button>
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              </div>
+            );
+          })()}
         </DialogContent>
       </Dialog>
 
