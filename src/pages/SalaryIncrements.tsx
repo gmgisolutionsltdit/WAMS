@@ -31,6 +31,8 @@ type Increment = {
   increment_pct: number;
   retention_pct: number | null;
   retention_amount: number | null;
+  gross_salary_before: number | null;
+  gross_salary_after: number | null;
   reason: string | null;
   approved_by: string | null;
   created_at: string;
@@ -46,6 +48,10 @@ const emptyForm = () => ({
   base_salary: 0,
   increment_amount: 0,
   increment_pct: 0,
+  retention_pct: 0,
+  retention_amount: 0,
+  gross_salary_before: 0,
+  gross_salary_after: 0,
   reason: "",
 });
 
@@ -99,6 +105,10 @@ const SalaryIncrements = () => {
       base_salary: Number(rec.base_salary),
       increment_amount: Number(rec.increment_amount),
       increment_pct: Number(rec.increment_pct),
+      retention_pct: Number(rec.retention_pct) || 0,
+      retention_amount: Number(rec.retention_amount) || 0,
+      gross_salary_before: Number(rec.gross_salary_before) || 0,
+      gross_salary_after: Number(rec.gross_salary_after) || 0,
       reason: rec.reason || "",
     });
     setOpen(true);
@@ -118,6 +128,10 @@ const SalaryIncrements = () => {
       base_salary: Number(form.base_salary) || 0,
       increment_amount: Number(form.increment_amount) || 0,
       increment_pct: Number(form.increment_pct) || 0,
+      retention_pct: Number(form.retention_pct) || null,
+      retention_amount: Number(form.retention_amount) || null,
+      gross_salary_before: Number(form.gross_salary_before) || null,
+      gross_salary_after: Number(form.gross_salary_after) || null,
       reason: form.reason || null,
       approved_by: user?.id || null,
     };
@@ -197,14 +211,41 @@ const SalaryIncrements = () => {
                       onChange={(e) => setForm((f) => ({ ...f, base_salary: parseFloat(e.target.value) || 0 }))} />
                   </div>
                   <div>
-                    <Label>Increment Amt</Label>
-                    <Input type="number" step="0.01" value={form.increment_amount}
-                      onChange={(e) => setForm((f) => ({ ...f, increment_amount: parseFloat(e.target.value) || 0 }))} />
-                  </div>
-                  <div>
                     <Label>Increment %</Label>
                     <Input type="number" step="0.01" value={form.increment_pct}
                       onChange={(e) => setForm((f) => ({ ...f, increment_pct: parseFloat(e.target.value) || 0 }))} />
+                  </div>
+                  <div>
+                    <Label>Increment Amount</Label>
+                    <Input type="number" step="0.01" value={form.increment_amount}
+                      onChange={(e) => setForm((f) => ({ ...f, increment_amount: parseFloat(e.target.value) || 0 }))} />
+                  </div>
+                </div>
+                {/* Increment Amount/% are the combined total (main + retention), matching
+                    the Increment Evaluation Form's convention — Main is derived by
+                    subtracting Retention from these in the table/ledger display. */}
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <Label>Retention %</Label>
+                    <Input type="number" step="0.01" value={form.retention_pct}
+                      onChange={(e) => setForm((f) => ({ ...f, retention_pct: parseFloat(e.target.value) || 0 }))} />
+                  </div>
+                  <div>
+                    <Label>Retention Amount</Label>
+                    <Input type="number" step="0.01" value={form.retention_amount}
+                      onChange={(e) => setForm((f) => ({ ...f, retention_amount: parseFloat(e.target.value) || 0 }))} />
+                  </div>
+                </div>
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <Label>Gross Salary Before</Label>
+                    <Input type="number" step="0.01" value={form.gross_salary_before}
+                      onChange={(e) => setForm((f) => ({ ...f, gross_salary_before: parseFloat(e.target.value) || 0 }))} />
+                  </div>
+                  <div>
+                    <Label>Gross Salary After</Label>
+                    <Input type="number" step="0.01" value={form.gross_salary_after}
+                      onChange={(e) => setForm((f) => ({ ...f, gross_salary_after: parseFloat(e.target.value) || 0 }))} />
                   </div>
                 </div>
                 <div>
@@ -242,16 +283,23 @@ const SalaryIncrements = () => {
             </Select>
           </div>
 
+          <div className="overflow-x-auto">
           <Table>
             <TableHeader>
               <TableRow>
                 <TableHead>Employee</TableHead>
+                <TableHead>Effective Date</TableHead>
+                <TableHead>Effective Month</TableHead>
                 <TableHead>Cycle</TableHead>
-                <TableHead>Effective</TableHead>
-                <TableHead className="text-right">Basic Salary</TableHead>
-                <TableHead className="text-right">Increment</TableHead>
-                <TableHead className="text-right">Retention</TableHead>
-                <TableHead className="text-right">Total</TableHead>
+                <TableHead className="text-right">Previous Basic</TableHead>
+                <TableHead className="text-right">Increment %</TableHead>
+                <TableHead className="text-right">Increment Amount</TableHead>
+                <TableHead className="text-right">Main %</TableHead>
+                <TableHead className="text-right">Main Amount</TableHead>
+                <TableHead className="text-right">Retention %</TableHead>
+                <TableHead className="text-right">Retention Amount</TableHead>
+                <TableHead className="text-right">New Basic</TableHead>
+                <TableHead className="text-right">New Gross</TableHead>
                 <TableHead>Reason</TableHead>
                 {canManage && <TableHead></TableHead>}
               </TableRow>
@@ -259,51 +307,45 @@ const SalaryIncrements = () => {
             <TableBody>
               {visible.length === 0 ? (
                 <TableRow>
-                  <TableCell colSpan={canManage ? 9 : 8} className="text-center text-muted-foreground">
+                  <TableCell colSpan={canManage ? 15 : 14} className="text-center text-muted-foreground">
                     No salary increment records
                   </TableCell>
                 </TableRow>
               ) : visible.map((r) => {
                 const p = profileMap[r.user_id];
+                const prev = Number(r.base_salary) || 0;
+                const incAmt = Number(r.increment_amount) || 0;
+                const incPct = Number(r.increment_pct) || 0;
+                // increment_amount/increment_pct are stored as the combined total
+                // (main + retention) — see IncrementEvaluationDialog's
+                // totalAmount/totalPct in PerformanceEvaluation.tsx.
+                const retentionAmount = Number(r.retention_amount) || 0;
+                const retentionPct = Number(r.retention_pct) || 0;
+                const mainAmount = Math.round((incAmt - retentionAmount) * 100) / 100;
+                const mainPct = Math.round((incPct - retentionPct) * 100) / 100;
+                // New Basic = New Gross / 2 when gross is tracked; a manual entry
+                // without a tracked gross falls back to Previous Basic + Increment.
+                const newSal = r.gross_salary_after != null ? Number(r.gross_salary_after) / 2 : prev + incAmt;
                 return (
                   <TableRow key={r.id}>
                     <TableCell className="font-medium">{p?.full_name || p?.email || "—"}</TableCell>
-                    <TableCell><Badge variant="outline">{r.cycle_label}</Badge></TableCell>
                     <TableCell className="text-sm">
                       {format(new Date(r.effective_from), "MMM d, yyyy")}
                       {r.effective_to && <> → {format(new Date(r.effective_to), "MMM d, yyyy")}</>}
                     </TableCell>
-                    <TableCell className="text-right">{fmtMoney(r.base_salary)}</TableCell>
-                    {(() => {
-                      // increment_amount/increment_pct are stored as the combined
-                      // total (performance + retention) — see
-                      // IncrementEvaluationDialog's totalAmount/totalPct in
-                      // PerformanceEvaluation.tsx. The Increment column shows the
-                      // performance-only portion; Total shows the stored value as-is.
-                      const retentionAmount = Number(r.retention_amount || 0);
-                      const retentionPct = Number(r.retention_pct || 0);
-                      const performanceAmount = Number(r.increment_amount) - retentionAmount;
-                      const performancePct = Math.round((Number(r.increment_pct) - retentionPct) * 100) / 100;
-                      return (
-                        <>
-                          <TableCell className="text-right">
-                            +{fmtMoney(performanceAmount)}
-                            {performancePct > 0 && (
-                              <span className="text-xs text-muted-foreground ml-1">({performancePct}%)</span>
-                            )}
-                          </TableCell>
-                          <TableCell className="text-right">
-                            {r.retention_amount
-                              ? <>+{fmtMoney(retentionAmount)}{r.retention_pct ? <span className="text-xs text-muted-foreground ml-1">({retentionPct}%)</span> : null}</>
-                              : "—"}
-                          </TableCell>
-                          <TableCell className="text-right font-semibold">
-                            +{fmtMoney(r.increment_amount)}
-                            <span className="text-xs text-muted-foreground ml-1">({r.increment_pct}%)</span>
-                          </TableCell>
-                        </>
-                      );
-                    })()}
+                    <TableCell>{format(new Date(r.effective_from), "MMMM yyyy")}</TableCell>
+                    <TableCell><Badge variant="outline">{r.cycle_label}</Badge></TableCell>
+                    <TableCell className="text-right">{fmtMoney(prev)}</TableCell>
+                    <TableCell className="text-right">{incPct.toFixed(2)}%</TableCell>
+                    <TableCell className="text-right text-green-600 font-medium">+{fmtMoney(incAmt)}</TableCell>
+                    <TableCell className="text-right">{mainPct.toFixed(2)}%</TableCell>
+                    <TableCell className="text-right">{fmtMoney(mainAmount)}</TableCell>
+                    <TableCell className="text-right">{retentionPct > 0 ? `${retentionPct.toFixed(2)}%` : "—"}</TableCell>
+                    <TableCell className="text-right">{retentionAmount > 0 ? fmtMoney(retentionAmount) : "—"}</TableCell>
+                    <TableCell className="text-right font-semibold">{fmtMoney(newSal)}</TableCell>
+                    <TableCell className="text-right font-semibold">
+                      {r.gross_salary_after != null ? fmtMoney(Number(r.gross_salary_after)) : "—"}
+                    </TableCell>
                     <TableCell className="max-w-xs truncate">{r.reason || "—"}</TableCell>
                     {canManage && (
                       <TableCell>
@@ -318,6 +360,7 @@ const SalaryIncrements = () => {
               })}
             </TableBody>
           </Table>
+          </div>
         </CardContent>
       </Card>
     </div>
