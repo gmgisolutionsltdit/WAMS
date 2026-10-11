@@ -248,7 +248,7 @@ const SalaryIncrements = () => {
                 <TableHead>Employee</TableHead>
                 <TableHead>Cycle</TableHead>
                 <TableHead>Effective</TableHead>
-                <TableHead className="text-right">Base</TableHead>
+                <TableHead className="text-right">Basic Salary</TableHead>
                 <TableHead className="text-right">Increment</TableHead>
                 <TableHead className="text-right">Retention</TableHead>
                 <TableHead className="text-right">Total</TableHead>
@@ -274,24 +274,36 @@ const SalaryIncrements = () => {
                       {r.effective_to && <> → {format(new Date(r.effective_to), "MMM d, yyyy")}</>}
                     </TableCell>
                     <TableCell className="text-right">{fmtMoney(r.base_salary)}</TableCell>
-                    <TableCell className="text-right">
-                      +{fmtMoney(r.increment_amount)}
-                      {r.increment_pct > 0 && (
-                        <span className="text-xs text-muted-foreground ml-1">({r.increment_pct}%)</span>
-                      )}
-                    </TableCell>
-                    <TableCell className="text-right">
-                      {r.retention_amount
-                        ? <>+{fmtMoney(r.retention_amount)}{r.retention_pct ? <span className="text-xs text-muted-foreground ml-1">({r.retention_pct}%)</span> : null}</>
-                        : "—"}
-                    </TableCell>
-                    <TableCell className="text-right font-semibold">
-                      {(() => {
-                        const totalAmount = Number(r.increment_amount || 0) + Number(r.retention_amount || 0);
-                        const totalPct = Number(r.base_salary) > 0 ? Math.round((totalAmount / Number(r.base_salary)) * 100 * 100) / 100 : Number(r.increment_pct || 0) + Number(r.retention_pct || 0);
-                        return <>+{fmtMoney(totalAmount)}<span className="text-xs text-muted-foreground ml-1">({totalPct}%)</span></>;
-                      })()}
-                    </TableCell>
+                    {(() => {
+                      // increment_amount/increment_pct are stored as the combined
+                      // total (performance + retention) — see
+                      // IncrementEvaluationDialog's totalAmount/totalPct in
+                      // PerformanceEvaluation.tsx. The Increment column shows the
+                      // performance-only portion; Total shows the stored value as-is.
+                      const retentionAmount = Number(r.retention_amount || 0);
+                      const retentionPct = Number(r.retention_pct || 0);
+                      const performanceAmount = Number(r.increment_amount) - retentionAmount;
+                      const performancePct = Math.round((Number(r.increment_pct) - retentionPct) * 100) / 100;
+                      return (
+                        <>
+                          <TableCell className="text-right">
+                            +{fmtMoney(performanceAmount)}
+                            {performancePct > 0 && (
+                              <span className="text-xs text-muted-foreground ml-1">({performancePct}%)</span>
+                            )}
+                          </TableCell>
+                          <TableCell className="text-right">
+                            {r.retention_amount
+                              ? <>+{fmtMoney(retentionAmount)}{r.retention_pct ? <span className="text-xs text-muted-foreground ml-1">({retentionPct}%)</span> : null}</>
+                              : "—"}
+                          </TableCell>
+                          <TableCell className="text-right font-semibold">
+                            +{fmtMoney(r.increment_amount)}
+                            <span className="text-xs text-muted-foreground ml-1">({r.increment_pct}%)</span>
+                          </TableCell>
+                        </>
+                      );
+                    })()}
                     <TableCell className="max-w-xs truncate">{r.reason || "—"}</TableCell>
                     {canManage && (
                       <TableCell>
