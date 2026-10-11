@@ -12,6 +12,7 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogFooter } from "@/components/ui/dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Plus, Check, X, FileText, AlertTriangle, Loader2 } from "lucide-react";
 import { toast } from "sonner";
 import { format } from "date-fns";
@@ -328,16 +329,15 @@ function AdminLoanPanel({ loans, renderRow }: { loans: any[]; renderRow: (loan: 
   // Active = approved with an outstanding balance to collect. Scoped to the
   // selected employees only, not the date range (same as before).
   const summary = useMemo(() => {
-    let totalLoanBalance = 0, totalInstallmentsPerMonth = 0, totalCurrentBalance = 0;
+    let totalLoanBalance = 0, totalCurrentBalance = 0;
     loans.forEach((l) => {
       if (!selectedIds.includes(l.user_id)) return;
       if (l.status === "approved" && Number(l.remaining_balance) > 0) {
         totalLoanBalance += Number(l.amount);
-        totalInstallmentsPerMonth += Number(l.monthly_deduction);
         totalCurrentBalance += Number(l.remaining_balance);
       }
     });
-    return { totalLoanBalance, totalInstallmentsPerMonth, totalCurrentBalance };
+    return { totalLoanBalance, totalCurrentBalance };
   }, [loans, selectedIds]);
 
   const filteredLoans = useMemo(() => loans
@@ -352,9 +352,8 @@ function AdminLoanPanel({ loans, renderRow }: { loans: any[]; renderRow: (loan: 
 
   return (
     <div className="space-y-4">
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
         <Card><CardHeader className="pb-2"><CardDescription>Total Loan Balance</CardDescription><CardTitle>{summary.totalLoanBalance.toLocaleString()}</CardTitle></CardHeader></Card>
-        <Card><CardHeader className="pb-2"><CardDescription>Total Installments / Month</CardDescription><CardTitle>{summary.totalInstallmentsPerMonth.toLocaleString()}</CardTitle></CardHeader></Card>
         <Card><CardHeader className="pb-2"><CardDescription>Total Current Balance</CardDescription><CardTitle>{summary.totalCurrentBalance.toLocaleString()}</CardTitle></CardHeader></Card>
       </div>
 
@@ -363,22 +362,31 @@ function AdminLoanPanel({ loans, renderRow }: { loans: any[]; renderRow: (loan: 
           <CardTitle className="text-base">Filters</CardTitle>
           <div className="flex flex-wrap items-start gap-3 pt-2">
             <div className="space-y-1">
-              <Label className="text-xs">Employees ({selectedIds.length} selected)</Label>
-              <div className="rounded-md border p-2 max-h-36 w-64 overflow-y-auto space-y-1">
-                <label className="flex items-center gap-2 text-sm px-1 py-0.5 font-medium border-b pb-1 mb-1">
-                  <Checkbox
-                    checked={employees.length > 0 && selectedIds.length === employees.length}
-                    onCheckedChange={() => setSelectedIds(selectedIds.length === employees.length ? [] : employees.map((e) => e.id))}
-                  />
-                  Select all
-                </label>
-                {employees.map((e) => (
-                  <label key={e.id} className="flex items-center gap-2 text-sm px-1 py-0.5">
-                    <Checkbox checked={selectedIds.includes(e.id)} onCheckedChange={() => toggleEmployee(e.id)} />
-                    {e.full_name || e.email}
-                  </label>
-                ))}
-              </div>
+              <Label className="text-xs">Employees</Label>
+              <Popover>
+                <PopoverTrigger asChild>
+                  <Button variant="outline" className="w-64 justify-start font-normal">
+                    Employees ({selectedIds.length} selected)
+                  </Button>
+                </PopoverTrigger>
+                <PopoverContent className="w-64 p-2">
+                  <div className="max-h-36 overflow-y-auto space-y-1">
+                    <label className="flex items-center gap-2 text-sm px-1 py-0.5 font-medium border-b pb-1 mb-1">
+                      <Checkbox
+                        checked={employees.length > 0 && selectedIds.length === employees.length}
+                        onCheckedChange={() => setSelectedIds(selectedIds.length === employees.length ? [] : employees.map((e) => e.id))}
+                      />
+                      Select all
+                    </label>
+                    {employees.map((e) => (
+                      <label key={e.id} className="flex items-center gap-2 text-sm px-1 py-0.5">
+                        <Checkbox checked={selectedIds.includes(e.id)} onCheckedChange={() => toggleEmployee(e.id)} />
+                        {e.full_name || e.email}
+                      </label>
+                    ))}
+                  </div>
+                </PopoverContent>
+              </Popover>
             </div>
             <div className="space-y-1"><Label className="text-xs">Month From</Label><Input type="month" value={monthFrom} disabled={!!(dateFrom || dateTo)} onChange={(e) => setMonthFrom(e.target.value)} /></div>
             <div className="space-y-1"><Label className="text-xs">Month To</Label><Input type="month" value={monthTo} disabled={!!(dateFrom || dateTo)} onChange={(e) => setMonthTo(e.target.value)} /></div>
