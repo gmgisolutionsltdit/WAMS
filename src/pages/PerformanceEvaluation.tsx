@@ -865,9 +865,6 @@ const emptyIncrementForm = (finalization: Finalization, existing?: IncrementEval
       retention_period: existing.retention_period || "",
       retention_condition: existing.retention_condition || "",
       retention_justification: existing.retention_justification || "",
-      final_approved_retention_pct: existing.final_approved_retention_pct != null ? String(existing.final_approved_retention_pct) : "",
-      final_approved_bonus_amount: existing.final_approved_bonus_amount != null ? String(existing.final_approved_bonus_amount) : "",
-      final_notes: existing.final_notes || "",
     };
   }
   return {
@@ -882,9 +879,6 @@ const emptyIncrementForm = (finalization: Finalization, existing?: IncrementEval
     retention_period: "",
     retention_condition: "",
     retention_justification: "",
-    final_approved_retention_pct: "",
-    final_approved_bonus_amount: "",
-    final_notes: "",
   };
 };
 
@@ -908,14 +902,12 @@ const IncrementEvaluationDialog = ({
   const basePct = finalIncrementPct(form.average_recommended_pct, form.approved_increment_factor_pct, form.company_scenario);
   const baseAmount = incrementAmountFromBasic(basicBefore, basePct);
 
-  // Retention stacks on top of the performance-based increment: the admin's
-  // final approved % wins if set, otherwise the recommended retention %/amount applies.
+  // Retention stacks on top of the performance-based increment. Pct takes
+  // priority when both are filled in (e.g. when editing a previously
+  // decided increment that has both stored).
   let retentionPct = 0;
   let retentionAmount = 0;
-  if (form.final_approved_retention_pct) {
-    retentionPct = parseFloat(form.final_approved_retention_pct) || 0;
-    retentionAmount = incrementAmountFromBasic(basicBefore, retentionPct);
-  } else if (form.retention_recommended) {
+  if (form.retention_recommended) {
     if (form.retention_pct) {
       retentionPct = parseFloat(form.retention_pct) || 0;
       retentionAmount = incrementAmountFromBasic(basicBefore, retentionPct);
@@ -970,9 +962,6 @@ const IncrementEvaluationDialog = ({
         retention_period: form.retention_recommended ? form.retention_period || null : null,
         retention_condition: form.retention_recommended ? form.retention_condition.trim() || null : null,
         retention_justification: form.retention_recommended ? form.retention_justification.trim() : null,
-        final_approved_retention_pct: form.final_approved_retention_pct ? parseFloat(form.final_approved_retention_pct) : null,
-        final_approved_bonus_amount: form.final_approved_bonus_amount ? parseFloat(form.final_approved_bonus_amount) : null,
-        final_notes: form.final_notes.trim() || null,
       };
       const salaryIncrementPayload = {
         effective_from: `${form.effective_from_month}-01`,
@@ -1036,7 +1025,7 @@ const IncrementEvaluationDialog = ({
           </div>
 
           <div>
-            <p className="text-sm font-medium mb-2">Section 1: Company Performance Scenario &amp; Approved Increment Factor</p>
+            <p className="text-sm font-medium mb-2">Section 1: Annual Increment</p>
             <div className="grid grid-cols-2 gap-2">
               {COMPANY_SCENARIOS.map((s) => (
                 <button
@@ -1061,47 +1050,29 @@ const IncrementEvaluationDialog = ({
                 />
               </div>
             )}
-          </div>
-
-          <div>
-            <p className="text-sm font-medium mb-2">Section 2: Final Annual Increment Calculation</p>
-            <Label>Average Recommended Annual Increment %</Label>
-            <Input
-              type="number" step="0.5"
-              value={form.average_recommended_pct}
-              onChange={(e) => setForm((f) => ({ ...f, average_recommended_pct: parseFloat(e.target.value) || 0 }))}
-            />
-            <p className="text-xs text-muted-foreground mt-1">
-              Must be within the policy range {finalization.recommended_min_pct}%–{finalization.recommended_max_pct}%. Applied to Basic Salary{" "}
-              (<span className="font-mono">{basicBefore.toLocaleString()}</span> BDT).
-            </p>
             <div className="mt-3">
-              <Label>Effective From (month the increment applies)</Label>
+              <Label>Average Recommended Annual Increment %</Label>
               <Input
-                type="month"
-                value={form.effective_from_month}
-                onChange={(e) => setForm((f) => ({ ...f, effective_from_month: e.target.value }))}
+                type="number" step="0.5"
+                value={form.average_recommended_pct}
+                onChange={(e) => setForm((f) => ({ ...f, average_recommended_pct: parseFloat(e.target.value) || 0 }))}
               />
+              <p className="text-xs text-muted-foreground mt-1">
+                Must be within the policy range {finalization.recommended_min_pct}%–{finalization.recommended_max_pct}%. Applied to Basic Salary{" "}
+                (<span className="font-mono">{basicBefore.toLocaleString()}</span> BDT).
+              </p>
             </div>
             <div className="rounded-md bg-muted/40 p-3 text-sm mt-2 space-y-1">
-              <p>Final Annual Increment % (incl. retention): <span className="font-mono font-semibold">{totalPct}%</span></p>
-              {retentionAmount > 0 && (
-                <p className="text-xs text-muted-foreground">
-                  Performance {basePct}% (<span className="font-mono">{baseAmount.toLocaleString()}</span> BDT) + retention {retentionPct}%{" "}
-                  (<span className="font-mono">{retentionAmount.toLocaleString()}</span> BDT)
-                </p>
-              )}
-              <p className="text-xs text-muted-foreground">
-                Increment amount: <span className="font-mono">{totalAmount.toLocaleString()}</span> BDT · Gross salary after increment:{" "}
-                <span className="font-mono">{grossAfter.toLocaleString()}</span> BDT
-              </p>
+              <p>Increment %: <span className="font-mono font-semibold">{basePct}%</span>{" "}
+                · Amount: <span className="font-mono">{baseAmount.toLocaleString()}</span> BDT</p>
+              <p>Gross Salary After Increment: <span className="font-mono">{grossAfterIncrement(finalization.gross_salary, baseAmount).toLocaleString()}</span> BDT</p>
             </div>
           </div>
 
           <div>
             <div className="flex items-center gap-2">
               <Checkbox checked={form.retention_recommended} onCheckedChange={(c) => setForm((f) => ({ ...f, retention_recommended: !!c }))} />
-              <p className="text-sm font-medium">Section 3: Recommend a Retention Increment</p>
+              <p className="text-sm font-medium">Section 2: Recommend a Retention Increment</p>
             </div>
             {form.retention_recommended && (
               <div className="space-y-3 mt-2 pl-6">
@@ -1116,12 +1087,12 @@ const IncrementEvaluationDialog = ({
                 <div className="grid grid-cols-2 gap-3">
                   <div>
                     <Label>Retention Amount (BDT)</Label>
-                    <Input type="number" value={form.retention_pct ? "" : form.retention_amount} disabled={!!form.retention_pct}
+                    <Input type="number" value={form.retention_amount}
                       onChange={(e) => setForm((f) => ({ ...f, retention_amount: e.target.value }))} />
                   </div>
                   <div>
                     <Label>OR Retention % of Basic</Label>
-                    <Input type="number" value={form.retention_amount ? "" : form.retention_pct} disabled={!!form.retention_amount}
+                    <Input type="number" value={form.retention_pct}
                       onChange={(e) => setForm((f) => ({ ...f, retention_pct: e.target.value }))} />
                   </div>
                 </div>
@@ -1144,24 +1115,21 @@ const IncrementEvaluationDialog = ({
                 </div>
               </div>
             )}
+            <div className="rounded-md bg-muted/40 p-3 text-sm mt-3 space-y-1">
+              <p>Increment: <span className="font-mono">{basePct}%</span> (<span className="font-mono">{baseAmount.toLocaleString()}</span> BDT)</p>
+              <p>Retention: <span className="font-mono">{retentionPct}%</span> (<span className="font-mono">{retentionAmount.toLocaleString()}</span> BDT)</p>
+              <p className="font-semibold">Final: <span className="font-mono">{totalPct}%</span> (<span className="font-mono">{totalAmount.toLocaleString()}</span> BDT)</p>
+              <p>Gross Salary After Increment: <span className="font-mono">{grossAfter.toLocaleString()}</span> BDT</p>
+            </div>
           </div>
 
           <div>
-            <p className="text-sm font-medium mb-2">Section 4: Final Approval Summary</p>
-            <div className="grid grid-cols-2 gap-3">
-              <div>
-                <Label>Final Approved Retention % (Basic)</Label>
-                <Input type="number" value={form.final_approved_retention_pct} onChange={(e) => setForm((f) => ({ ...f, final_approved_retention_pct: e.target.value }))} />
-              </div>
-              <div>
-                <Label>Final Approved Bonus (BDT)</Label>
-                <Input type="number" value={form.final_approved_bonus_amount} onChange={(e) => setForm((f) => ({ ...f, final_approved_bonus_amount: e.target.value }))} />
-              </div>
-            </div>
-            <div className="mt-2">
-              <Label>Final Notes / Comments</Label>
-              <Textarea rows={2} value={form.final_notes} onChange={(e) => setForm((f) => ({ ...f, final_notes: e.target.value }))} />
-            </div>
+            <Label>Effective From (month the increment applies)</Label>
+            <Input
+              type="month"
+              value={form.effective_from_month}
+              onChange={(e) => setForm((f) => ({ ...f, effective_from_month: e.target.value }))}
+            />
           </div>
         </div>
         <DialogFooter>
