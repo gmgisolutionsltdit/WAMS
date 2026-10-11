@@ -235,26 +235,28 @@ const Payment = () => {
               </DialogContent>
             </Dialog>
           </div>
-          <Card>
-            <CardContent className="pt-6">
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    {canApprove && <TableHead>Employee</TableHead>}
-                    <TableHead>Date</TableHead><TableHead>Amount</TableHead>
-                    <TableHead>Reason</TableHead><TableHead>Installments</TableHead><TableHead>Balance</TableHead><TableHead>Status</TableHead><TableHead></TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {loanRows.length === 0 ? (
-                    <TableRow><TableCell colSpan={canApprove ? 8 : 7} className="text-center text-muted-foreground">No loan requests</TableCell></TableRow>
-                  ) : loanRows.map((loan) => renderRow(loan, canApprove))}
-                </TableBody>
-              </Table>
-            </CardContent>
-          </Card>
-
-          {isAdmin && <AdminLoanSituationTable />}
+          {isAdmin ? (
+            <AdminLoanPanel loans={loans} renderRow={renderRow} />
+          ) : (
+            <Card>
+              <CardContent className="pt-6">
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      {canApprove && <TableHead>Employee</TableHead>}
+                      <TableHead>Date</TableHead><TableHead>Amount</TableHead>
+                      <TableHead>Reason</TableHead><TableHead>Installments</TableHead><TableHead>Balance</TableHead><TableHead>Status</TableHead><TableHead></TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {loanRows.length === 0 ? (
+                      <TableRow><TableCell colSpan={canApprove ? 8 : 7} className="text-center text-muted-foreground">No loan requests</TableCell></TableRow>
+                    ) : loanRows.map((loan) => renderRow(loan, canApprove))}
+                  </TableBody>
+                </Table>
+              </CardContent>
+            </Card>
+          )}
         </TabsContent>
 
         <TabsContent value="salary">
@@ -292,30 +294,18 @@ const Payment = () => {
 export default Payment;
 
 /* =======================================================================
- * Loan Situation — admin-only summary of every employee's loan activity
- * (issued/repaid within a filtered range, plus current outstanding
- * balance), shown below the Loans table.
+ * Admin Loan Panel — summary cards, then filters, then the filterable all-
+ * employees loan history table (reusing Payment's own renderRow/loans state,
+ * no separate fetch). Order: cards, filters, history — in that order.
  * ===================================================================== */
 
-type LoanSituationRow = {
-  userId: string;
-  name: string;
-  issuedInRange: number;
-  repaidInRange: number;
-  currentRemaining: number;
-};
-
-function AdminLoanSituationTable() {
+function AdminLoanPanel({ loans, renderRow }: { loans: any[]; renderRow: (loan: any, showEmployee: boolean) => JSX.Element }) {
   const [employees, setEmployees] = useState<{ id: string; full_name: string | null; email: string | null }[]>([]);
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const [monthFrom, setMonthFrom] = useState("");
   const [monthTo, setMonthTo] = useState("");
   const [dateFrom, setDateFrom] = useState("");
   const [dateTo, setDateTo] = useState("");
-  const [rows, setRows] = useState<LoanSituationRow[]>([]);
-  const [summary, setSummary] = useState({ totalLoanBalance: 0, totalInstallmentsPerMonth: 0, totalCurrentBalance: 0 });
-  const [loading, setLoading] = useState(true);
-  const fetchSeq = useRef(0);
 
   useEffect(() => {
     (async () => {
@@ -332,131 +322,96 @@ function AdminLoanSituationTable() {
     return monthFilterToRange(monthFrom, monthTo);
   }, [monthFrom, monthTo, dateFrom, dateTo]);
 
-  useEffect(() => {
-    if (selectedIds.length === 0) { setRows([]); setLoading(false); return; }
-    const seq = ++fetchSeq.current;
-    setLoading(true);
-    (async () => {
-      const [{ data: advances }, { data: actions }] = await Promise.all([
-        supabase.from("personal_advances").select("user_id, amount, monthly_deduction, remaining_balance").in("user_id", selectedIds).eq("status", "approved"),
-        (() => {
-          let q = supabase.from("personal_advance_actions").select("user_id, action_type, amount, created_at").in("user_id", selectedIds);
-          if (effectiveRange.from) q = q.gte("created_at", `${effectiveRange.from}T00:00:00`);
-          if (effectiveRange.to) q = q.lte("created_at", `${effectiveRange.to}T23:59:59`);
-          return q;
-        })(),
-      ]);
-      if (seq !== fetchSeq.current) return;
-
-      const remainingByUser = new Map<string, number>();
-      let totalLoanBalance = 0, totalInstallmentsPerMonth = 0, totalCurrentBalance = 0;
-      (advances || []).forEach((a) => {
-        remainingByUser.set(a.user_id, (remainingByUser.get(a.user_id) || 0) + Number(a.remaining_balance));
-        // Active = still has an outstanding balance to collect.
-        if (Number(a.remaining_balance) > 0) {
-          totalLoanBalance += Number(a.amount);
-          totalInstallmentsPerMonth += Number(a.monthly_deduction);
-          totalCurrentBalance += Number(a.remaining_balance);
-        }
-      });
-      setSummary({ totalLoanBalance, totalInstallmentsPerMonth, totalCurrentBalance });
-
-      const issuedByUser = new Map<string, number>();
-      const repaidByUser = new Map<string, number>();
-      (actions || []).forEach((a) => {
-        if (a.action_type === "issued") issuedByUser.set(a.user_id, (issuedByUser.get(a.user_id) || 0) + Number(a.amount));
-        if (a.action_type === "payroll_deduction") repaidByUser.set(a.user_id, (repaidByUser.get(a.user_id) || 0) + Number(a.amount));
-      });
-
-      const employeeMap = new Map(employees.map((e) => [e.id, e]));
-      const result: LoanSituationRow[] = selectedIds
-        .map((id) => {
-          const e = employeeMap.get(id);
-          return {
-            userId: id,
-            name: e?.full_name || e?.email || "—",
-            issuedInRange: issuedByUser.get(id) || 0,
-            repaidInRange: repaidByUser.get(id) || 0,
-            currentRemaining: remainingByUser.get(id) || 0,
-          };
-        })
-        .filter((r) => r.issuedInRange > 0 || r.repaidInRange > 0 || r.currentRemaining > 0);
-
-      setRows(result.sort((a, b) => a.name.localeCompare(b.name)));
-      setLoading(false);
-    })();
-  }, [selectedIds, effectiveRange, employees]);
-
   const toggleEmployee = (id: string) =>
     setSelectedIds((ids) => (ids.includes(id) ? ids.filter((x) => x !== id) : [...ids, id]));
 
+  // Active = approved with an outstanding balance to collect. Scoped to the
+  // selected employees only, not the date range (same as before).
+  const summary = useMemo(() => {
+    let totalLoanBalance = 0, totalInstallmentsPerMonth = 0, totalCurrentBalance = 0;
+    loans.forEach((l) => {
+      if (!selectedIds.includes(l.user_id)) return;
+      if (l.status === "approved" && Number(l.remaining_balance) > 0) {
+        totalLoanBalance += Number(l.amount);
+        totalInstallmentsPerMonth += Number(l.monthly_deduction);
+        totalCurrentBalance += Number(l.remaining_balance);
+      }
+    });
+    return { totalLoanBalance, totalInstallmentsPerMonth, totalCurrentBalance };
+  }, [loans, selectedIds]);
+
+  const filteredLoans = useMemo(() => loans
+    .filter((l) => {
+      if (!selectedIds.includes(l.user_id)) return false;
+      if (effectiveRange.from && l.created_at < `${effectiveRange.from}T00:00:00`) return false;
+      if (effectiveRange.to && l.created_at > `${effectiveRange.to}T23:59:59`) return false;
+      return true;
+    })
+    .sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime()),
+  [loans, selectedIds, effectiveRange]);
+
   return (
-    <Card>
-      <CardHeader>
-        <CardTitle className="text-base">Loan Situation — All Employees</CardTitle>
-        <CardDescription>Issued and repaid within the selected range, plus each employee's current outstanding balance.</CardDescription>
-        <div className="flex flex-wrap items-start gap-3 pt-2">
-          <div className="space-y-1">
-            <Label className="text-xs">Employees ({selectedIds.length} selected)</Label>
-            <div className="rounded-md border p-2 max-h-36 w-64 overflow-y-auto space-y-1">
-              <label className="flex items-center gap-2 text-sm px-1 py-0.5 font-medium border-b pb-1 mb-1">
-                <Checkbox
-                  checked={employees.length > 0 && selectedIds.length === employees.length}
-                  onCheckedChange={() => setSelectedIds(selectedIds.length === employees.length ? [] : employees.map((e) => e.id))}
-                />
-                Select all
-              </label>
-              {employees.map((e) => (
-                <label key={e.id} className="flex items-center gap-2 text-sm px-1 py-0.5">
-                  <Checkbox checked={selectedIds.includes(e.id)} onCheckedChange={() => toggleEmployee(e.id)} />
-                  {e.full_name || e.email}
+    <div className="space-y-4">
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+        <Card><CardHeader className="pb-2"><CardDescription>Total Loan Balance</CardDescription><CardTitle>{summary.totalLoanBalance.toLocaleString()}</CardTitle></CardHeader></Card>
+        <Card><CardHeader className="pb-2"><CardDescription>Total Installments / Month</CardDescription><CardTitle>{summary.totalInstallmentsPerMonth.toLocaleString()}</CardTitle></CardHeader></Card>
+        <Card><CardHeader className="pb-2"><CardDescription>Total Current Balance</CardDescription><CardTitle>{summary.totalCurrentBalance.toLocaleString()}</CardTitle></CardHeader></Card>
+      </div>
+
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-base">Filters</CardTitle>
+          <div className="flex flex-wrap items-start gap-3 pt-2">
+            <div className="space-y-1">
+              <Label className="text-xs">Employees ({selectedIds.length} selected)</Label>
+              <div className="rounded-md border p-2 max-h-36 w-64 overflow-y-auto space-y-1">
+                <label className="flex items-center gap-2 text-sm px-1 py-0.5 font-medium border-b pb-1 mb-1">
+                  <Checkbox
+                    checked={employees.length > 0 && selectedIds.length === employees.length}
+                    onCheckedChange={() => setSelectedIds(selectedIds.length === employees.length ? [] : employees.map((e) => e.id))}
+                  />
+                  Select all
                 </label>
-              ))}
+                {employees.map((e) => (
+                  <label key={e.id} className="flex items-center gap-2 text-sm px-1 py-0.5">
+                    <Checkbox checked={selectedIds.includes(e.id)} onCheckedChange={() => toggleEmployee(e.id)} />
+                    {e.full_name || e.email}
+                  </label>
+                ))}
+              </div>
             </div>
+            <div className="space-y-1"><Label className="text-xs">Month From</Label><Input type="month" value={monthFrom} disabled={!!(dateFrom || dateTo)} onChange={(e) => setMonthFrom(e.target.value)} /></div>
+            <div className="space-y-1"><Label className="text-xs">Month To</Label><Input type="month" value={monthTo} disabled={!!(dateFrom || dateTo)} onChange={(e) => setMonthTo(e.target.value)} /></div>
+            <div className="space-y-1"><Label className="text-xs">From Date</Label><Input type="date" value={dateFrom} onChange={(e) => setDateFrom(e.target.value)} /></div>
+            <div className="space-y-1"><Label className="text-xs">To Date</Label><Input type="date" value={dateTo} onChange={(e) => setDateTo(e.target.value)} /></div>
+            {(monthFrom || monthTo || dateFrom || dateTo) && (
+              <Button size="sm" variant="ghost" className="self-end" onClick={() => { setMonthFrom(""); setMonthTo(""); setDateFrom(""); setDateTo(""); }}>Clear</Button>
+            )}
           </div>
-          <div className="space-y-1"><Label className="text-xs">Month From</Label><Input type="month" value={monthFrom} disabled={!!(dateFrom || dateTo)} onChange={(e) => setMonthFrom(e.target.value)} /></div>
-          <div className="space-y-1"><Label className="text-xs">Month To</Label><Input type="month" value={monthTo} disabled={!!(dateFrom || dateTo)} onChange={(e) => setMonthTo(e.target.value)} /></div>
-          <div className="space-y-1"><Label className="text-xs">From Date</Label><Input type="date" value={dateFrom} onChange={(e) => setDateFrom(e.target.value)} /></div>
-          <div className="space-y-1"><Label className="text-xs">To Date</Label><Input type="date" value={dateTo} onChange={(e) => setDateTo(e.target.value)} /></div>
-          {(monthFrom || monthTo || dateFrom || dateTo) && (
-            <Button size="sm" variant="ghost" className="self-end" onClick={() => { setMonthFrom(""); setMonthTo(""); setDateFrom(""); setDateTo(""); }}>Clear</Button>
-          )}
-        </div>
-      </CardHeader>
-      <CardContent className="space-y-4">
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-          <Card><CardHeader className="pb-2"><CardDescription>Total Loan Balance</CardDescription><CardTitle>{summary.totalLoanBalance.toLocaleString()}</CardTitle></CardHeader></Card>
-          <Card><CardHeader className="pb-2"><CardDescription>Total Installments / Month</CardDescription><CardTitle>{summary.totalInstallmentsPerMonth.toLocaleString()}</CardTitle></CardHeader></Card>
-          <Card><CardHeader className="pb-2"><CardDescription>Total Current Balance</CardDescription><CardTitle>{summary.totalCurrentBalance.toLocaleString()}</CardTitle></CardHeader></Card>
-        </div>
-        <div className="overflow-x-auto">
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>Employee</TableHead>
-                <TableHead className="text-right">Issued (range)</TableHead>
-                <TableHead className="text-right">Repaid (range)</TableHead>
-                <TableHead className="text-right">Current Balance</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {loading ? (
-                <TableRow><TableCell colSpan={4} className="text-center text-muted-foreground py-8"><Loader2 className="h-4 w-4 animate-spin inline mr-2" />Loading…</TableCell></TableRow>
-              ) : rows.length === 0 ? (
-                <TableRow><TableCell colSpan={4} className="text-center text-muted-foreground py-8">No loan activity</TableCell></TableRow>
-              ) : rows.map((r) => (
-                <TableRow key={r.userId}>
-                  <TableCell className="font-medium">{r.name}</TableCell>
-                  <TableCell className="text-right">{r.issuedInRange.toLocaleString()}</TableCell>
-                  <TableCell className="text-right">{r.repaidInRange.toLocaleString()}</TableCell>
-                  <TableCell className="text-right font-semibold">{r.currentRemaining.toLocaleString()}</TableCell>
+        </CardHeader>
+      </Card>
+
+      <Card>
+        <CardHeader><CardTitle className="text-base">Loan History</CardTitle></CardHeader>
+        <CardContent>
+          <div className="overflow-x-auto">
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Employee</TableHead><TableHead>Date</TableHead><TableHead>Amount</TableHead>
+                  <TableHead>Reason</TableHead><TableHead>Installments</TableHead><TableHead>Balance</TableHead><TableHead>Status</TableHead><TableHead></TableHead>
                 </TableRow>
-              ))}
-            </TableBody>
-          </Table>
-        </div>
-      </CardContent>
-    </Card>
+              </TableHeader>
+              <TableBody>
+                {filteredLoans.length === 0 ? (
+                  <TableRow><TableCell colSpan={8} className="text-center text-muted-foreground">No loan requests</TableCell></TableRow>
+                ) : filteredLoans.map((loan) => renderRow(loan, true))}
+              </TableBody>
+            </Table>
+          </div>
+        </CardContent>
+      </Card>
+    </div>
   );
 }
 
