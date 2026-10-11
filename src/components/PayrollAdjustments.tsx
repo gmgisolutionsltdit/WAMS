@@ -13,7 +13,6 @@ import { salaryBreakdown, perMinuteRate, computeFinalSalary, fmtBDT } from "@/li
 
 type Schedule = WorkSchedule & OfficeTime & { company_wing?: string | null; base_salary?: number | null };
 
-type OtAdjRow = { id: string; decision: string; amount: number };
 type DueAdjRow = { id: string; decision: string; amount: number };
 type RecoveryAction = { id: string; action_type: string; amount: number };
 
@@ -28,7 +27,6 @@ export const PayrollAdjustments = ({ isAdmin }: { isAdmin: boolean }) => {
   const [selectedUserId, setSelectedUserId] = useState<string>("");
   const [schedule, setSchedule] = useState<Schedule | null>(null);
   const [reportTotals, setReportTotals] = useState({ otActualMinutes: 0, dueMinutes: 0 });
-  const [otAdjustments, setOtAdjustments] = useState<OtAdjRow[]>([]);
   const [dueAdjustments, setDueAdjustments] = useState<DueAdjRow[]>([]);
   const [recoveryActions, setRecoveryActions] = useState<RecoveryAction[]>([]);
   const [loading, setLoading] = useState(true);
@@ -52,14 +50,12 @@ export const PayrollAdjustments = ({ isAdmin }: { isAdmin: boolean }) => {
     setLoading(true);
     try {
       const [{ data: prof }, { data: attRows }, { data: holidayRows }, { data: leaveRows },
-        { data: otAdjRows }, { data: dueAdjRows }, { data: recoveryRows }] = await Promise.all([
+        { data: dueAdjRows }, { data: recoveryRows }] = await Promise.all([
         supabase.from("profiles").select("id, base_salary, office_start_time, late_grace_minutes, standard_daily_hours, unpaid_break_minutes, working_days, company_wing").eq("id", targetUserId).maybeSingle(),
         supabase.from("attendance_logs").select("id, user_id, date, clock_in, clock_out, break_minutes, late_minutes, penalty_minutes, penalty_reviewed")
           .eq("user_id", targetUserId).gte("date", monthStartISO).lte("date", monthEndISO),
         supabase.from("holidays").select("holiday_date, name, wing"),
         supabase.from("leave_requests").select("start_date, end_date").eq("user_id", targetUserId).eq("status", "approved"),
-        supabase.from("payroll_ot_adjustments").select("id, decision, amount")
-          .eq("user_id", targetUserId).eq("month", monthStartISO).order("created_at", { ascending: false }),
         supabase.from("payroll_due_adjustments").select("id, decision, amount")
           .eq("user_id", targetUserId).eq("month", monthStartISO).order("created_at", { ascending: false }),
         supabase.from("expense_recovery_actions").select("id, action_type, amount")
@@ -69,7 +65,6 @@ export const PayrollAdjustments = ({ isAdmin }: { isAdmin: boolean }) => {
       const sched = (prof as Schedule) || null;
       setSchedule(sched);
       setRecoveryActions((recoveryRows || []) as RecoveryAction[]);
-      setOtAdjustments((otAdjRows || []) as OtAdjRow[]);
       setDueAdjustments((dueAdjRows || []) as DueAdjRow[]);
 
       // Due/Overtime totals: reuse the same holiday/weekend/leave classification
@@ -132,14 +127,6 @@ export const PayrollAdjustments = ({ isAdmin }: { isAdmin: boolean }) => {
   const gross = Number(schedule?.base_salary) || 0;
   const breakdown = useMemo(() => salaryBreakdown(gross), [gross]);
 
-  const otPaymentTotal = useMemo(
-    () => otAdjustments.filter((r) => r.decision === "pay").reduce((s, r) => s + Number(r.amount), 0),
-    [otAdjustments],
-  );
-  const dueDeductionTotal = useMemo(
-    () => dueAdjustments.filter((r) => r.decision === "salary_deduction").reduce((s, r) => s + Number(r.amount), 0),
-    [dueAdjustments],
-  );
   const recoveryTotal = useMemo(
     () => recoveryActions.filter((r) => ["deduct_month", "specific_amount", "installment"].includes(r.action_type))
       .reduce((s, r) => s + Number(r.amount), 0),
@@ -150,16 +137,13 @@ export const PayrollAdjustments = ({ isAdmin }: { isAdmin: boolean }) => {
     [dueAdjustments],
   );
 
-  // Employee/manager Salary Summary is calculated straight from this month's
-  // Reports totals (actual Overtime and Due Time, including the late-arrival
-  // penalty) at the plain per-minute rate — no admin per-day decision needed.
-  // Admin's own view keeps the manual Decide-driven totals above, since
-  // that's the workflow for applying multipliers and offsets per record.
-  const otPaymentAuto = useMemo(() => perMinuteRate(gross) * reportTotals.otActualMinutes, [gross, reportTotals.otActualMinutes]);
-  const dueDeductionAuto = useMemo(() => perMinuteRate(gross) * reportTotals.dueMinutes, [gross, reportTotals.dueMinutes]);
-
-  const otPaymentDisplay = isAdmin ? otPaymentTotal : otPaymentAuto;
-  const dueDeductionDisplay = isAdmin ? dueDeductionTotal : dueDeductionAuto;
+  // Calculated straight from this month's Reports totals (actual Overtime
+  // and Due Time, including the late-arrival penalty) at the plain
+  // per-minute rate, for both admin and employee/manager views — the same
+  // formula computeMonthlySalaryRows uses for the Monthly Salary Summary
+  // table, so the Salary Summary cards here always match that table.
+  const otPaymentDisplay = useMemo(() => perMinuteRate(gross) * reportTotals.otActualMinutes, [gross, reportTotals.otActualMinutes]);
+  const dueDeductionDisplay = useMemo(() => perMinuteRate(gross) * reportTotals.dueMinutes, [gross, reportTotals.dueMinutes]);
 
   const finalSalary = useMemo(
     () => computeFinalSalary({
