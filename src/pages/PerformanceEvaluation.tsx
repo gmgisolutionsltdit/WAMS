@@ -280,6 +280,20 @@ const PerformanceEvaluation = () => {
     fetchAll();
   };
 
+  // Lets an admin undo a finalize (e.g. to let evaluators redo their scores
+  // and refinalize) without going into Supabase directly. This also cascades
+  // to the linked increment_evaluations row, so a stale finalization left
+  // behind is the usual reason "Finalize" stays stuck on "Finalized" and
+  // See Details keeps showing old data after evaluations were deleted and
+  // redone — the performance_evaluation_finalizations row itself wasn't.
+  const deleteFinalization = async (finalizationId: string) => {
+    if (!window.confirm("Delete this finalization? This also removes any increment decision made from it (but not the salary increment ledger entry it may have created) and cannot be undone.")) return;
+    const { error } = await supabase.from("performance_evaluation_finalizations").delete().eq("id", finalizationId);
+    if (error) { toast.error(error.message); return; }
+    toast.success("Finalization deleted");
+    fetchAll();
+  };
+
   // Section 3 + Section 6A: persists the weighted final category alongside
   // the employee's current gross salary, salary category and the
   // policy-based increment % range, so the Increment Evaluation Form below
@@ -533,6 +547,10 @@ const PerformanceEvaluation = () => {
                       )}
                       {" "}
                       <Button size="sm" variant="outline" className="h-6" onClick={() => setViewFinalizationDetails(finalization)}>See Details</Button>
+                      {" "}
+                      <Button size="sm" variant="ghost" className="h-6 text-destructive hover:text-destructive" onClick={() => deleteFinalization(finalization.id)}>
+                        <Trash2 className="h-3 w-3" />
+                      </Button>
                     </p>
                   </div>
                 )}
