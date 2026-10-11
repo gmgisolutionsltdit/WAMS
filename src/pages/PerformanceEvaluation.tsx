@@ -288,8 +288,12 @@ const PerformanceEvaluation = () => {
   // redone — the performance_evaluation_finalizations row itself wasn't.
   const deleteFinalization = async (finalizationId: string) => {
     if (!window.confirm("Delete this finalization? This also removes any increment decision made from it (but not the salary increment ledger entry it may have created) and cannot be undone.")) return;
-    const { error } = await supabase.from("performance_evaluation_finalizations").delete().eq("id", finalizationId);
+    // RLS blocking this (e.g. a stale session role) doesn't error — it just
+    // matches 0 rows, which would otherwise look like silent success while
+    // the stale row (and the stuck Finalize button) stays put.
+    const { data, error } = await supabase.from("performance_evaluation_finalizations").delete().eq("id", finalizationId).select("id");
     if (error) { toast.error(error.message); return; }
+    if (!data?.length) { toast.error("Delete didn't go through — you may not have permission to delete this."); return; }
     toast.success("Finalization deleted");
     fetchAll();
   };
