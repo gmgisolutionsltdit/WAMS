@@ -1106,9 +1106,12 @@ const EmployeeProfile = () => {
                         <TableHead>Effective Month</TableHead>
                         <TableHead>Cycle</TableHead>
                         <TableHead className="text-right">Previous Basic</TableHead>
-                        <TableHead className="text-right">Increment</TableHead>
+                        <TableHead className="text-right">Increment %</TableHead>
+                        <TableHead className="text-right">Increment Amount</TableHead>
                         <TableHead className="text-right">Main %</TableHead>
+                        <TableHead className="text-right">Main Amount</TableHead>
                         <TableHead className="text-right">Retention %</TableHead>
+                        <TableHead className="text-right">Retention Amount</TableHead>
                         <TableHead className="text-right">New Basic</TableHead>
                         <TableHead className="text-right">New Gross</TableHead>
                         <TableHead>Reason</TableHead>
@@ -1118,21 +1121,27 @@ const EmployeeProfile = () => {
                       {increments.map((inc) => {
                         const prev = Number(inc.base_salary) || 0;
                         const incAmt = Number(inc.increment_amount) || 0;
+                        const incPct = Number(inc.increment_pct) || 0;
                         // New Basic = New Gross / 2 when gross is tracked (Increment
                         // Evaluation Form entries); a plain manual entry without a
                         // tracked gross falls back to Previous Basic + Increment.
                         const newSal = inc.gross_salary_after != null ? Number(inc.gross_salary_after) / 2 : prev + incAmt;
                         const retentionPct = Number(inc.retention_pct) || 0;
-                        const mainPct = Math.round(((Number(inc.increment_pct) || 0) - retentionPct) * 100) / 100;
+                        const retentionAmount = Number(inc.retention_amount) || 0;
+                        const mainPct = Math.round((incPct - retentionPct) * 100) / 100;
+                        const mainAmount = Math.round((incAmt - retentionAmount) * 100) / 100;
                         return (
                           <TableRow key={inc.id}>
                             <TableCell>{fmtDate(inc.effective_from)}</TableCell>
                             <TableCell>{format(new Date(inc.effective_from), "MMMM yyyy")}</TableCell>
                             <TableCell>{fmt(inc.cycle_label)}</TableCell>
                             <TableCell className="text-right">{fmtMoney(prev)}</TableCell>
+                            <TableCell className="text-right">{incPct.toFixed(2)}%</TableCell>
                             <TableCell className="text-right text-green-600 font-medium">+{fmtMoney(incAmt)}</TableCell>
                             <TableCell className="text-right">{mainPct.toFixed(2)}%</TableCell>
+                            <TableCell className="text-right">{fmtMoney(mainAmount)}</TableCell>
                             <TableCell className="text-right">{retentionPct > 0 ? `${retentionPct.toFixed(2)}%` : "—"}</TableCell>
+                            <TableCell className="text-right">{retentionAmount > 0 ? fmtMoney(retentionAmount) : "—"}</TableCell>
                             <TableCell className="text-right font-semibold">{fmtMoney(newSal)}</TableCell>
                             <TableCell className="text-right font-semibold">
                               {inc.gross_salary_after != null ? fmtMoney(Number(inc.gross_salary_after)) : "—"}
