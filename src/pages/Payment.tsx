@@ -313,6 +313,7 @@ function AdminLoanSituationTable() {
   const [dateFrom, setDateFrom] = useState("");
   const [dateTo, setDateTo] = useState("");
   const [rows, setRows] = useState<LoanSituationRow[]>([]);
+  const [summary, setSummary] = useState({ totalLoanBalance: 0, totalInstallmentsPerMonth: 0, totalCurrentBalance: 0 });
   const [loading, setLoading] = useState(true);
   const fetchSeq = useRef(0);
 
@@ -337,7 +338,7 @@ function AdminLoanSituationTable() {
     setLoading(true);
     (async () => {
       const [{ data: advances }, { data: actions }] = await Promise.all([
-        supabase.from("personal_advances").select("user_id, remaining_balance").in("user_id", selectedIds).eq("status", "approved"),
+        supabase.from("personal_advances").select("user_id, amount, monthly_deduction, remaining_balance").in("user_id", selectedIds).eq("status", "approved"),
         (() => {
           let q = supabase.from("personal_advance_actions").select("user_id, action_type, amount, created_at").in("user_id", selectedIds);
           if (effectiveRange.from) q = q.gte("created_at", `${effectiveRange.from}T00:00:00`);
@@ -348,7 +349,17 @@ function AdminLoanSituationTable() {
       if (seq !== fetchSeq.current) return;
 
       const remainingByUser = new Map<string, number>();
-      (advances || []).forEach((a) => remainingByUser.set(a.user_id, (remainingByUser.get(a.user_id) || 0) + Number(a.remaining_balance)));
+      let totalLoanBalance = 0, totalInstallmentsPerMonth = 0, totalCurrentBalance = 0;
+      (advances || []).forEach((a) => {
+        remainingByUser.set(a.user_id, (remainingByUser.get(a.user_id) || 0) + Number(a.remaining_balance));
+        // Active = still has an outstanding balance to collect.
+        if (Number(a.remaining_balance) > 0) {
+          totalLoanBalance += Number(a.amount);
+          totalInstallmentsPerMonth += Number(a.monthly_deduction);
+          totalCurrentBalance += Number(a.remaining_balance);
+        }
+      });
+      setSummary({ totalLoanBalance, totalInstallmentsPerMonth, totalCurrentBalance });
 
       const issuedByUser = new Map<string, number>();
       const repaidByUser = new Map<string, number>();
@@ -385,13 +396,6 @@ function AdminLoanSituationTable() {
         <CardTitle className="text-base">Loan Situation — All Employees</CardTitle>
         <CardDescription>Issued and repaid within the selected range, plus each employee's current outstanding balance.</CardDescription>
         <div className="flex flex-wrap items-start gap-3 pt-2">
-          <div className="space-y-1"><Label className="text-xs">Month From</Label><Input type="month" value={monthFrom} disabled={!!(dateFrom || dateTo)} onChange={(e) => setMonthFrom(e.target.value)} /></div>
-          <div className="space-y-1"><Label className="text-xs">Month To</Label><Input type="month" value={monthTo} disabled={!!(dateFrom || dateTo)} onChange={(e) => setMonthTo(e.target.value)} /></div>
-          <div className="space-y-1"><Label className="text-xs">From Date</Label><Input type="date" value={dateFrom} onChange={(e) => setDateFrom(e.target.value)} /></div>
-          <div className="space-y-1"><Label className="text-xs">To Date</Label><Input type="date" value={dateTo} onChange={(e) => setDateTo(e.target.value)} /></div>
-          {(monthFrom || monthTo || dateFrom || dateTo) && (
-            <Button size="sm" variant="ghost" className="self-end" onClick={() => { setMonthFrom(""); setMonthTo(""); setDateFrom(""); setDateTo(""); }}>Clear</Button>
-          )}
           <div className="space-y-1">
             <Label className="text-xs">Employees ({selectedIds.length} selected)</Label>
             <div className="rounded-md border p-2 max-h-36 w-64 overflow-y-auto space-y-1">
@@ -410,9 +414,21 @@ function AdminLoanSituationTable() {
               ))}
             </div>
           </div>
+          <div className="space-y-1"><Label className="text-xs">Month From</Label><Input type="month" value={monthFrom} disabled={!!(dateFrom || dateTo)} onChange={(e) => setMonthFrom(e.target.value)} /></div>
+          <div className="space-y-1"><Label className="text-xs">Month To</Label><Input type="month" value={monthTo} disabled={!!(dateFrom || dateTo)} onChange={(e) => setMonthTo(e.target.value)} /></div>
+          <div className="space-y-1"><Label className="text-xs">From Date</Label><Input type="date" value={dateFrom} onChange={(e) => setDateFrom(e.target.value)} /></div>
+          <div className="space-y-1"><Label className="text-xs">To Date</Label><Input type="date" value={dateTo} onChange={(e) => setDateTo(e.target.value)} /></div>
+          {(monthFrom || monthTo || dateFrom || dateTo) && (
+            <Button size="sm" variant="ghost" className="self-end" onClick={() => { setMonthFrom(""); setMonthTo(""); setDateFrom(""); setDateTo(""); }}>Clear</Button>
+          )}
         </div>
       </CardHeader>
-      <CardContent>
+      <CardContent className="space-y-4">
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+          <Card><CardHeader className="pb-2"><CardDescription>Total Loan Balance</CardDescription><CardTitle>{summary.totalLoanBalance.toLocaleString()}</CardTitle></CardHeader></Card>
+          <Card><CardHeader className="pb-2"><CardDescription>Total Installments / Month</CardDescription><CardTitle>{summary.totalInstallmentsPerMonth.toLocaleString()}</CardTitle></CardHeader></Card>
+          <Card><CardHeader className="pb-2"><CardDescription>Total Current Balance</CardDescription><CardTitle>{summary.totalCurrentBalance.toLocaleString()}</CardTitle></CardHeader></Card>
+        </div>
         <div className="overflow-x-auto">
           <Table>
             <TableHeader>
