@@ -46,7 +46,22 @@ type IncrementEval = {
   id: string;
   finalization_id: string;
   employee_id: string;
+  company_scenario: CompanyScenario;
+  approved_increment_factor_pct: number;
+  average_recommended_pct: number;
   final_increment_pct: number;
+  gross_salary_before: number;
+  gross_salary_after: number;
+  retention_recommended: boolean;
+  retention_checklist: string[] | null;
+  retention_pct: number | null;
+  retention_amount: number | null;
+  retention_period: string | null;
+  retention_condition: string | null;
+  retention_justification: string | null;
+  final_approved_retention_pct: number | null;
+  final_approved_bonus_amount: number | null;
+  final_notes: string | null;
   salary_increment_id: string | null;
   created_at: string;
 };
@@ -107,6 +122,7 @@ const PerformanceEvaluation = () => {
 
   const [incrementDialogFinalization, setIncrementDialogFinalization] = useState<Finalization | null>(null);
   const [viewEvaluation, setViewEvaluation] = useState<Evaluation | null>(null);
+  const [viewIncrementEval, setViewIncrementEval] = useState<IncrementEval | null>(null);
 
   const profileMap = useMemo(() => {
     const m: Record<string, Profile> = {};
@@ -137,7 +153,7 @@ const PerformanceEvaluation = () => {
       const [{ data: pf }, { data: finals }, { data: incEvals }] = await Promise.all([
         supabase.from("profiles").select("id, full_name, email, base_salary").order("full_name"),
         supabase.from("performance_evaluation_finalizations").select("*").order("created_at", { ascending: false }),
-        supabase.from("increment_evaluations").select("id, finalization_id, employee_id, final_increment_pct, salary_increment_id, created_at"),
+        supabase.from("increment_evaluations").select("*"),
       ]);
       setProfiles((pf || []) as Profile[]);
       setFinalizations((finals || []) as unknown as Finalization[]);
@@ -475,10 +491,13 @@ const PerformanceEvaluation = () => {
                       <span className="font-mono">{finalization.gross_salary.toLocaleString()}</span> BDT.
                     </p>
                     {incrementEval ? (
-                      <p className="text-success-foreground">
-                        Increment decided: <span className="font-mono">{incrementEval.final_increment_pct}%</span>
-                        {incrementEval.salary_increment_id && " — applied to Salary Increments"}
-                      </p>
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <p className="text-success-foreground">
+                          Increment decided: <span className="font-mono">{incrementEval.final_increment_pct}%</span>
+                          {incrementEval.salary_increment_id && " — applied to Salary Increments"}
+                        </p>
+                        <Button size="sm" variant="outline" onClick={() => setViewIncrementEval(incrementEval)}>View Details</Button>
+                      </div>
                     ) : (
                       <Button size="sm" className="mt-1" onClick={() => setIncrementDialogFinalization(finalization)}>
                         <TrendingUp className="h-3.5 w-3.5 mr-1" /> Create Increment Recommendation
@@ -671,6 +690,61 @@ const PerformanceEvaluation = () => {
         </DialogContent>
       </Dialog>
 
+      <Dialog open={!!viewIncrementEval} onOpenChange={(o) => !o && setViewIncrementEval(null)}>
+        <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>
+              Increment Decision — {viewIncrementEval ? (profileMap[viewIncrementEval.employee_id]?.full_name || profileMap[viewIncrementEval.employee_id]?.email) : ""}
+            </DialogTitle>
+          </DialogHeader>
+          {viewIncrementEval && (
+            <div className="space-y-4 text-sm">
+              <div className="rounded-md bg-muted/40 p-3 space-y-1">
+                <p>Company Scenario: <span className="font-medium">{companyScenario(viewIncrementEval.company_scenario).label}</span></p>
+                <p>Approved Increment Factor: <span className="font-mono">{viewIncrementEval.approved_increment_factor_pct}%</span></p>
+                <p>Average Recommended %: <span className="font-mono">{viewIncrementEval.average_recommended_pct}%</span></p>
+                <p>Gross Salary: <span className="font-mono">{viewIncrementEval.gross_salary_before.toLocaleString()}</span> → <span className="font-mono">{viewIncrementEval.gross_salary_after.toLocaleString()}</span> BDT</p>
+                <p>Final Increment % (incl. retention): <span className="font-mono font-semibold">{viewIncrementEval.final_increment_pct}%</span></p>
+              </div>
+
+              {viewIncrementEval.retention_recommended ? (
+                <div className="rounded-md border p-3 space-y-2">
+                  <p className="font-medium">Retention Increment</p>
+                  {viewIncrementEval.retention_checklist && viewIncrementEval.retention_checklist.length > 0 && (
+                    <ul className="list-disc list-inside text-xs text-muted-foreground">
+                      {viewIncrementEval.retention_checklist.map((item) => <li key={item}>{item}</li>)}
+                    </ul>
+                  )}
+                  {viewIncrementEval.retention_pct != null && <p>Retention %: <span className="font-mono">{viewIncrementEval.retention_pct}%</span></p>}
+                  {viewIncrementEval.retention_amount != null && <p>Retention Amount: <span className="font-mono">{viewIncrementEval.retention_amount.toLocaleString()}</span> BDT</p>}
+                  {viewIncrementEval.retention_period && <p>Required Period: {viewIncrementEval.retention_period}</p>}
+                  {viewIncrementEval.retention_condition && <p>Required Condition: {viewIncrementEval.retention_condition}</p>}
+                  {viewIncrementEval.retention_justification && (
+                    <p className="text-xs text-muted-foreground">Justification: {viewIncrementEval.retention_justification}</p>
+                  )}
+                  {viewIncrementEval.final_approved_retention_pct != null && (
+                    <p>Final Approved Retention %: <span className="font-mono">{viewIncrementEval.final_approved_retention_pct}%</span></p>
+                  )}
+                </div>
+              ) : (
+                <p className="text-xs text-muted-foreground">No retention increment was recommended.</p>
+              )}
+
+              {viewIncrementEval.final_approved_bonus_amount != null && (
+                <p>Final Approved Bonus: <span className="font-mono">{viewIncrementEval.final_approved_bonus_amount.toLocaleString()}</span> BDT</p>
+              )}
+              {viewIncrementEval.final_notes && (
+                <div>
+                  <Label className="text-xs">Final Notes</Label>
+                  <p className="rounded-md border p-2 mt-1 whitespace-pre-wrap">{viewIncrementEval.final_notes}</p>
+                </div>
+              )}
+              <p className="text-xs text-muted-foreground">Decided {format(new Date(viewIncrementEval.created_at), "MMM d, yyyy")}</p>
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
+
       {incrementDialogFinalization && (
         <IncrementEvaluationDialog
           finalization={incrementDialogFinalization}
@@ -691,8 +765,8 @@ const nextMonthValue = () => {
 
 const emptyIncrementForm = (finalization: Finalization) => ({
   company_scenario: "average" as CompanyScenario,
-  approved_increment_factor_pct: companyScenario("average").range?.min ?? 0,
-  average_recommended_pct: Math.round(((finalization.recommended_min_pct + finalization.recommended_max_pct) / 2) * 100) / 100,
+  approved_increment_factor_pct: companyScenario("average").range?.max ?? 0,
+  average_recommended_pct: finalization.recommended_max_pct,
   effective_from_month: nextMonthValue(),
   retention_recommended: false,
   retention_checklist: [] as string[],
@@ -842,7 +916,7 @@ const IncrementEvaluationDialog = ({
                   key={s.value}
                   type="button"
                   className={`rounded-md border p-2 text-left text-xs ${form.company_scenario === s.value ? "border-primary bg-primary/5" : ""}`}
-                  onClick={() => setForm((f) => ({ ...f, company_scenario: s.value, approved_increment_factor_pct: s.range?.min ?? 0 }))}
+                  onClick={() => setForm((f) => ({ ...f, company_scenario: s.value, approved_increment_factor_pct: s.range?.max ?? 0 }))}
                 >
                   <p className="font-medium">{s.label}</p>
                   <p className="text-muted-foreground">{s.detail}</p>

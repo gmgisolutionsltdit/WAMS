@@ -251,6 +251,7 @@ const SalaryIncrements = () => {
                 <TableHead className="text-right">Base</TableHead>
                 <TableHead className="text-right">Increment</TableHead>
                 <TableHead className="text-right">Retention</TableHead>
+                <TableHead className="text-right">Total</TableHead>
                 <TableHead>Reason</TableHead>
                 {canManage && <TableHead></TableHead>}
               </TableRow>
@@ -258,7 +259,7 @@ const SalaryIncrements = () => {
             <TableBody>
               {visible.length === 0 ? (
                 <TableRow>
-                  <TableCell colSpan={canManage ? 8 : 7} className="text-center text-muted-foreground">
+                  <TableCell colSpan={canManage ? 9 : 8} className="text-center text-muted-foreground">
                     No salary increment records
                   </TableCell>
                 </TableRow>
@@ -283,6 +284,13 @@ const SalaryIncrements = () => {
                       {r.retention_amount
                         ? <>+{fmtMoney(r.retention_amount)}{r.retention_pct ? <span className="text-xs text-muted-foreground ml-1">({r.retention_pct}%)</span> : null}</>
                         : "—"}
+                    </TableCell>
+                    <TableCell className="text-right font-semibold">
+                      {(() => {
+                        const totalAmount = Number(r.increment_amount || 0) + Number(r.retention_amount || 0);
+                        const totalPct = Number(r.base_salary) > 0 ? Math.round((totalAmount / Number(r.base_salary)) * 100 * 100) / 100 : Number(r.increment_pct || 0) + Number(r.retention_pct || 0);
+                        return <>+{fmtMoney(totalAmount)}<span className="text-xs text-muted-foreground ml-1">({totalPct}%)</span></>;
+                      })()}
                     </TableCell>
                     <TableCell className="max-w-xs truncate">{r.reason || "—"}</TableCell>
                     {canManage && (
