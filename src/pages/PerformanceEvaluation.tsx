@@ -106,6 +106,7 @@ const PerformanceEvaluation = () => {
   const [answerForm, setAnswerForm] = useState(emptyAnswerForm());
 
   const [incrementDialogFinalization, setIncrementDialogFinalization] = useState<Finalization | null>(null);
+  const [viewEvaluation, setViewEvaluation] = useState<Evaluation | null>(null);
 
   const profileMap = useMemo(() => {
     const m: Record<string, Profile> = {};
@@ -521,13 +522,18 @@ const PerformanceEvaluation = () => {
                             />
                           </TableCell>
                           <TableCell>
-                            <Button
-                              variant="ghost" size="icon" className="h-7 w-7 text-destructive hover:text-destructive"
-                              aria-label="Delete this evaluation"
-                              onClick={() => deleteRequest(r.id)}
-                            >
-                              <Trash2 className="h-3.5 w-3.5" />
-                            </Button>
+                            <div className="flex items-center gap-1">
+                              {ev && (
+                                <Button size="sm" variant="outline" onClick={() => setViewEvaluation(ev)}>View Answers</Button>
+                              )}
+                              <Button
+                                variant="ghost" size="icon" className="h-7 w-7 text-destructive hover:text-destructive"
+                                aria-label="Delete this evaluation"
+                                onClick={() => deleteRequest(r.id)}
+                              >
+                                <Trash2 className="h-3.5 w-3.5" />
+                              </Button>
+                            </div>
                           </TableCell>
                         </TableRow>
                       );
@@ -618,6 +624,50 @@ const PerformanceEvaluation = () => {
               {saving ? "Submitting…" : "Submit Evaluation"}
             </Button>
           </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={!!viewEvaluation} onOpenChange={(o) => !o && setViewEvaluation(null)}>
+        <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>
+              {viewEvaluation ? (profileMap[viewEvaluation.evaluator_id]?.full_name || profileMap[viewEvaluation.evaluator_id]?.email) : ""}'s Evaluation of{" "}
+              {viewEvaluation ? (profileMap[viewEvaluation.employee_id]?.full_name || profileMap[viewEvaluation.employee_id]?.email) : ""}
+            </DialogTitle>
+          </DialogHeader>
+          {viewEvaluation && (
+            <div className="space-y-5">
+              <div className="rounded-lg border bg-muted/40 p-3 text-sm">
+                Total Score: <span className="font-mono">{viewEvaluation.total_score} / {viewEvaluation.criteria_count * 5}</span>{" "}
+                · Average: <span className="font-mono">{viewEvaluation.average_score} / 5</span>{" "}
+                · Category: <Badge className={CATEGORY_BADGE_CLASS[viewEvaluation.category]}>{viewEvaluation.category}</Badge>
+                {" "}· Submitted {format(new Date(viewEvaluation.created_at), "MMM d, yyyy")}
+              </div>
+
+              {EVALUATION_SECTIONS.map((section) => (
+                <div key={section.key} className="space-y-2">
+                  <p className="text-sm font-medium">{section.key}. {section.title}</p>
+                  {section.criteria.map((criterion) => {
+                    const answer = viewEvaluation.scores.find((s) => s.criterion === criterion);
+                    return (
+                      <div key={criterion} className="rounded-md border p-2 space-y-1">
+                        <div className="flex items-start justify-between gap-2">
+                          <p className="text-xs flex-1">{criterion}</p>
+                          <Badge variant="outline" className="shrink-0">{answer?.score ?? "—"} / 5</Badge>
+                        </div>
+                        {answer?.comment && <p className="text-xs text-muted-foreground">{answer.comment}</p>}
+                      </div>
+                    );
+                  })}
+                </div>
+              ))}
+
+              <div>
+                <Label className="text-xs">Justification</Label>
+                <p className="text-sm rounded-md border p-2 mt-1 whitespace-pre-wrap">{viewEvaluation.justification || "—"}</p>
+              </div>
+            </div>
+          )}
         </DialogContent>
       </Dialog>
 
