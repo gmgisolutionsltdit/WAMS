@@ -36,4 +36,4 @@ export const RETENTION_CHECKLIST_ITEMS = [
   "Annual increment adjustment required for fairness",
 ];
 
-export const RETENTION_PERIODS = ["3 Months", "6 Months", "1 Year"];
+export const RETENTION_PERIODS = ["No period needed", "3 Months", "6 Months", "1 Year"];
