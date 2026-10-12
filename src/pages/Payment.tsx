@@ -17,7 +17,7 @@ import { Plus, Check, X, FileText, AlertTriangle, Loader2 } from "lucide-react";
 import { toast } from "sonner";
 import { format } from "date-fns";
 import { notifyManagersAndAdmins, notifyEmployee } from "@/lib/notifications";
-import { MONTHS, applyDuePersonalAdvanceDeduction, type PayrollProfile } from "@/lib/payroll";
+import { applyDuePersonalAdvanceDeduction, type PayrollProfile } from "@/lib/payroll";
 import { PayrollAdjustments } from "@/components/PayrollAdjustments";
 import { monthsInRange, fmtBDT } from "@/lib/payrollAdjustments";
 import { computeMonthlySalaryRows, type SalaryMonthRow } from "@/lib/salaryMonthly";
@@ -994,18 +994,15 @@ function ExpenseClaimsTab() {
   const canApprove = role === "admin" || role === "manager";
   const [claims, setClaims] = useState<any[]>([]);
   const [expenseTypes, setExpenseTypes] = useState<ExpenseType[]>(FALLBACK_CATEGORIES);
-  const [newCategory, setNewCategory] = useState("");
-  const [newCategoryType, setNewCategoryType] = useState<"expense" | "advance">("expense");
   const [open, setOpen] = useState(false);
-  // Entry Type comes first - it decides which category list applies, so the
-  // category must be picked (or re-picked) after it, not independently.
   const [form, setForm] = useState({
-    entry_type: "expense" as "expense" | "advance", category: "Travel",
+    entry_type: "expense" as "expense" | "advance", category: "Travel", otherCategory: "",
     amount: "", claim_date: format(new Date(), "yyyy-MM-dd"), description: "", receipt_url: "",
   });
   const [uploading, setUploading] = useState(false);
-  const [filterMonth, setFilterMonth] = useState<string>("all");
-  const [filterYear, setFilterYear] = useState<number>(new Date().getFullYear());
+  const [employees, setEmployees] = useState<{ id: string; full_name: string | null; email: string | null }[]>([]);
+  const [selectedIds, setSelectedIds] = useState<string[]>([]);
+  const [filterMonth, setFilterMonth] = useState("");
   const [filterFromDate, setFilterFromDate] = useState<string>("");
   const [filterToDate, setFilterToDate] = useState<string>("");
 
@@ -1022,27 +1019,25 @@ function ExpenseClaimsTab() {
     if (data && data.length > 0) setExpenseTypes(data as ExpenseType[]);
   };
 
-  useEffect(() => { fetchClaims(); fetchCategories(); }, []);
+  useEffect(() => {
+    fetchClaims();
+    fetchCategories();
+    (async () => {
+      const { data } = await supabase.from("profiles").select("id, full_name, email").order("full_name");
+      setEmployees(data || []);
+      setSelectedIds((data || []).map((e) => e.id));
+    })();
+  }, []);
 
-  const categoriesForType = useMemo(
-    () => expenseTypes.filter((t) => t.entry_type === form.entry_type).map((t) => t.name),
-    [expenseTypes, form.entry_type],
+  // Category list is the same regardless of which Type (Expense/Advance) is
+  // selected — no more per-type filtering.
+  const allCategories = useMemo(
+    () => Array.from(new Set(expenseTypes.map((t) => t.name))),
+    [expenseTypes],
   );
 
-  const setEntryType = (entry_type: "expense" | "advance") => {
-    const list = expenseTypes.filter((t) => t.entry_type === entry_type).map((t) => t.name);
-    setForm((f) => ({ ...f, entry_type, category: list[0] || "" }));
-  };
-
-  const addCategory = async () => {
-    const name = newCategory.trim();
-    if (!name) return;
-    const { error } = await supabase.from("expense_types").insert({ name, entry_type: newCategoryType });
-    if (error) { toast.error(error.message); return; }
-    toast.success("Expense type added");
-    setNewCategory("");
-    fetchCategories();
-  };
+  const toggleEmployee = (id: string) =>
+    setSelectedIds((ids) => (ids.includes(id) ? ids.filter((x) => x !== id) : [...ids, id]));
 
   const uploadReceipt = async (file: File) => {
     if (!user) return;
@@ -1060,13 +1055,14 @@ function ExpenseClaimsTab() {
     if (!form.amount) return toast.error("Amount required");
     if (!form.category) return toast.error("Category required");
     const amount = Number(form.amount);
+    const category = form.category === "Other" ? (form.otherCategory.trim() || "Other") : form.category;
     // Direction used to be a separate field the employee picked by hand; it's
     // now implied by Entry Type - an Advance is cash given up front that the
     // employee owes back, an Expense is a reimbursement the company owes them.
     const direction = form.entry_type === "advance" ? "employee_owes_company" : "company_pays_employee";
     const { data: inserted, error } = await supabase.from("expense_claims").insert({
       user_id: user?.id,
-      category: form.category,
+      category,
       amount,
       claim_date: form.claim_date,
       description: form.description,
@@ -1078,10 +1074,10 @@ function ExpenseClaimsTab() {
     if (error) return toast.error(error.message);
     toast.success("Expense submitted");
     setOpen(false);
-    setForm({ entry_type: "expense", category: categoriesForType[0] || "Travel", amount: "", claim_date: format(new Date(), "yyyy-MM-dd"), description: "", receipt_url: "" });
+    setForm({ entry_type: "expense", category: allCategories[0] || "Travel", otherCategory: "", amount: "", claim_date: format(new Date(), "yyyy-MM-dd"), description: "", receipt_url: "" });
     await notifyManagersAndAdmins(
       "Expense Claim Submitted",
-      `${user?.email} submitted a ${form.category} claim for ${form.amount}.`,
+      `${user?.email} submitted a ${category} claim for ${form.amount}.`,
       inserted?.id,
       { route: "/expenses", type: "expense_claim", requesterId: user?.id },
     );
@@ -1114,30 +1110,19 @@ function ExpenseClaimsTab() {
     fetchClaims();
   };
 
+  // An explicit date range is more specific than Month, so it takes over
+  // whenever either end is set — the two controls are not combined.
+  const effectiveRange = useMemo(() => {
+    if (filterFromDate || filterToDate) return { from: filterFromDate, to: filterToDate };
+    return monthFilterToRange(filterMonth, filterMonth);
+  }, [filterMonth, filterFromDate, filterToDate]);
+
   const filteredClaims = claims.filter((c) => {
-    // An explicit date range is more specific than Month/Year, so it takes
-    // over whenever either end is set — the two controls are not combined.
-    if (filterFromDate || filterToDate) {
-      if (!c.claim_date) return false;
-      if (filterFromDate && c.claim_date < filterFromDate) return false;
-      if (filterToDate && c.claim_date > filterToDate) return false;
-      return true;
-    }
-    if (!c.claim_date) return filterMonth === "all";
-    const d = new Date(`${c.claim_date}T00:00:00`);
-    if (d.getFullYear() !== filterYear) return false;
-    if (filterMonth !== "all" && d.getMonth() + 1 !== Number(filterMonth)) return false;
+    if (!selectedIds.includes(c.user_id)) return false;
+    if (effectiveRange.from && c.claim_date < effectiveRange.from) return false;
+    if (effectiveRange.to && c.claim_date > effectiveRange.to) return false;
     return true;
   });
-
-  const myClaims = filteredClaims.filter(c => c.user_id === user?.id);
-  const pendingApprovals = filteredClaims.filter(c => c.status === "pending" && c.user_id !== user?.id);
-  const allOthers = filteredClaims.filter(c => c.user_id !== user?.id);
-
-  const totals = expenseTypes.map(({ name: cat }) => ({
-    cat,
-    total: filteredClaims.filter(c => c.category === cat && c.status === "approved").reduce((s,c)=>s+Number(c.amount), 0)
-  })).filter(t => t.total > 0);
 
   const advanceTotal = filteredClaims.filter(c => c.entry_type === "advance" && c.status === "approved").reduce((s, c) => s + Number(c.amount), 0);
   const expenseTotal = filteredClaims.filter(c => c.entry_type !== "advance" && c.status === "approved").reduce((s, c) => s + Number(c.amount), 0);
@@ -1155,20 +1140,25 @@ function ExpenseClaimsTab() {
           <DialogContent>
             <DialogHeader><DialogTitle>Submit Expense Claim</DialogTitle></DialogHeader>
             <div className="space-y-3">
-              <div><Label>Entry Type</Label>
-                <Select value={form.entry_type} onValueChange={(v) => setEntryType(v as "expense" | "advance")}>
-                  <SelectTrigger><SelectValue /></SelectTrigger>
-                  <SelectContent>{ENTRY_TYPES.map(t => <SelectItem key={t.value} value={t.value}>{t.label}</SelectItem>)}</SelectContent>
-                </Select>
-              </div>
               <div><Label>Category</Label>
                 <Select value={form.category} onValueChange={(v)=>setForm({...form, category: v})}>
                   <SelectTrigger><SelectValue /></SelectTrigger>
                   <SelectContent>
-                    {categoriesForType.length === 0 ? (
-                      <SelectItem value="none" disabled>No categories for this entry type yet</SelectItem>
-                    ) : categoriesForType.map(c => <SelectItem key={c} value={c}>{c}</SelectItem>)}
+                    {allCategories.length === 0 ? (
+                      <SelectItem value="none" disabled>No categories yet</SelectItem>
+                    ) : allCategories.map(c => <SelectItem key={c} value={c}>{c}</SelectItem>)}
                   </SelectContent>
+                </Select>
+              </div>
+              {form.category === "Other" && (
+                <div><Label>Other</Label>
+                  <Input placeholder="Specify category" value={form.otherCategory} onChange={(e)=>setForm({...form, otherCategory: e.target.value})} />
+                </div>
+              )}
+              <div><Label>Type</Label>
+                <Select value={form.entry_type} onValueChange={(v) => setForm((f) => ({ ...f, entry_type: v as "expense" | "advance" }))}>
+                  <SelectTrigger><SelectValue /></SelectTrigger>
+                  <SelectContent>{ENTRY_TYPES.map(t => <SelectItem key={t.value} value={t.value}>{t.label}</SelectItem>)}</SelectContent>
                 </Select>
               </div>
               <div className="grid grid-cols-2 gap-3">
@@ -1187,16 +1177,46 @@ function ExpenseClaimsTab() {
         </Dialog>
       </div>
 
-      {isAdmin && (
-        <div className="flex items-center gap-2">
-          <Input className="max-w-[220px]" placeholder="New category name" value={newCategory} onChange={(e) => setNewCategory(e.target.value)} />
-          <Select value={newCategoryType} onValueChange={(v) => setNewCategoryType(v as "expense" | "advance")}>
-            <SelectTrigger className="w-[140px]"><SelectValue /></SelectTrigger>
-            <SelectContent>{ENTRY_TYPES.map(t => <SelectItem key={t.value} value={t.value}>{t.label}</SelectItem>)}</SelectContent>
-          </Select>
-          <Button size="sm" variant="outline" onClick={addCategory}>Add Category</Button>
-        </div>
-      )}
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-base">Filter Options</CardTitle>
+          <div className="flex flex-wrap items-end gap-3 pt-2">
+            <div className="space-y-1">
+              <Label className="text-xs">Employees</Label>
+              <Popover>
+                <PopoverTrigger asChild>
+                  <Button variant="outline" className="w-64 justify-start font-normal">
+                    Employees ({selectedIds.length} selected)
+                  </Button>
+                </PopoverTrigger>
+                <PopoverContent className="w-64 p-2">
+                  <div className="max-h-36 overflow-y-auto space-y-1">
+                    <label className="flex items-center gap-2 text-sm px-1 py-0.5 font-medium border-b pb-1 mb-1">
+                      <Checkbox
+                        checked={employees.length > 0 && selectedIds.length === employees.length}
+                        onCheckedChange={() => setSelectedIds(selectedIds.length === employees.length ? [] : employees.map((e) => e.id))}
+                      />
+                      Select all
+                    </label>
+                    {employees.map((e) => (
+                      <label key={e.id} className="flex items-center gap-2 text-sm px-1 py-0.5">
+                        <Checkbox checked={selectedIds.includes(e.id)} onCheckedChange={() => toggleEmployee(e.id)} />
+                        {e.full_name || e.email}
+                      </label>
+                    ))}
+                  </div>
+                </PopoverContent>
+              </Popover>
+            </div>
+            <div className="space-y-1"><Label className="text-xs">Month</Label><Input type="month" value={filterMonth} disabled={!!(filterFromDate || filterToDate)} onChange={(e) => setFilterMonth(e.target.value)} /></div>
+            <div className="space-y-1"><Label className="text-xs">From</Label><Input type="date" value={filterFromDate} onChange={(e) => setFilterFromDate(e.target.value)} /></div>
+            <div className="space-y-1"><Label className="text-xs">To</Label><Input type="date" value={filterToDate} onChange={(e) => setFilterToDate(e.target.value)} /></div>
+            {(filterMonth || filterFromDate || filterToDate) && (
+              <Button size="sm" variant="ghost" onClick={() => { setFilterMonth(""); setFilterFromDate(""); setFilterToDate(""); }}>Clear</Button>
+            )}
+          </div>
+        </CardHeader>
+      </Card>
 
       <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
         <Card><CardHeader className="pb-2"><CardDescription>Advance</CardDescription><CardTitle>{advanceTotal.toLocaleString()}</CardTitle></CardHeader></Card>
@@ -1204,81 +1224,38 @@ function ExpenseClaimsTab() {
         <Card><CardHeader className="pb-2"><CardDescription>Net Amount</CardDescription><CardTitle className={netAmount < 0 ? "text-destructive" : ""}>{netAmount.toLocaleString()}</CardTitle></CardHeader></Card>
       </div>
 
-      <div className="flex flex-wrap items-end gap-2">
-        <div>
-          <Label className="text-xs">Month</Label>
-          <Select value={filterMonth} onValueChange={setFilterMonth} disabled={!!(filterFromDate || filterToDate)}>
-            <SelectTrigger className="w-[150px]"><SelectValue /></SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">All Months</SelectItem>
-              {MONTHS.map((m, i) => <SelectItem key={m} value={String(i + 1)}>{m}</SelectItem>)}
-            </SelectContent>
-          </Select>
-        </div>
-        <div>
-          <Label className="text-xs">Year</Label>
-          <Input type="number" className="w-[100px]" value={filterYear} onChange={(e) => setFilterYear(Number(e.target.value) || filterYear)} disabled={!!(filterFromDate || filterToDate)} />
-        </div>
-        <div>
-          <Label className="text-xs">From Date</Label>
-          <Input type="date" className="w-[160px]" value={filterFromDate} onChange={(e) => setFilterFromDate(e.target.value)} />
-        </div>
-        <div>
-          <Label className="text-xs">To Date</Label>
-          <Input type="date" className="w-[160px]" value={filterToDate} onChange={(e) => setFilterToDate(e.target.value)} />
-        </div>
-        {(filterFromDate || filterToDate) && (
-          <Button size="sm" variant="ghost" onClick={() => { setFilterFromDate(""); setFilterToDate(""); }}>Clear Dates</Button>
-        )}
-      </div>
-
-      {totals.length > 0 && (
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-          {totals.map(t => (
-            <Card key={t.cat}><CardHeader className="pb-2"><CardDescription>{t.cat}</CardDescription><CardTitle>{t.total.toLocaleString()}</CardTitle></CardHeader></Card>
-          ))}
-        </div>
-      )}
-
-      <Tabs defaultValue="mine">
-        <TabsList>
-          <TabsTrigger value="mine">My Claims</TabsTrigger>
-          {canApprove && <TabsTrigger value="pending">Pending Approval ({pendingApprovals.length})</TabsTrigger>}
-          {canApprove && <TabsTrigger value="all">Team History</TabsTrigger>}
-        </TabsList>
-
-        <TabsContent value="mine">
-          <ClaimTable claims={myClaims} showEmployee={false} isAdmin={isAdmin} onTogglePaid={markPaid} />
-        </TabsContent>
-        {canApprove && (
-          <TabsContent value="pending">
-            <ClaimTable claims={pendingApprovals} showEmployee onApprove={(id)=>decide(id,"approved")} onReject={(id)=>decide(id,"rejected")} isAdmin={isAdmin} onTogglePaid={markPaid} />
-          </TabsContent>
-        )}
-        {canApprove && (
-          <TabsContent value="all">
-            <ClaimTable claims={allOthers} showEmployee isAdmin={isAdmin} onTogglePaid={markPaid} />
-          </TabsContent>
-        )}
-      </Tabs>
+      <ClaimTable
+        claims={filteredClaims}
+        showEmployee
+        isAdmin={isAdmin}
+        canApprove={canApprove}
+        currentUserId={user?.id}
+        onApprove={(id: string) => decide(id, "approved")}
+        onReject={(id: string) => decide(id, "rejected")}
+        onTogglePaid={markPaid}
+      />
     </div>
   );
 }
 
-const ClaimTable = ({ claims, showEmployee, onApprove, onReject, onTogglePaid, isAdmin }: any) => (
+const ClaimTable = ({ claims, showEmployee, onApprove, onReject, onTogglePaid, isAdmin, canApprove, currentUserId }: any) => (
   <Card>
-    <CardContent className="pt-6">
+    <CardHeader><CardTitle className="text-base">Claim History</CardTitle></CardHeader>
+    <CardContent>
+      <div className="overflow-x-auto">
       <Table>
         <TableHeader>
           <TableRow>
             {showEmployee && <TableHead>Employee</TableHead>}
-            <TableHead>Date</TableHead><TableHead>Category</TableHead><TableHead>Entry Type</TableHead><TableHead>Direction</TableHead><TableHead>Amount</TableHead><TableHead>Description</TableHead><TableHead>Receipt</TableHead><TableHead>Status</TableHead><TableHead>Approved/Rejected By</TableHead>
-            {(onApprove || onReject) && <TableHead></TableHead>}
+            <TableHead>Date</TableHead><TableHead>Category</TableHead><TableHead>Type</TableHead><TableHead>Direction</TableHead><TableHead>Amount</TableHead><TableHead>Description</TableHead><TableHead>Receipt</TableHead><TableHead>Status</TableHead><TableHead>Approved/Rejected By</TableHead>
+            <TableHead></TableHead>
           </TableRow>
         </TableHeader>
         <TableBody>
           {claims.length === 0 ? <TableRow><TableCell colSpan={showEmployee ? 11 : 10} className="text-center text-muted-foreground">No claims</TableCell></TableRow> :
-            claims.map((c: any) => (
+            claims.map((c: any) => {
+              const canDecide = canApprove && c.status === "pending" && c.user_id !== currentUserId;
+              return (
               <TableRow key={c.id}>
                 {showEmployee && <TableCell>{c.profiles?.full_name || c.profiles?.email || "—"}</TableCell>}
                 <TableCell>{format(new Date(c.claim_date), "MMM d, yyyy")}</TableCell>
@@ -1305,18 +1282,20 @@ const ClaimTable = ({ claims, showEmployee, onApprove, onReject, onTogglePaid, i
                 <TableCell className="text-xs text-muted-foreground">
                   {c.status === "pending" ? "—" : (c.approver?.full_name || c.approver?.email || "—")}
                 </TableCell>
-                {(onApprove || onReject) && (
-                  <TableCell>
+                <TableCell>
+                  {canDecide && (
                     <div className="flex gap-1">
                       <Button size="icon" variant="outline" onClick={()=>onApprove?.(c.id)}><Check className="h-4 w-4 text-success" /></Button>
                       <Button size="icon" variant="outline" onClick={()=>onReject?.(c.id)}><X className="h-4 w-4 text-destructive" /></Button>
                     </div>
-                  </TableCell>
-                )}
+                  )}
+                </TableCell>
               </TableRow>
-            ))}
+              );
+            })}
         </TableBody>
       </Table>
+      </div>
     </CardContent>
   </Card>
 );
