@@ -17,7 +17,7 @@ import { Plus, Check, X, FileText, AlertTriangle, Loader2 } from "lucide-react";
 import { toast } from "sonner";
 import { format } from "date-fns";
 import { notifyManagersAndAdmins, notifyEmployee } from "@/lib/notifications";
-import { applyDuePersonalAdvanceDeduction, type PayrollProfile } from "@/lib/payroll";
+import { applyDuePersonalAdvanceDeduction, downloadPaymentReceiptPDF, type PayrollProfile } from "@/lib/payroll";
 import { PayrollAdjustments } from "@/components/PayrollAdjustments";
 import { monthsInRange, fmtBDT } from "@/lib/payrollAdjustments";
 import { computeMonthlySalaryRows, type SalaryMonthRow } from "@/lib/salaryMonthly";
@@ -447,12 +447,16 @@ function MyPaymentsTab() {
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
 
-  const [netHours, setNetHours] = useState(0);
+  const [finalSalary, setFinalSalary] = useState(0);
+  const [netAdjustment, setNetAdjustment] = useState(0);
+  const [finalSalaryNoExpense, setFinalSalaryNoExpense] = useState(0);
   const [loan, setLoan] = useState<{ id: string; monthly_deduction: number; remaining_balance: number } | null>(null);
   const [expenseOutstanding, setExpenseOutstanding] = useState(0);
   const [existingSettlement, setExistingSettlement] = useState<any>(null);
 
   const [netHoursPaidNow, setNetHoursPaidNow] = useState(true);
+  const [expensePaidNow, setExpensePaidNow] = useState(true);
+  const [loanPaidNow, setLoanPaidNow] = useState(true);
   const [expenseAmount, setExpenseAmount] = useState("0");
   const [loanAmount, setLoanAmount] = useState("0");
   const [note, setNote] = useState("");
@@ -469,27 +473,37 @@ function MyPaymentsTab() {
     if (!selectedUserId || !month) return;
     setLoading(true);
     (async () => {
+      // A claim/loan dated after the end of the viewed month hasn't happened
+      // yet as of that month, so it's excluded — a month before either
+      // existed naturally comes out to 0.00, and once it exists the balance
+      // (paid or not) carries into every later month the same as before.
+      const monthEndISO = format(new Date(Number(month.slice(0, 4)), Number(month.slice(5, 7)), 0), "yyyy-MM-dd");
       const [rows, { data: loanRow }, { data: settlement }, { data: claims }, { data: priorSettlements }] = await Promise.all([
         computeMonthlySalaryRows([selectedUserId], [month]),
-        supabase.from("personal_advances").select("id, monthly_deduction, remaining_balance")
+        supabase.from("personal_advances").select("id, monthly_deduction, remaining_balance, created_at")
           .eq("user_id", selectedUserId).eq("status", "approved").gt("remaining_balance", 0)
+          .lte("created_at", `${monthEndISO}T23:59:59`)
           .order("created_at", { ascending: true }).limit(1).maybeSingle(),
         supabase.from("payroll_settlements").select("*").eq("user_id", selectedUserId).eq("month", `${month}-01`).maybeSingle(),
-        supabase.from("expense_claims").select("amount, entry_type, recovered_amount").eq("user_id", selectedUserId).eq("status", "approved"),
+        supabase.from("expense_claims").select("amount, entry_type, recovered_amount").eq("user_id", selectedUserId).eq("status", "approved").lte("claim_date", monthEndISO),
         supabase.from("payroll_settlements").select("expense_amount_paid").eq("user_id", selectedUserId),
       ]);
 
       const row = rows[0];
-      setNetHours(row ? row.netAdjustment : 0);
+      setFinalSalary(row ? row.final : 0);
+      setNetAdjustment(row ? row.netAdjustment : 0);
+      setFinalSalaryNoExpense(row ? row.final + row.recoveryTotal : 0);
       setLoan(loanRow || null);
       setExistingSettlement(settlement || null);
       setNetHoursPaidNow(settlement ? settlement.net_hours_paid : true);
+      setExpensePaidNow(true);
+      setLoanPaidNow(true);
       const loanDue = Math.min(Number(loanRow?.monthly_deduction || 0), Number(loanRow?.remaining_balance || 0));
       setLoanAmount(String(settlement ? settlement.loan_amount_paid : loanDue));
 
-      // Lifetime Expense net balance (every approved claim, not just this
-      // month) minus every prior settlement's expense_amount_paid - so a
-      // partial payment last month reduces what's still outstanding now.
+      // Expense net balance as of the viewed month (every approved claim
+      // dated by then) minus every prior settlement's expense_amount_paid -
+      // so a partial payment last month reduces what's still outstanding now.
       const expenseTotal = (claims || []).filter((c) => c.entry_type !== "advance").reduce((s, c) => s + Number(c.amount), 0);
       const advanceOutstanding = (claims || []).filter((c) => c.entry_type === "advance").reduce((s, c) => s + Math.max(0, Number(c.amount) - Number(c.recovered_amount || 0)), 0);
       const paidSoFar = (priorSettlements || []).reduce((s, p) => s + Number(p.expense_amount_paid || 0), 0);
@@ -501,16 +515,19 @@ function MyPaymentsTab() {
     })();
   }, [selectedUserId, month]);
 
+  const loanDue = loan ? Math.min(Number(loan.monthly_deduction), Number(loan.remaining_balance)) : 0;
+  const netPayment = finalSalaryNoExpense - expenseOutstanding - loanDue;
+
   const submit = async () => {
     if (!user || !selectedUserId) return;
     setSaving(true);
     try {
-      const loanPaid = Math.max(0, Number(loanAmount) || 0);
-      const expensePaid = Math.max(0, Number(expenseAmount) || 0);
+      const loanPaid = loanPaidNow ? Math.max(0, Number(loanAmount) || 0) : 0;
+      const expensePaid = expensePaidNow ? Math.max(0, Number(expenseAmount) || 0) : 0;
       const { error } = await supabase.from("payroll_settlements").upsert({
         user_id: selectedUserId,
         month: `${month}-01`,
-        net_hours_amount: netHours,
+        net_hours_amount: netAdjustment,
         net_hours_paid: netHoursPaidNow,
         expense_amount_paid: expensePaid,
         loan_amount_paid: loanPaid,
@@ -541,7 +558,7 @@ function MyPaymentsTab() {
       await notifyEmployee(
         selectedUserId,
         "Payment Recorded",
-        `Your ${format(new Date(`${month}-01`), "MMMM yyyy")} payment was recorded: Net Hours ${netHoursPaidNow ? "paid" : "carried to next month"}, Expense ${fmtBDT(expensePaid)}, Loan ${fmtBDT(loanPaid)}.`,
+        `Your ${format(new Date(`${month}-01`), "MMMM yyyy")} payment was recorded: Net Salary ${netHoursPaidNow ? "paid" : "carried to next month"}, Expense ${fmtBDT(expensePaid)}, Loan ${fmtBDT(loanPaid)}.`,
         undefined,
         { route: "/payment", type: "payroll_settlement" },
       );
@@ -552,13 +569,27 @@ function MyPaymentsTab() {
     }
   };
 
-  const employeeName = employees.find((e) => e.id === selectedUserId)?.full_name || employees.find((e) => e.id === selectedUserId)?.email;
+  const employeeName = employees.find((e) => e.id === selectedUserId)?.full_name || employees.find((e) => e.id === selectedUserId)?.email || "";
+
+  const downloadReceipt = () => {
+    downloadPaymentReceiptPDF({
+      employeeName,
+      monthLabel: format(new Date(`${month}-01`), "MMMM yyyy"),
+      finalSalary,
+      netAdjustment,
+      finalSalaryNoExpense,
+      expensePaid: Number(expenseAmount) || 0,
+      loanPaid: Number(loanAmount) || 0,
+      netPayment,
+      note,
+    });
+  };
 
   return (
     <Card>
       <CardHeader>
         <CardTitle>My Payments</CardTitle>
-        <CardDescription>Decide how much of this month's Net Hours, Expense balance and Loan due to pay now.</CardDescription>
+        <CardDescription>Decide how much of this month's Net Salary, Expense balance and Loan due to pay now.</CardDescription>
         <div className="flex flex-wrap items-end gap-3 pt-2">
           <div className="space-y-1">
             <Label className="text-xs">Employee</Label>
@@ -585,36 +616,73 @@ function MyPaymentsTab() {
                 A payment for {format(new Date(`${month}-01`), "MMMM yyyy")} was already recorded — saving again updates it.
               </p>
             )}
-            <div className="grid gap-4 md:grid-cols-3">
+            <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
               <div className="rounded-md border p-3 space-y-2">
-                <div className="text-sm font-medium">Net Salary{employeeName ? "" : ""}</div>
-                <div className="text-lg font-semibold">{fmtBDT(netHours)}</div>
-                <label className="flex items-center gap-2 text-sm">
-                  <Checkbox checked={netHoursPaidNow} onCheckedChange={(v) => setNetHoursPaidNow(!!v)} />
-                  Pay now (unchecked = carry to next month)
-                </label>
+                <div className="text-sm font-medium">Net Salary</div>
+                <div className="space-y-1">
+                  <div className="flex items-center justify-between text-sm">
+                    <span className="text-muted-foreground">Final Salary</span>
+                    <span className="font-semibold">{fmtBDT(finalSalary)}</span>
+                  </div>
+                  <label className="flex items-center gap-2 text-xs">
+                    <Checkbox checked={netHoursPaidNow} onCheckedChange={(v) => setNetHoursPaidNow(!!v)} />
+                    Pay now (unchecked = carry to next month)
+                  </label>
+                  <div className="flex items-center justify-between text-sm pt-1">
+                    <span className="text-muted-foreground">Net Adjustment</span>
+                    <span className="font-semibold">{fmtBDT(netAdjustment)}</span>
+                  </div>
+                  <label className="flex items-center gap-2 text-xs">
+                    <Checkbox checked={netHoursPaidNow} onCheckedChange={(v) => setNetHoursPaidNow(!!v)} />
+                    Pay now (unchecked = carry to next month)
+                  </label>
+                  <div className="flex items-center justify-between text-sm pt-1">
+                    <span className="text-muted-foreground">Final Salary (no Expense)</span>
+                    <span className="font-semibold">{fmtBDT(finalSalaryNoExpense)}</span>
+                  </div>
+                  <label className="flex items-center gap-2 text-xs">
+                    <Checkbox checked={netHoursPaidNow} onCheckedChange={(v) => setNetHoursPaidNow(!!v)} />
+                    Pay now (unchecked = carry to next month)
+                  </label>
+                </div>
               </div>
               <div className="rounded-md border p-3 space-y-2">
                 <div className="text-sm font-medium">Expense Balance</div>
                 <div className="text-lg font-semibold">{fmtBDT(expenseOutstanding)}</div>
-                <Label className="text-xs">Pay now</Label>
-                <Input type="number" value={expenseAmount} onChange={(e) => setExpenseAmount(e.target.value)} />
+                <label className="flex items-center gap-2 text-xs">
+                  <Checkbox checked={expensePaidNow} onCheckedChange={(v) => setExpensePaidNow(!!v)} />
+                  Pay now (unchecked = carry to next month)
+                </label>
+                <Input type="number" value={expenseAmount} onChange={(e) => setExpenseAmount(e.target.value)} disabled={!expensePaidNow} />
               </div>
               <div className="rounded-md border p-3 space-y-2">
                 <div className="text-sm font-medium">Loan Due</div>
                 <div className="text-lg font-semibold">
-                  {loan ? fmtBDT(Math.min(Number(loan.monthly_deduction), Number(loan.remaining_balance))) : "No active loan"}
+                  {loan ? fmtBDT(loanDue) : "No active loan"}
                 </div>
-                <Label className="text-xs">Pay now</Label>
-                <Input type="number" value={loanAmount} onChange={(e) => setLoanAmount(e.target.value)} disabled={!loan} />
+                <label className="flex items-center gap-2 text-xs">
+                  <Checkbox checked={loanPaidNow} onCheckedChange={(v) => setLoanPaidNow(!!v)} disabled={!loan} />
+                  Pay now (unchecked = carry to next month)
+                </label>
+                <Input type="number" value={loanAmount} onChange={(e) => setLoanAmount(e.target.value)} disabled={!loan || !loanPaidNow} />
                 {loan && <p className="text-xs text-muted-foreground">{fmtBDT(loan.remaining_balance)} remaining balance</p>}
+              </div>
+              <div className="rounded-md border p-3 space-y-2">
+                <div className="text-sm font-medium">Net Payment</div>
+                <div className="text-lg font-semibold">{fmtBDT(netPayment)}</div>
+                <p className="text-xs text-muted-foreground">Final Salary (no Expense) − Expense Balance − Loan Due</p>
               </div>
             </div>
             <div>
               <Label className="text-xs">Note (optional)</Label>
               <Textarea value={note} onChange={(e) => setNote(e.target.value)} />
             </div>
-            <Button onClick={submit} disabled={saving}>{saving ? "Recording..." : "Record Payment"}</Button>
+            <div className="flex flex-wrap gap-2">
+              <Button onClick={submit} disabled={saving}>{saving ? "Recording..." : "Record Payment"}</Button>
+              {existingSettlement && (
+                <Button variant="outline" onClick={downloadReceipt}>Download Receipt</Button>
+              )}
+            </div>
           </div>
         )}
       </CardContent>
@@ -633,31 +701,42 @@ function MyPaymentsSummary() {
   const { user } = useAuth();
   const [month, setMonth] = useState(() => format(new Date(), "yyyy-MM"));
   const [loading, setLoading] = useState(false);
-  const [netHours, setNetHours] = useState(0);
+  const [finalSalary, setFinalSalary] = useState(0);
+  const [netAdjustment, setNetAdjustment] = useState(0);
+  const [finalSalaryNoExpense, setFinalSalaryNoExpense] = useState(0);
   const [loan, setLoan] = useState<{ monthly_deduction: number; remaining_balance: number } | null>(null);
   const [expenseOutstanding, setExpenseOutstanding] = useState(0);
   const [settlement, setSettlement] = useState<any>(null);
   const [history, setHistory] = useState<any[]>([]);
+  const [employeeName, setEmployeeName] = useState("");
 
   useEffect(() => {
     if (!user?.id || !month) return;
     setLoading(true);
     (async () => {
-      const [rows, { data: loanRow }, { data: settlementRow }, { data: claims }, { data: priorSettlements }, { data: historyRows }] = await Promise.all([
+      // Same month cutoff as the admin's My Payments tab: a claim/loan dated
+      // after the viewed month hasn't happened yet as of that month.
+      const monthEndISO = format(new Date(Number(month.slice(0, 4)), Number(month.slice(5, 7)), 0), "yyyy-MM-dd");
+      const [rows, { data: loanRow }, { data: settlementRow }, { data: claims }, { data: priorSettlements }, { data: historyRows }, { data: profile }] = await Promise.all([
         computeMonthlySalaryRows([user.id], [month]),
         supabase.from("personal_advances").select("monthly_deduction, remaining_balance")
           .eq("user_id", user.id).eq("status", "approved").gt("remaining_balance", 0)
+          .lte("created_at", `${monthEndISO}T23:59:59`)
           .order("created_at", { ascending: true }).limit(1).maybeSingle(),
         supabase.from("payroll_settlements").select("*").eq("user_id", user.id).eq("month", `${month}-01`).maybeSingle(),
-        supabase.from("expense_claims").select("amount, entry_type, recovered_amount").eq("user_id", user.id).eq("status", "approved"),
+        supabase.from("expense_claims").select("amount, entry_type, recovered_amount").eq("user_id", user.id).eq("status", "approved").lte("claim_date", monthEndISO),
         supabase.from("payroll_settlements").select("expense_amount_paid").eq("user_id", user.id),
         supabase.from("payroll_settlements").select("*").eq("user_id", user.id).order("month", { ascending: false }).limit(12),
+        supabase.from("profiles").select("full_name, email").eq("id", user.id).maybeSingle(),
       ]);
 
       const row = rows[0];
-      setNetHours(row ? row.netAdjustment : 0);
+      setFinalSalary(row ? row.final : 0);
+      setNetAdjustment(row ? row.netAdjustment : 0);
+      setFinalSalaryNoExpense(row ? row.final + row.recoveryTotal : 0);
       setLoan(loanRow || null);
       setSettlement(settlementRow || null);
+      setEmployeeName(profile?.full_name || profile?.email || "");
 
       const expenseTotal = (claims || []).filter((c) => c.entry_type !== "advance").reduce((s, c) => s + Number(c.amount), 0);
       const advanceOutstanding = (claims || []).filter((c) => c.entry_type === "advance").reduce((s, c) => s + Math.max(0, Number(c.amount) - Number(c.recovered_amount || 0)), 0);
@@ -669,11 +748,28 @@ function MyPaymentsSummary() {
     })();
   }, [user?.id, month]);
 
+  const loanDue = loan ? Math.min(Number(loan.monthly_deduction), Number(loan.remaining_balance)) : 0;
+  const netPayment = finalSalaryNoExpense - expenseOutstanding - loanDue;
+
+  const downloadReceipt = () => {
+    downloadPaymentReceiptPDF({
+      employeeName,
+      monthLabel: format(new Date(`${month}-01`), "MMMM yyyy"),
+      finalSalary,
+      netAdjustment,
+      finalSalaryNoExpense,
+      expensePaid: Number(settlement?.expense_amount_paid) || 0,
+      loanPaid: Number(settlement?.loan_amount_paid) || 0,
+      netPayment,
+      note: settlement?.note,
+    });
+  };
+
   return (
     <Card>
       <CardHeader>
         <CardTitle>My Payments</CardTitle>
-        <CardDescription>What's been recorded for your Net Hours, Expense balance and Loan due — read only.</CardDescription>
+        <CardDescription>What's been recorded for your Net Salary, Expense balance and Loan due — read only.</CardDescription>
         <div className="flex flex-wrap items-end gap-3 pt-2">
           <div className="space-y-1">
             <Label className="text-xs">Month</Label>
@@ -686,10 +782,23 @@ function MyPaymentsSummary() {
           <p className="text-sm text-muted-foreground">Loading…</p>
         ) : (
           <>
-            <div className="grid gap-4 md:grid-cols-3">
+            <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
               <div className="rounded-md border p-3 space-y-2">
                 <div className="text-sm font-medium">Net Salary</div>
-                <div className="text-lg font-semibold">{fmtBDT(netHours)}</div>
+                <div className="space-y-1">
+                  <div className="flex items-center justify-between text-sm">
+                    <span className="text-muted-foreground">Final Salary</span>
+                    <span className="font-semibold">{fmtBDT(finalSalary)}</span>
+                  </div>
+                  <div className="flex items-center justify-between text-sm">
+                    <span className="text-muted-foreground">Net Adjustment</span>
+                    <span className="font-semibold">{fmtBDT(netAdjustment)}</span>
+                  </div>
+                  <div className="flex items-center justify-between text-sm">
+                    <span className="text-muted-foreground">Final Salary (no Expense)</span>
+                    <span className="font-semibold">{fmtBDT(finalSalaryNoExpense)}</span>
+                  </div>
+                </div>
                 <Badge variant="outline">
                   {!settlement ? "Not recorded yet" : settlement.net_hours_paid ? "Paid" : "Carried to next month"}
                 </Badge>
@@ -702,14 +811,22 @@ function MyPaymentsSummary() {
               <div className="rounded-md border p-3 space-y-2">
                 <div className="text-sm font-medium">Loan Due</div>
                 <div className="text-lg font-semibold">
-                  {loan ? fmtBDT(Math.min(Number(loan.monthly_deduction), Number(loan.remaining_balance))) : "No active loan"}
+                  {loan ? fmtBDT(loanDue) : "No active loan"}
                 </div>
                 <Badge variant="outline">{settlement ? `Paid ${fmtBDT(settlement.loan_amount_paid)}` : "Not recorded yet"}</Badge>
                 {loan && <p className="text-xs text-muted-foreground">{fmtBDT(loan.remaining_balance)} remaining balance</p>}
               </div>
+              <div className="rounded-md border p-3 space-y-2">
+                <div className="text-sm font-medium">Net Payment</div>
+                <div className="text-lg font-semibold">{fmtBDT(netPayment)}</div>
+                <p className="text-xs text-muted-foreground">Final Salary (no Expense) − Expense Balance − Loan Due</p>
+              </div>
             </div>
             {settlement?.note && (
               <p className="text-sm text-muted-foreground"><span className="font-medium">Note:</span> {settlement.note}</p>
+            )}
+            {settlement && (
+              <Button variant="outline" onClick={downloadReceipt}>Download Receipt</Button>
             )}
 
             <div>
@@ -719,7 +836,7 @@ function MyPaymentsSummary() {
                   <TableHeader>
                     <TableRow>
                       <TableHead>Month</TableHead>
-                      <TableHead>Net Hours</TableHead>
+                      <TableHead>Net Salary</TableHead>
                       <TableHead className="text-right">Expense Paid</TableHead>
                       <TableHead className="text-right">Loan Paid</TableHead>
                     </TableRow>
