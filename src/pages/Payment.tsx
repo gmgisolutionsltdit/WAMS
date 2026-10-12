@@ -587,7 +587,7 @@ function MyPaymentsTab() {
             )}
             <div className="grid gap-4 md:grid-cols-3">
               <div className="rounded-md border p-3 space-y-2">
-                <div className="text-sm font-medium">Net Hours{employeeName ? "" : ""}</div>
+                <div className="text-sm font-medium">Net Salary{employeeName ? "" : ""}</div>
                 <div className="text-lg font-semibold">{fmtBDT(netHours)}</div>
                 <label className="flex items-center gap-2 text-sm">
                   <Checkbox checked={netHoursPaidNow} onCheckedChange={(v) => setNetHoursPaidNow(!!v)} />
@@ -688,7 +688,7 @@ function MyPaymentsSummary() {
           <>
             <div className="grid gap-4 md:grid-cols-3">
               <div className="rounded-md border p-3 space-y-2">
-                <div className="text-sm font-medium">Net Hours</div>
+                <div className="text-sm font-medium">Net Salary</div>
                 <div className="text-lg font-semibold">{fmtBDT(netHours)}</div>
                 <Badge variant="outline">
                   {!settlement ? "Not recorded yet" : settlement.net_hours_paid ? "Paid" : "Carried to next month"}
