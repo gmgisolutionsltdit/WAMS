@@ -214,7 +214,6 @@ export const PayrollAdjustments = ({ isAdmin }: { isAdmin: boolean }) => {
             <SummaryTile label="+ OT Payment" value={fmtBDT(otPaymentDisplay)} />
             <SummaryTile label="- Due Deduction" value={fmtBDT(-dueDeductionDisplay)} />
             <SummaryTile label="Net Adjustment" value={fmtBDT(finalSalary.netAdjustment)} />
-            <SummaryTile label="- Expense" value={fmtBDT(-recoveryTotal)} />
             {isAdmin && hasPendingDue ? (
               <>
                 <SummaryTile label="Current Applicable Salary" value={fmtBDT(finalSalary.currentApplicable)} highlight />
