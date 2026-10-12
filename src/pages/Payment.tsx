@@ -516,7 +516,7 @@ function MyPaymentsTab() {
   }, [selectedUserId, month]);
 
   const loanDue = loan ? Math.min(Number(loan.monthly_deduction), Number(loan.remaining_balance)) : 0;
-  const netPayment = finalSalaryNoExpense - expenseOutstanding - loanDue;
+  const netPayment = finalSalaryNoExpense + expenseOutstanding - loanDue;
 
   const submit = async () => {
     if (!user || !selectedUserId) return;
@@ -662,7 +662,7 @@ function MyPaymentsTab() {
               <div className="rounded-md border p-3 space-y-2">
                 <div className="text-sm font-medium">Net Payment</div>
                 <div className="text-lg font-semibold">{fmtBDT(netPayment)}</div>
-                <p className="text-xs text-muted-foreground">Final Salary (no Expense) − Expense Balance − Loan Due</p>
+                <p className="text-xs text-muted-foreground">Final Salary (no Expense) + Expense Balance − Loan Due</p>
               </div>
             </div>
             <div>
@@ -741,7 +741,7 @@ function MyPaymentsSummary() {
   }, [user?.id, month]);
 
   const loanDue = loan ? Math.min(Number(loan.monthly_deduction), Number(loan.remaining_balance)) : 0;
-  const netPayment = finalSalaryNoExpense - expenseOutstanding - loanDue;
+  const netPayment = finalSalaryNoExpense + expenseOutstanding - loanDue;
 
   const downloadReceipt = () => {
     downloadPaymentReceiptPDF({
@@ -811,7 +811,7 @@ function MyPaymentsSummary() {
               <div className="rounded-md border p-3 space-y-2">
                 <div className="text-sm font-medium">Net Payment</div>
                 <div className="text-lg font-semibold">{fmtBDT(netPayment)}</div>
-                <p className="text-xs text-muted-foreground">Final Salary (no Expense) − Expense Balance − Loan Due</p>
+                <p className="text-xs text-muted-foreground">Final Salary (no Expense) + Expense Balance − Loan Due</p>
               </div>
             </div>
             {settlement?.note && (
