@@ -324,3 +324,75 @@ export function downloadPayslipPDF(args: {
   const safeName = (profile.full_name || profile.email || "employee").replace(/[^a-z0-9]+/gi, "_");
   doc.save(`Payslip_${safeName}_${record.period_year}_${String(record.period_month).padStart(2, "0")}.pdf`);
 }
+
+/** A My Payments settlement, receipted as a simple one-page PDF for download. */
+export function downloadPaymentReceiptPDF(args: {
+  employeeName: string;
+  monthLabel: string;
+  finalSalary: number;
+  netAdjustment: number;
+  finalSalaryNoExpense: number;
+  expensePaid: number;
+  loanPaid: number;
+  netPayment: number;
+  note?: string | null;
+  companyName?: string;
+}) {
+  const { employeeName, monthLabel, finalSalary, netAdjustment, finalSalaryNoExpense, expensePaid, loanPaid, netPayment, note } = args;
+  const company = args.companyName || "Workforce & Attendance Management System (WAMS)";
+  const doc = new jsPDF({ unit: "pt", format: "a4" });
+  const left = 48;
+  let y = 56;
+
+  doc.setFontSize(18);
+  doc.text(company, left, y);
+  y += 22;
+  doc.setFontSize(13);
+  doc.text(`Payment Receipt — ${monthLabel}`, left, y);
+  y += 24;
+
+  doc.setFontSize(10);
+  doc.text(`Employee: ${employeeName}`, left, y);
+  y += 24;
+
+  doc.setDrawColor(180);
+  doc.line(left, y, 555, y);
+  y += 18;
+
+  const rows: Array<[string, string]> = [
+    ["Final Salary", fmtMoney(finalSalary)],
+    ["Net Adjustment", fmtMoney(netAdjustment)],
+    ["Final Salary (without Expense)", fmtMoney(finalSalaryNoExpense)],
+    ["Expense Paid", fmtMoney(expensePaid)],
+    ["Loan Paid", fmtMoney(loanPaid)],
+  ];
+  doc.setFontSize(11);
+  rows.forEach(([k, v]) => {
+    doc.text(k, left, y);
+    doc.text(v, 555, y, { align: "right" });
+    y += 18;
+  });
+
+  y += 6;
+  doc.setDrawColor(120);
+  doc.line(left, y, 555, y);
+  y += 22;
+  doc.setFontSize(13);
+  doc.text("NET PAYMENT", left, y);
+  doc.text(fmtMoney(netPayment), 555, y, { align: "right" });
+  y += 26;
+
+  if (note) {
+    doc.setFontSize(10);
+    doc.text(`Note: ${note}`, left, y);
+    y += 18;
+  }
+
+  doc.setFontSize(9);
+  doc.setTextColor(120);
+  doc.text(`Generated: ${new Date().toLocaleString()}`, left, y);
+
+  const safeName = employeeName.replace(/[^a-z0-9]+/gi, "_");
+  const safeMonth = monthLabel.replace(/[^a-z0-9]+/gi, "_");
+  doc.save(`Receipt_${safeName}_${safeMonth}.pdf`);
+}
