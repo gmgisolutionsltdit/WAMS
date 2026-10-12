@@ -527,7 +527,7 @@ function MyPaymentsTab() {
       const { error } = await supabase.from("payroll_settlements").upsert({
         user_id: selectedUserId,
         month: `${month}-01`,
-        net_hours_amount: netAdjustment,
+        net_hours_amount: finalSalaryNoExpense,
         net_hours_paid: netHoursPaidNow,
         expense_amount_paid: expensePaid,
         loan_amount_paid: loanPaid,
@@ -624,25 +624,17 @@ function MyPaymentsTab() {
                     <span className="text-muted-foreground">Final Salary</span>
                     <span className="font-semibold">{fmtBDT(finalSalary)}</span>
                   </div>
-                  <label className="flex items-center gap-2 text-xs">
-                    <Checkbox checked={netHoursPaidNow} onCheckedChange={(v) => setNetHoursPaidNow(!!v)} />
-                    Pay now (unchecked = carry to next month)
-                  </label>
                   <div className="flex items-center justify-between text-sm pt-1">
                     <span className="text-muted-foreground">Net Adjustment</span>
                     <span className="font-semibold">{fmtBDT(netAdjustment)}</span>
                   </div>
-                  <label className="flex items-center gap-2 text-xs">
-                    <Checkbox checked={netHoursPaidNow} onCheckedChange={(v) => setNetHoursPaidNow(!!v)} />
-                    Pay now (unchecked = carry to next month)
-                  </label>
                   <div className="flex items-center justify-between text-sm pt-1">
                     <span className="text-muted-foreground">Final Salary (no Expense)</span>
                     <span className="font-semibold">{fmtBDT(finalSalaryNoExpense)}</span>
                   </div>
                   <label className="flex items-center gap-2 text-xs">
                     <Checkbox checked={netHoursPaidNow} onCheckedChange={(v) => setNetHoursPaidNow(!!v)} />
-                    Pay now (unchecked = carry to next month)
+                    Adjust Now (unchecked = carry to next month)
                   </label>
                 </div>
               </div>
@@ -651,7 +643,7 @@ function MyPaymentsTab() {
                 <div className="text-lg font-semibold">{fmtBDT(expenseOutstanding)}</div>
                 <label className="flex items-center gap-2 text-xs">
                   <Checkbox checked={expensePaidNow} onCheckedChange={(v) => setExpensePaidNow(!!v)} />
-                  Pay now (unchecked = carry to next month)
+                  Adjust Now (unchecked = carry to next month)
                 </label>
                 <Input type="number" value={expenseAmount} onChange={(e) => setExpenseAmount(e.target.value)} disabled={!expensePaidNow} />
               </div>
@@ -662,7 +654,7 @@ function MyPaymentsTab() {
                 </div>
                 <label className="flex items-center gap-2 text-xs">
                   <Checkbox checked={loanPaidNow} onCheckedChange={(v) => setLoanPaidNow(!!v)} disabled={!loan} />
-                  Pay now (unchecked = carry to next month)
+                  Adjust Now (unchecked = carry to next month)
                 </label>
                 <Input type="number" value={loanAmount} onChange={(e) => setLoanAmount(e.target.value)} disabled={!loan || !loanPaidNow} />
                 {loan && <p className="text-xs text-muted-foreground">{fmtBDT(loan.remaining_balance)} remaining balance</p>}
