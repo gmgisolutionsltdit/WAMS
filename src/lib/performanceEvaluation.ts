@@ -51,13 +51,52 @@ export const EVALUATION_SECTIONS: { key: string; title: string; criteria: string
 
 export const TOTAL_CRITERIA_COUNT = EVALUATION_SECTIONS.reduce((n, s) => n + s.criteria.length, 0);
 
-/** What each 1-5 score means when rating a single criterion. */
-export const SCORE_SCALE: { score: number; label: string; description: string }[] = [
-  { score: 1, label: "Poor", description: "Consistently fails to meet expectations" },
-  { score: 2, label: "Below Average", description: "Occasionally meets expectations; needs improvement" },
-  { score: 3, label: "Satisfactory", description: "Meets expectations consistently" },
-  { score: 4, label: "Good", description: "Frequently exceeds expectations" },
-  { score: 5, label: "Excellent", description: "Consistently exceeds expectations" },
+/**
+ * Section 6: the four final Performance Categories an evaluation's average
+ * score resolves to (via categoryForAverage) — what each one means and the
+ * behaviors expected at that level. Shown as the reference legend in the
+ * Evaluate form, the View Answers popup and its PDF.
+ */
+export const PERFORMANCE_CATEGORY_GUIDE: { category: EvaluationCategory; description: string; behaviors: string[] }[] = [
+  {
+    category: "Outstanding",
+    description: "Exceptional performance exceeding expectations.",
+    behaviors: [
+      "Consistently exceeds targets and goals.",
+      "Demonstrates leadership and innovation in the role.",
+      "Highly proactive, often leading initiatives beyond their scope.",
+      "Plays a critical role in team success and company growth.",
+    ],
+  },
+  {
+    category: "Above Expectation",
+    description: "Performance consistently meeting and occasionally exceeding expectations.",
+    behaviors: [
+      "Regularly meets and exceeds goals in their job.",
+      "Contributes to team success with minimal supervision.",
+      "Takes on additional responsibilities and is reliable.",
+      "Actively seek opportunities for improvement.",
+    ],
+  },
+  {
+    category: "Meet Expectation",
+    description: "Performance meets the required standards and job expectations.",
+    behaviors: [
+      "Consistently meets job requirements and performs as expected.",
+      "Follows company guidelines and completes tasks on time.",
+      "Reliable, with consistent performance but limited initiative beyond assigned tasks.",
+    ],
+  },
+  {
+    category: "Below Expectation",
+    description: "Performance does not meet the required standards.",
+    behaviors: [
+      "Fails to meet set goals and deadlines.",
+      "Requires frequent supervision or guidance.",
+      "Shows a lack of initiative and contributes minimally to team success.",
+      "Needs improvement in critical job-related skills.",
+    ],
+  },
 ];
 
 export type CriterionScore = {
@@ -134,6 +173,10 @@ const INCREMENT_POLICY: Record<SalaryCategory, Record<EvaluationCategory, Increm
 export const recommendedIncrementRange = (salaryCategory: SalaryCategory, performanceCategory: EvaluationCategory): IncrementRange =>
   INCREMENT_POLICY[salaryCategory][performanceCategory];
 
+/** "Above 20 to 30%" (min > 0) or "0 to 5% or freeze" (min = 0, i.e. Below Expectation) — the policy table's own wording. */
+export const formatIncrementRange = (range: IncrementRange): string =>
+  range.min > 0 ? `Above ${range.min} to ${range.max}%` : `0 to ${range.max}% or freeze`;
+
 /** Final Section 6 category when an employee has multiple evaluators, combined via the admin-assigned weight on each. */
 export const weightedFinalCategory = (evaluations: { average_score: number; weight: number }[]): {
   weightedAverage: number;
@@ -207,32 +250,34 @@ export function downloadEvaluationAnswersPDF(args: {
   doc.text(`Category: ${category}`, left, y);
   y += 24;
 
-  // Score scale legend, same as the View Answers popup's table.
-  ensureSpace(20 + SCORE_SCALE.length * 14);
+  // Performance Category legend, same as the View Answers popup's table.
+  ensureSpace(20);
   doc.setFontSize(11);
-  doc.text("Score Scale", left, y);
+  doc.text("Performance Category", left, y);
   y += 16;
-  const scoreCol = left;
-  const meaningCol = left + 40;
-  const descCol = left + 150;
+  const catCol = left;
+  const descCol = left + 90;
+  const behaviorCol = left + 230;
   doc.setFontSize(9);
   doc.setFont("helvetica", "bold");
-  doc.text("Score", scoreCol, y);
-  doc.text("Meaning", meaningCol, y);
+  doc.text("Category", catCol, y);
   doc.text("Description", descCol, y);
+  doc.text("Expected Contributions and Behaviors", behaviorCol, y);
   doc.setFont("helvetica", "normal");
   y += 12;
   doc.setDrawColor(210);
   doc.line(left, y - 9, right, y - 9);
-  SCORE_SCALE.forEach((s) => {
-    ensureSpace(14);
-    doc.text(String(s.score), scoreCol, y);
-    doc.text(s.label, meaningCol, y);
-    const descLines = doc.splitTextToSize(s.description, right - descCol);
+  PERFORMANCE_CATEGORY_GUIDE.forEach((c) => {
+    const descLines = doc.splitTextToSize(c.description, behaviorCol - descCol - 8);
+    const behaviorLines = c.behaviors.flatMap((b) => doc.splitTextToSize(`- ${b}`, right - behaviorCol));
+    const rowLines = Math.max(1, descLines.length, behaviorLines.length);
+    ensureSpace(rowLines * 11 + 4);
+    doc.text(c.category, catCol, y);
     doc.text(descLines, descCol, y);
-    y += Math.max(12, descLines.length * 11);
+    doc.text(behaviorLines, behaviorCol, y);
+    y += rowLines * 11 + 6;
   });
-  y += 12;
+  y += 10;
 
   EVALUATION_SECTIONS.forEach((section) => {
     ensureSpace(30);
