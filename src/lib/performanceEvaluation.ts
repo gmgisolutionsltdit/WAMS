@@ -207,6 +207,33 @@ export function downloadEvaluationAnswersPDF(args: {
   doc.text(`Category: ${category}`, left, y);
   y += 24;
 
+  // Score scale legend, same as the View Answers popup's table.
+  ensureSpace(20 + SCORE_SCALE.length * 14);
+  doc.setFontSize(11);
+  doc.text("Score Scale", left, y);
+  y += 16;
+  const scoreCol = left;
+  const meaningCol = left + 40;
+  const descCol = left + 150;
+  doc.setFontSize(9);
+  doc.setFont("helvetica", "bold");
+  doc.text("Score", scoreCol, y);
+  doc.text("Meaning", meaningCol, y);
+  doc.text("Description", descCol, y);
+  doc.setFont("helvetica", "normal");
+  y += 12;
+  doc.setDrawColor(210);
+  doc.line(left, y - 9, right, y - 9);
+  SCORE_SCALE.forEach((s) => {
+    ensureSpace(14);
+    doc.text(String(s.score), scoreCol, y);
+    doc.text(s.label, meaningCol, y);
+    const descLines = doc.splitTextToSize(s.description, right - descCol);
+    doc.text(descLines, descCol, y);
+    y += Math.max(12, descLines.length * 11);
+  });
+  y += 12;
+
   EVALUATION_SECTIONS.forEach((section) => {
     ensureSpace(30);
     doc.setFontSize(12);
