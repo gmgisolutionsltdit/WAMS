@@ -455,7 +455,7 @@ function MyPaymentsTab() {
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
 
-  const [finalSalary, setFinalSalary] = useState(0);
+  const [grossSalary, setGrossSalary] = useState(0);
   const [netAdjustment, setNetAdjustment] = useState(0);
   const [finalSalaryNoExpense, setFinalSalaryNoExpense] = useState(0);
   const [loan, setLoan] = useState<{ id: string; monthly_deduction: number; remaining_balance: number } | null>(null);
@@ -501,7 +501,7 @@ function MyPaymentsTab() {
       ]);
 
       const row = rows[0];
-      setFinalSalary(row ? row.final : 0);
+      setGrossSalary(row ? row.gross : 0);
       setNetAdjustment(row ? row.netAdjustment : 0);
       setFinalSalaryNoExpense(row ? row.final + row.recoveryTotal : 0);
       setLoan(loanRow || null);
@@ -597,7 +597,7 @@ function MyPaymentsTab() {
     downloadPaymentReceiptPDF({
       employeeName,
       monthLabel: format(new Date(`${month}-01`), "MMMM yyyy"),
-      finalSalary,
+      finalSalary: grossSalary,
       netAdjustment,
       finalSalaryNoExpense,
       expensePaid: Number(expenseAmount) || 0,
@@ -644,7 +644,7 @@ function MyPaymentsTab() {
                 <div className="space-y-1">
                   <div className="flex items-center justify-between text-sm">
                     <span className="text-muted-foreground">Gross Salary</span>
-                    <span className="font-semibold">{fmtBDT(finalSalary)}</span>
+                    <span className="font-semibold">{fmtBDT(grossSalary)}</span>
                   </div>
                   <div className="flex items-center justify-between text-sm pt-1">
                     <span className="text-muted-foreground">Net Adjustment</span>
@@ -724,7 +724,7 @@ function MyPaymentsSummary() {
   const { user } = useAuth();
   const [month, setMonth] = useState(() => format(new Date(), "yyyy-MM"));
   const [loading, setLoading] = useState(false);
-  const [finalSalary, setFinalSalary] = useState(0);
+  const [grossSalary, setGrossSalary] = useState(0);
   const [netAdjustment, setNetAdjustment] = useState(0);
   const [finalSalaryNoExpense, setFinalSalaryNoExpense] = useState(0);
   const [loan, setLoan] = useState<{ monthly_deduction: number; remaining_balance: number } | null>(null);
@@ -754,7 +754,7 @@ function MyPaymentsSummary() {
       ]);
 
       const row = rows[0];
-      setFinalSalary(row ? row.final : 0);
+      setGrossSalary(row ? row.gross : 0);
       setNetAdjustment(row ? row.netAdjustment : 0);
       setFinalSalaryNoExpense(row ? row.final + row.recoveryTotal : 0);
       setLoan(loanRow || null);
@@ -778,7 +778,7 @@ function MyPaymentsSummary() {
     downloadPaymentReceiptPDF({
       employeeName,
       monthLabel: format(new Date(`${month}-01`), "MMMM yyyy"),
-      finalSalary,
+      finalSalary: grossSalary,
       netAdjustment,
       finalSalaryNoExpense,
       expensePaid: Number(settlement?.expense_amount_paid) || 0,
@@ -811,7 +811,7 @@ function MyPaymentsSummary() {
                 <div className="space-y-1">
                   <div className="flex items-center justify-between text-sm">
                     <span className="text-muted-foreground">Gross Salary</span>
-                    <span className="font-semibold">{fmtBDT(finalSalary)}</span>
+                    <span className="font-semibold">{fmtBDT(grossSalary)}</span>
                   </div>
                   <div className="flex items-center justify-between text-sm">
                     <span className="text-muted-foreground">Net Adjustment</span>

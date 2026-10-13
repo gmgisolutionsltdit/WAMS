@@ -360,7 +360,7 @@ export function downloadPaymentReceiptPDF(args: {
   y += 18;
 
   const rows: Array<[string, string]> = [
-    ["Final Salary", fmtMoney(finalSalary)],
+    ["Gross Salary", fmtMoney(finalSalary)],
     ["Net Adjustment", fmtMoney(netAdjustment)],
     ["Final Salary (without Expense)", fmtMoney(finalSalaryNoExpense)],
     ["Expense Paid", fmtMoney(expensePaid)],
