@@ -13,7 +13,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, Dialog
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
-import { Plus, Check, X, FileText, AlertTriangle, Loader2 } from "lucide-react";
+import { Plus, Check, X, FileText, AlertTriangle, Loader2, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 import { format } from "date-fns";
 import { notifyManagersAndAdmins, notifyEmployee } from "@/lib/notifications";
@@ -24,6 +24,25 @@ import { computeMonthlySalaryRows, type SalaryMonthRow } from "@/lib/salaryMonth
 import { uploadAttachments } from "@/lib/attachments";
 import AttachmentsInput from "@/components/AttachmentsInput";
 import AttachmentThumbnails from "@/components/AttachmentThumbnails";
+
+type PayrollSettlementRow = {
+  id: string;
+  user_id: string;
+  month: string;
+  net_hours_amount: number;
+  net_hours_paid: boolean;
+  expense_amount_paid: number;
+  loan_amount_paid: number;
+  note: string | null;
+  attachments: string[] | null;
+  paid_by: string;
+  approval_status: "pending_approval" | "approved" | "rejected";
+  approved_by: string | null;
+  approved_at: string | null;
+  rejection_reason: string | null;
+  created_at: string;
+  profiles?: { full_name: string | null; email: string | null } | null;
+};
 
 const Payment = () => {
   const { user, role } = useAuth();
@@ -165,6 +184,17 @@ const Payment = () => {
 
   const isResigned = (loan: any) => loan.profiles?.employee_status === "Resigned";
 
+  const deleteLoan = async (loanId: string) => {
+    if (!window.confirm("Delete this loan request? This cannot be undone.")) return;
+    // RLS blocking this doesn't error — it just matches 0 rows, which would
+    // otherwise look like silent success while the row stays put.
+    const { data, error } = await supabase.from("personal_advances").delete().eq("id", loanId).select("id");
+    if (error) { toast.error(error.message); return; }
+    if (!data?.length) { toast.error("Delete didn't go through — you may not have permission to delete this."); return; }
+    toast.success("Loan deleted");
+    fetchAll();
+  };
+
   const renderRow = (loan: any, showEmployee: boolean) => (
     <TableRow key={loan.id}>
       {showEmployee && <TableCell>{loan.profiles?.full_name || loan.profiles?.email || "—"}</TableCell>}
@@ -200,6 +230,11 @@ const Payment = () => {
           )}
           {loan.status === "approved" && Number(loan.remaining_balance) > 0 && canApprove && loan.user_id !== user?.id && (
             <Button size="sm" variant="outline" onClick={() => setDeductDialogId(loan.id)}>Record This Month's Deduction</Button>
+          )}
+          {isAdmin && (
+            <Button size="icon" variant="ghost" className="text-destructive hover:text-destructive" onClick={() => deleteLoan(loan.id)}>
+              <Trash2 className="h-4 w-4" />
+            </Button>
           )}
         </div>
       </TableCell>
@@ -542,7 +577,7 @@ function MyPaymentsTab() {
 
       const loanPaid = loanPaidNow ? Math.max(0, Number(loanAmount) || 0) : 0;
       const expensePaid = expensePaidNow ? Math.max(0, Number(expenseAmount) || 0) : 0;
-      const { error } = await supabase.from("payroll_settlements").upsert({
+      const { data: settlement, error } = await supabase.from("payroll_settlements").upsert({
         user_id: selectedUserId,
         month: `${month}-01`,
         net_hours_amount: finalSalaryNoExpense,
@@ -552,10 +587,17 @@ function MyPaymentsTab() {
         note: note || null,
         attachments: allAttachments,
         paid_by: user.id,
-      }, { onConflict: "user_id,month" });
+        // Every (re-)recording opens a fresh approval round — a stale
+        // approve/reject from a previous amount shouldn't carry over.
+        approval_status: "pending_approval",
+        approved_by: null,
+        approved_at: null,
+        rejection_reason: null,
+      }, { onConflict: "user_id,month" }).select("*").single();
       if (error) throw error;
       setExistingAttachments(allAttachments);
       setAttachments([]);
+      setExistingSettlement(settlement || null);
 
       // Apply the loan portion to the ledger immediately, same mechanism as
       // the existing "Record This Month's Deduction" flow - only the delta
@@ -576,13 +618,35 @@ function MyPaymentsTab() {
       }
 
       toast.success("Payment recorded");
+      const monthLabel = format(new Date(`${month}-01`), "MMMM yyyy");
+      const recordedEmployeeName = employees.find((e) => e.id === selectedUserId)?.full_name
+        || employees.find((e) => e.id === selectedUserId)?.email || "An employee";
+      const summary = `Net Salary ${netHoursPaidNow ? "paid" : "carried to next month"}, Expense ${fmtBDT(expensePaid)}, Loan ${fmtBDT(loanPaid)}.`;
+      // Employee and their manager can both approve/reject it (whoever acts
+      // first settles it) — admins are only informed, not asked to act.
       await notifyEmployee(
         selectedUserId,
-        "Payment Recorded",
-        `Your ${format(new Date(`${month}-01`), "MMMM yyyy")} payment was recorded: Net Salary ${netHoursPaidNow ? "paid" : "carried to next month"}, Expense ${fmtBDT(expensePaid)}, Loan ${fmtBDT(loanPaid)}.`,
-        undefined,
-        { route: "/payment", type: "payroll_settlement" },
+        "Payment Recorded — Approval Needed",
+        `Your ${monthLabel} payment was recorded: ${summary} Please review and approve.`,
+        settlement?.id,
+        { route: "/payment", type: "payroll_settlement_approval" },
       );
+      await notifyManagersAndAdmins(
+        `${recordedEmployeeName}'s Payment Recorded — Approval Needed`,
+        `${recordedEmployeeName}'s ${monthLabel} payment was recorded: ${summary} Please review and approve.`,
+        settlement?.id,
+        { route: "/payment", type: "payroll_settlement_approval", requesterId: selectedUserId },
+      );
+      const { data: admins } = await supabase.from("user_roles").select("user_id").eq("role", "admin");
+      const adminRows = (admins || []).map((r) => ({
+        user_id: r.user_id,
+        type: "payroll_settlement",
+        title: "Payment Recorded",
+        message: `${recordedEmployeeName}'s ${monthLabel} payment was recorded: ${summary}`,
+        related_id: settlement?.id || null,
+        route: "/payment",
+      }));
+      if (adminRows.length) await supabase.from("notifications").insert(adminRows);
     } catch (e) {
       toast.error(e instanceof Error ? e.message : "Failed to record payment");
     } finally {
@@ -729,9 +793,13 @@ function MyPaymentsSummary() {
   const [finalSalaryNoExpense, setFinalSalaryNoExpense] = useState(0);
   const [loan, setLoan] = useState<{ monthly_deduction: number; remaining_balance: number } | null>(null);
   const [expenseOutstanding, setExpenseOutstanding] = useState(0);
-  const [settlement, setSettlement] = useState<any>(null);
+  const [settlement, setSettlement] = useState<PayrollSettlementRow | null>(null);
   const [history, setHistory] = useState<any[]>([]);
   const [employeeName, setEmployeeName] = useState("");
+  const [teamPending, setTeamPending] = useState<PayrollSettlementRow[]>([]);
+  const [rejectingId, setRejectingId] = useState<string | null>(null);
+  const [rejectReason, setRejectReason] = useState("");
+  const [acting, setActing] = useState(false);
 
   useEffect(() => {
     if (!user?.id || !month) return;
@@ -770,6 +838,73 @@ function MyPaymentsSummary() {
       setLoading(false);
     })();
   }, [user?.id, month]);
+
+  // Team members' settlements awaiting this user's approval as their manager
+  // (RLS only returns rows can_approve() allows — nothing extra shows up for
+  // a plain employee who manages no one).
+  const fetchTeamPending = async () => {
+    if (!user?.id) return;
+    const { data } = await supabase.from("payroll_settlements")
+      .select("*, profiles!payroll_settlements_user_id_fkey(full_name,email)")
+      .eq("approval_status", "pending_approval")
+      .neq("user_id", user.id)
+      .order("created_at", { ascending: false });
+    setTeamPending(data || []);
+  };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  useEffect(() => { fetchTeamPending(); }, [user?.id]);
+
+  const nameFor = (row: PayrollSettlementRow) =>
+    row.user_id === user?.id ? (employeeName || "Your") : (row.profiles?.full_name || row.profiles?.email || "This employee's");
+
+  const approveSettlement = async (row: PayrollSettlementRow) => {
+    if (!user) return;
+    setActing(true);
+    const { data, error } = await supabase.from("payroll_settlements").update({
+      approval_status: "approved", approved_by: user.id, approved_at: new Date().toISOString(),
+    }).eq("id", row.id).select("id");
+    setActing(false);
+    if (error) return toast.error(error.message);
+    if (!data?.length) return toast.error("Approve didn't go through — you may not have permission to approve this.");
+    toast.success("Payment approved");
+    await notifyEmployee(
+      row.paid_by,
+      "Payment Approved",
+      `${nameFor(row)} ${format(new Date(row.month), "MMMM yyyy")} payment was approved.`,
+      row.id,
+      { route: "/payment", type: "payroll_settlement_update" },
+    );
+    if (row.user_id === user.id) {
+      setSettlement((s) => (s ? { ...s, approval_status: "approved", approved_by: user.id, approved_at: new Date().toISOString() } : s));
+    }
+    fetchTeamPending();
+  };
+
+  const rejectSettlement = async (row: PayrollSettlementRow) => {
+    if (!user) return;
+    if (!rejectReason.trim()) return toast.error("A reason is required to reject.");
+    setActing(true);
+    const { data, error } = await supabase.from("payroll_settlements").update({
+      approval_status: "rejected", approved_by: user.id, approved_at: new Date().toISOString(), rejection_reason: rejectReason.trim(),
+    }).eq("id", row.id).select("id");
+    setActing(false);
+    if (error) return toast.error(error.message);
+    if (!data?.length) return toast.error("Reject didn't go through — you may not have permission to reject this.");
+    toast.success("Payment rejected");
+    await notifyEmployee(
+      row.paid_by,
+      "Payment Rejected",
+      `${nameFor(row)} ${format(new Date(row.month), "MMMM yyyy")} payment was rejected: ${rejectReason.trim()}`,
+      row.id,
+      { route: "/payment", type: "payroll_settlement_update" },
+    );
+    setRejectingId(null);
+    setRejectReason("");
+    if (row.user_id === user.id) {
+      setSettlement((s) => (s ? { ...s, approval_status: "rejected", rejection_reason: rejectReason.trim() } : s));
+    }
+    fetchTeamPending();
+  };
 
   const loanDue = loan ? Math.min(Number(loan.monthly_deduction), Number(loan.remaining_balance)) : 0;
   const netPayment = finalSalaryNoExpense + expenseOutstanding - loanDue;
@@ -855,7 +990,81 @@ function MyPaymentsSummary() {
               </div>
             )}
             {settlement && (
+              <div className="flex flex-wrap items-center gap-2">
+                <Badge
+                  className={
+                    settlement.approval_status === "approved" ? "bg-success text-white" :
+                    settlement.approval_status === "rejected" ? "bg-destructive text-white" : ""
+                  }
+                  variant={settlement.approval_status === "pending_approval" ? "outline" : undefined}
+                >
+                  {settlement.approval_status === "pending_approval" ? "Pending Your Approval"
+                    : settlement.approval_status === "approved" ? "Approved" : "Rejected"}
+                </Badge>
+                {settlement.approval_status === "pending_approval" && (
+                  <>
+                    <Button size="sm" variant="outline" disabled={acting} onClick={() => approveSettlement(settlement)}>
+                      <Check className="h-4 w-4 mr-1 text-success" />Approve
+                    </Button>
+                    <Button size="sm" variant="outline" disabled={acting} onClick={() => setRejectingId(settlement.id)}>
+                      <X className="h-4 w-4 mr-1 text-destructive" />Reject
+                    </Button>
+                  </>
+                )}
+                {settlement.approval_status === "rejected" && settlement.rejection_reason && (
+                  <span className="text-xs text-muted-foreground">Reason: {settlement.rejection_reason}</span>
+                )}
+              </div>
+            )}
+            {rejectingId === settlement?.id && (
+              <div className="flex flex-wrap items-end gap-2">
+                <div className="flex-1 min-w-[200px]">
+                  <Label className="text-xs">Reason for rejecting (required)</Label>
+                  <Textarea value={rejectReason} onChange={(e) => setRejectReason(e.target.value)} />
+                </div>
+                <Button size="sm" variant="destructive" disabled={acting} onClick={() => rejectSettlement(settlement)}>Confirm Reject</Button>
+                <Button size="sm" variant="ghost" onClick={() => { setRejectingId(null); setRejectReason(""); }}>Cancel</Button>
+              </div>
+            )}
+            {settlement && (
               <Button variant="outline" onClick={downloadReceipt}>Download Receipt</Button>
+            )}
+
+            {teamPending.length > 0 && (
+              <div className="space-y-2">
+                <p className="text-sm font-medium">Team Payments Pending Your Approval</p>
+                {teamPending.map((row) => (
+                  <div key={row.id} className="rounded-md border p-3 space-y-2">
+                    <div className="flex flex-wrap items-center justify-between gap-2">
+                      <div className="text-sm">
+                        <span className="font-medium">{row.profiles?.full_name || row.profiles?.email || "—"}</span>
+                        {" · "}{format(new Date(row.month), "MMMM yyyy")}
+                      </div>
+                      <div className="flex gap-2">
+                        <Button size="sm" variant="outline" disabled={acting} onClick={() => approveSettlement(row)}>
+                          <Check className="h-4 w-4 mr-1 text-success" />Approve
+                        </Button>
+                        <Button size="sm" variant="outline" disabled={acting} onClick={() => setRejectingId(row.id)}>
+                          <X className="h-4 w-4 mr-1 text-destructive" />Reject
+                        </Button>
+                      </div>
+                    </div>
+                    <p className="text-xs text-muted-foreground">
+                      Net Salary {row.net_hours_paid ? `${fmtBDT(row.net_hours_amount)} paid` : "carried to next month"}, Expense {fmtBDT(row.expense_amount_paid)}, Loan {fmtBDT(row.loan_amount_paid)}.
+                    </p>
+                    {rejectingId === row.id && (
+                      <div className="flex flex-wrap items-end gap-2">
+                        <div className="flex-1 min-w-[200px]">
+                          <Label className="text-xs">Reason for rejecting (required)</Label>
+                          <Textarea value={rejectReason} onChange={(e) => setRejectReason(e.target.value)} />
+                        </div>
+                        <Button size="sm" variant="destructive" disabled={acting} onClick={() => rejectSettlement(row)}>Confirm Reject</Button>
+                        <Button size="sm" variant="ghost" onClick={() => { setRejectingId(null); setRejectReason(""); }}>Cancel</Button>
+                      </div>
+                    )}
+                  </div>
+                ))}
+              </div>
             )}
 
             <div>
@@ -1256,6 +1465,17 @@ function ExpenseClaimsTab() {
     fetchClaims();
   };
 
+  const deleteClaim = async (id: string) => {
+    if (!window.confirm("Delete this claim? This cannot be undone.")) return;
+    // RLS blocking this doesn't error — it just matches 0 rows, which would
+    // otherwise look like silent success while the row stays put.
+    const { data, error } = await supabase.from("expense_claims").delete().eq("id", id).select("id");
+    if (error) { toast.error(error.message); return; }
+    if (!data?.length) { toast.error("Delete didn't go through — you may not have permission to delete this."); return; }
+    toast.success("Claim deleted");
+    fetchClaims();
+  };
+
   // An explicit date range is more specific than Month, so it takes over
   // whenever either end is set — the two controls are not combined.
   const effectiveRange = useMemo(() => {
@@ -1379,12 +1599,13 @@ function ExpenseClaimsTab() {
         onApprove={(id: string) => decide(id, "approved")}
         onReject={(id: string) => decide(id, "rejected")}
         onTogglePaid={markPaid}
+        onDelete={deleteClaim}
       />
     </div>
   );
 }
 
-const ClaimTable = ({ claims, showEmployee, onApprove, onReject, onTogglePaid, isAdmin, canApprove, currentUserId }: any) => (
+const ClaimTable = ({ claims, showEmployee, onApprove, onReject, onTogglePaid, onDelete, isAdmin, canApprove, currentUserId }: any) => (
   <Card>
     <CardHeader><CardTitle className="text-base">Claim History</CardTitle></CardHeader>
     <CardContent>
@@ -1429,12 +1650,17 @@ const ClaimTable = ({ claims, showEmployee, onApprove, onReject, onTogglePaid, i
                   {c.status === "pending" ? "—" : (c.approver?.full_name || c.approver?.email || "—")}
                 </TableCell>
                 <TableCell>
-                  {canDecide && (
-                    <div className="flex gap-1">
-                      <Button size="icon" variant="outline" onClick={()=>onApprove?.(c.id)}><Check className="h-4 w-4 text-success" /></Button>
-                      <Button size="icon" variant="outline" onClick={()=>onReject?.(c.id)}><X className="h-4 w-4 text-destructive" /></Button>
-                    </div>
-                  )}
+                  <div className="flex gap-1">
+                    {canDecide && (
+                      <>
+                        <Button size="icon" variant="outline" onClick={()=>onApprove?.(c.id)}><Check className="h-4 w-4 text-success" /></Button>
+                        <Button size="icon" variant="outline" onClick={()=>onReject?.(c.id)}><X className="h-4 w-4 text-destructive" /></Button>
+                      </>
+                    )}
+                    {isAdmin && (
+                      <Button size="icon" variant="ghost" className="text-destructive hover:text-destructive" onClick={()=>onDelete?.(c.id)}><Trash2 className="h-4 w-4" /></Button>
+                    )}
+                  </div>
                 </TableCell>
               </TableRow>
               );
