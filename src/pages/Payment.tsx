@@ -672,7 +672,7 @@ function MyPaymentsTab() {
               <div className="rounded-md border p-3 space-y-2">
                 <div className="text-sm font-medium">Loan Due</div>
                 <div className="text-lg font-semibold">
-                  {loan ? fmtBDT(loanDue) : "No active loan"}
+                  {loan ? fmtBDT(-loanDue) : "No active loan"}
                 </div>
                 <label className="flex items-center gap-2 text-xs">
                   <Checkbox checked={loanPaidNow} onCheckedChange={(v) => setLoanPaidNow(!!v)} disabled={!loan} />
@@ -834,7 +834,7 @@ function MyPaymentsSummary() {
               <div className="rounded-md border p-3 space-y-2">
                 <div className="text-sm font-medium">Loan Due</div>
                 <div className="text-lg font-semibold">
-                  {loan ? fmtBDT(loanDue) : "No active loan"}
+                  {loan ? fmtBDT(-loanDue) : "No active loan"}
                 </div>
                 <Badge variant="outline">{settlement ? `Paid ${fmtBDT(settlement.loan_amount_paid)}` : "Not recorded yet"}</Badge>
                 {loan && <p className="text-xs text-muted-foreground">{fmtBDT(loan.remaining_balance)} remaining balance</p>}
