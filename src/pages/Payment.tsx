@@ -21,6 +21,9 @@ import { applyDuePersonalAdvanceDeduction, downloadPaymentReceiptPDF, type Payro
 import { PayrollAdjustments } from "@/components/PayrollAdjustments";
 import { monthsInRange, fmtBDT } from "@/lib/payrollAdjustments";
 import { computeMonthlySalaryRows, type SalaryMonthRow } from "@/lib/salaryMonthly";
+import { uploadAttachments } from "@/lib/attachments";
+import AttachmentsInput from "@/components/AttachmentsInput";
+import AttachmentThumbnails from "@/components/AttachmentThumbnails";
 
 const Payment = () => {
   const { user, role } = useAuth();
@@ -460,6 +463,9 @@ function MyPaymentsTab() {
   const [expenseAmount, setExpenseAmount] = useState("0");
   const [loanAmount, setLoanAmount] = useState("0");
   const [note, setNote] = useState("");
+  const [attachments, setAttachments] = useState<File[]>([]);
+  const [existingAttachments, setExistingAttachments] = useState<string[]>([]);
+  const [uploading, setUploading] = useState(false);
 
   useEffect(() => {
     (async () => {
@@ -511,6 +517,8 @@ function MyPaymentsTab() {
       setExpenseOutstanding(outstanding);
       setExpenseAmount(String(settlement ? settlement.expense_amount_paid : Math.max(0, outstanding)));
       setNote(settlement?.note || "");
+      setExistingAttachments(settlement?.attachments || []);
+      setAttachments([]);
       setLoading(false);
     })();
   }, [selectedUserId, month]);
@@ -522,6 +530,11 @@ function MyPaymentsTab() {
     if (!user || !selectedUserId) return;
     setSaving(true);
     try {
+      setUploading(true);
+      const newUrls = attachments.length ? await uploadAttachments(attachments, user.id) : [];
+      setUploading(false);
+      const allAttachments = [...existingAttachments, ...newUrls];
+
       const loanPaid = loanPaidNow ? Math.max(0, Number(loanAmount) || 0) : 0;
       const expensePaid = expensePaidNow ? Math.max(0, Number(expenseAmount) || 0) : 0;
       const { error } = await supabase.from("payroll_settlements").upsert({
@@ -532,9 +545,12 @@ function MyPaymentsTab() {
         expense_amount_paid: expensePaid,
         loan_amount_paid: loanPaid,
         note: note || null,
+        attachments: allAttachments,
         paid_by: user.id,
       }, { onConflict: "user_id,month" });
       if (error) throw error;
+      setExistingAttachments(allAttachments);
+      setAttachments([]);
 
       // Apply the loan portion to the ledger immediately, same mechanism as
       // the existing "Record This Month's Deduction" flow - only the delta
@@ -566,6 +582,7 @@ function MyPaymentsTab() {
       toast.error(e instanceof Error ? e.message : "Failed to record payment");
     } finally {
       setSaving(false);
+      setUploading(false);
     }
   };
 
@@ -669,8 +686,17 @@ function MyPaymentsTab() {
               <Label className="text-xs">Note (optional)</Label>
               <Textarea value={note} onChange={(e) => setNote(e.target.value)} />
             </div>
+            <div>
+              {existingAttachments.length > 0 && (
+                <div className="mb-1">
+                  <Label className="text-xs">Attached</Label>
+                  <AttachmentThumbnails urls={existingAttachments} />
+                </div>
+              )}
+              <AttachmentsInput files={attachments} onChange={setAttachments} />
+            </div>
             <div className="flex flex-wrap gap-2">
-              <Button onClick={submit} disabled={saving}>{saving ? "Recording..." : "Record Payment"}</Button>
+              <Button onClick={submit} disabled={saving || uploading}>{uploading ? "Uploading..." : saving ? "Recording..." : "Record Payment"}</Button>
               {existingSettlement && (
                 <Button variant="outline" onClick={downloadReceipt}>Download Receipt</Button>
               )}
@@ -816,6 +842,12 @@ function MyPaymentsSummary() {
             </div>
             {settlement?.note && (
               <p className="text-sm text-muted-foreground"><span className="font-medium">Note:</span> {settlement.note}</p>
+            )}
+            {settlement?.attachments?.length > 0 && (
+              <div>
+                <p className="text-sm font-medium mb-1">Attachments</p>
+                <AttachmentThumbnails urls={settlement.attachments} />
+              </div>
             )}
             {settlement && (
               <Button variant="outline" onClick={downloadReceipt}>Download Receipt</Button>
