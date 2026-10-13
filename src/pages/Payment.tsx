@@ -32,7 +32,9 @@ type PayrollSettlementRow = {
   net_hours_amount: number;
   net_hours_paid: boolean;
   expense_amount_paid: number;
+  expense_paid: boolean;
   loan_amount_paid: number;
+  loan_paid: boolean;
   note: string | null;
   attachments: string[] | null;
   paid_by: string;
@@ -542,8 +544,8 @@ function MyPaymentsTab() {
       setLoan(loanRow || null);
       setExistingSettlement(settlement || null);
       setNetHoursPaidNow(settlement ? settlement.net_hours_paid : true);
-      setExpensePaidNow(true);
-      setLoanPaidNow(true);
+      setExpensePaidNow(settlement ? settlement.expense_paid : true);
+      setLoanPaidNow(settlement ? settlement.loan_paid : true);
       const loanDue = Math.min(Number(loanRow?.monthly_deduction || 0), Number(loanRow?.remaining_balance || 0));
       setLoanAmount(String(settlement ? settlement.loan_amount_paid : loanDue));
 
@@ -564,7 +566,13 @@ function MyPaymentsTab() {
   }, [selectedUserId, month]);
 
   const loanDue = loan ? Math.min(Number(loan.monthly_deduction), Number(loan.remaining_balance)) : 0;
-  const netPayment = finalSalaryNoExpense + expenseOutstanding - loanDue;
+  // Each card's own full-balance figure counts only while its own Adjust Now
+  // is checked; unchecked (carried to next month) drops out of Net Payment
+  // entirely — Net Salary falls back to Gross Salary (Net Adjustment not
+  // counted) rather than to 0, since the gross is being paid regardless.
+  const netPayment = (netHoursPaidNow ? finalSalaryNoExpense : grossSalary)
+    + (expensePaidNow ? expenseOutstanding : 0)
+    - (loanPaidNow ? loanDue : 0);
 
   const submit = async () => {
     if (!user || !selectedUserId) return;
@@ -583,7 +591,9 @@ function MyPaymentsTab() {
         net_hours_amount: finalSalaryNoExpense,
         net_hours_paid: netHoursPaidNow,
         expense_amount_paid: expensePaid,
+        expense_paid: expensePaidNow,
         loan_amount_paid: loanPaid,
+        loan_paid: loanPaidNow,
         note: note || null,
         attachments: allAttachments,
         paid_by: user.id,
@@ -748,7 +758,9 @@ function MyPaymentsTab() {
               <div className="rounded-md border p-3 space-y-2">
                 <div className="text-sm font-medium">Net Payment</div>
                 <div className="text-lg font-semibold">{fmtBDT(netPayment)}</div>
-                <p className="text-xs text-muted-foreground">Final Salary (no Expense) + Expense Balance − Loan Due</p>
+                <p className="text-xs text-muted-foreground">
+                  Only counts each card while its own Adjust Now is checked — unchecked Net Salary falls back to Gross Salary, unchecked Expense/Loan drop out entirely.
+                </p>
               </div>
             </div>
             <div>
@@ -907,7 +919,11 @@ function MyPaymentsSummary() {
   };
 
   const loanDue = loan ? Math.min(Number(loan.monthly_deduction), Number(loan.remaining_balance)) : 0;
-  const netPayment = finalSalaryNoExpense + expenseOutstanding - loanDue;
+  // Mirrors MyPaymentsTab's formula using the settlement's own saved
+  // Adjust Now flags (defaulting to checked when nothing's recorded yet).
+  const netPayment = ((settlement ? settlement.net_hours_paid : true) ? finalSalaryNoExpense : grossSalary)
+    + ((settlement ? settlement.expense_paid : true) ? expenseOutstanding : 0)
+    - ((settlement ? settlement.loan_paid : true) ? loanDue : 0);
 
   const downloadReceipt = () => {
     downloadPaymentReceiptPDF({
@@ -977,7 +993,9 @@ function MyPaymentsSummary() {
               <div className="rounded-md border p-3 space-y-2">
                 <div className="text-sm font-medium">Net Payment</div>
                 <div className="text-lg font-semibold">{fmtBDT(netPayment)}</div>
-                <p className="text-xs text-muted-foreground">Final Salary (no Expense) + Expense Balance − Loan Due</p>
+                <p className="text-xs text-muted-foreground">
+                  Only counts each card while its own Adjust Now is checked — unchecked Net Salary falls back to Gross Salary, unchecked Expense/Loan drop out entirely.
+                </p>
               </div>
             </div>
             {settlement?.note && (
