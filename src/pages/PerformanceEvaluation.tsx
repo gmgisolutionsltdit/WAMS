@@ -16,8 +16,8 @@ import { toast } from "sonner";
 import { format } from "date-fns";
 import {
   EVALUATION_SECTIONS, TOTAL_CRITERIA_COUNT, summarizeScores, weightedFinalCategory,
-  CATEGORY_BADGE_CLASS, salaryCategoryForGross, SALARY_CATEGORY_LABEL, recommendedIncrementRange, SCORE_SCALE,
-  downloadEvaluationAnswersPDF,
+  CATEGORY_BADGE_CLASS, salaryCategoryForGross, SALARY_CATEGORY_LABEL, recommendedIncrementRange, formatIncrementRange,
+  PERFORMANCE_CATEGORY_GUIDE, downloadEvaluationAnswersPDF,
   type CriterionScore, type EvaluationCategory, type SalaryCategory,
 } from "@/lib/performanceEvaluation";
 import {
@@ -565,7 +565,7 @@ const PerformanceEvaluation = () => {
                     <p>
                       Finalized {format(new Date(finalization.created_at), "MMM d, yyyy")}: {SALARY_CATEGORY_LABEL[finalization.salary_category]},{" "}
                       {finalization.final_category} → recommended annual increment{" "}
-                      <span className="font-mono">{finalization.recommended_min_pct}% – {finalization.recommended_max_pct}%</span> of gross salary{" "}
+                      <span className="font-mono">{formatIncrementRange({ min: finalization.recommended_min_pct, max: finalization.recommended_max_pct })}</span> of gross salary{" "}
                       <span className="font-mono">{finalization.gross_salary.toLocaleString()}</span> BDT.
                       {incrementEval && (
                         <span className="text-success-foreground">
@@ -658,14 +658,18 @@ const PerformanceEvaluation = () => {
           <div className="space-y-5">
             <Table>
               <TableHeader>
-                <TableRow><TableHead className="w-12">Score</TableHead><TableHead className="w-32">Meaning</TableHead><TableHead>Description</TableHead></TableRow>
+                <TableRow><TableHead className="w-32">Performance Category</TableHead><TableHead className="w-48">Description</TableHead><TableHead>Expected Contributions and Behaviors</TableHead></TableRow>
               </TableHeader>
               <TableBody>
-                {SCORE_SCALE.map((s) => (
-                  <TableRow key={s.score}>
-                    <TableCell className="font-mono font-semibold">{s.score}</TableCell>
-                    <TableCell className="font-medium">{s.label}</TableCell>
-                    <TableCell className="text-xs text-muted-foreground">{s.description}</TableCell>
+                {PERFORMANCE_CATEGORY_GUIDE.map((c) => (
+                  <TableRow key={c.category}>
+                    <TableCell className="font-medium align-top">{c.category}</TableCell>
+                    <TableCell className="text-xs text-muted-foreground align-top">{c.description}</TableCell>
+                    <TableCell className="text-xs text-muted-foreground align-top">
+                      <ul className="list-disc list-inside space-y-0.5">
+                        {c.behaviors.map((b) => <li key={b}>{b}</li>)}
+                      </ul>
+                    </TableCell>
                   </TableRow>
                 ))}
               </TableBody>
@@ -747,14 +751,18 @@ const PerformanceEvaluation = () => {
 
               <Table>
                 <TableHeader>
-                  <TableRow><TableHead className="w-12">Score</TableHead><TableHead className="w-32">Meaning</TableHead><TableHead>Description</TableHead></TableRow>
+                  <TableRow><TableHead className="w-32">Performance Category</TableHead><TableHead className="w-48">Description</TableHead><TableHead>Expected Contributions and Behaviors</TableHead></TableRow>
                 </TableHeader>
                 <TableBody>
-                  {SCORE_SCALE.map((s) => (
-                    <TableRow key={s.score}>
-                      <TableCell className="font-mono font-semibold">{s.score}</TableCell>
-                      <TableCell className="font-medium">{s.label}</TableCell>
-                      <TableCell className="text-xs text-muted-foreground">{s.description}</TableCell>
+                  {PERFORMANCE_CATEGORY_GUIDE.map((c) => (
+                    <TableRow key={c.category}>
+                      <TableCell className="font-medium align-top">{c.category}</TableCell>
+                      <TableCell className="text-xs text-muted-foreground align-top">{c.description}</TableCell>
+                      <TableCell className="text-xs text-muted-foreground align-top">
+                        <ul className="list-disc list-inside space-y-0.5">
+                          {c.behaviors.map((b) => <li key={b}>{b}</li>)}
+                        </ul>
+                      </TableCell>
                     </TableRow>
                   ))}
                 </TableBody>
@@ -820,7 +828,7 @@ const PerformanceEvaluation = () => {
                   <p>Final Category: <Badge className={CATEGORY_BADGE_CLASS[finalization.final_category]}>{finalization.final_category}</Badge></p>
                   <p>Weighted Average: <span className="font-mono">{finalization.weighted_average} / 5</span></p>
                   <p>Salary Category: {SALARY_CATEGORY_LABEL[finalization.salary_category]}</p>
-                  <p>Recommended Increment Range: <span className="font-mono">{finalization.recommended_min_pct}% – {finalization.recommended_max_pct}%</span></p>
+                  <p>Recommended Increment Range: <span className="font-mono">{formatIncrementRange({ min: finalization.recommended_min_pct, max: finalization.recommended_max_pct })}</span></p>
                   <p>Gross Salary: <span className="font-mono">{finalization.gross_salary.toLocaleString()}</span> BDT</p>
                   <p className="text-xs text-muted-foreground">Finalized {format(new Date(finalization.created_at), "MMM d, yyyy")}</p>
                 </div>
@@ -1007,7 +1015,7 @@ const IncrementEvaluationDialog = ({
       }
     }
     if (form.average_recommended_pct < finalization.recommended_min_pct || form.average_recommended_pct > finalization.recommended_max_pct) {
-      toast.error(`Average Recommended % must be within the policy range ${finalization.recommended_min_pct}%–${finalization.recommended_max_pct}%`);
+      toast.error(`Average Recommended % must be within the policy range ${formatIncrementRange({ min: finalization.recommended_min_pct, max: finalization.recommended_max_pct })}`);
       return;
     }
     if (form.retention_recommended && !form.retention_justification.trim()) {
@@ -1088,7 +1096,7 @@ const IncrementEvaluationDialog = ({
         <div className="space-y-5">
           <div className="rounded-md bg-muted/40 p-3 text-xs">
             {SALARY_CATEGORY_LABEL[finalization.salary_category]} · {finalization.final_category} · Policy range{" "}
-            <span className="font-mono">{finalization.recommended_min_pct}%–{finalization.recommended_max_pct}%</span> · Gross salary{" "}
+            <span className="font-mono">{formatIncrementRange({ min: finalization.recommended_min_pct, max: finalization.recommended_max_pct })}</span> · Gross salary{" "}
             <span className="font-mono">{finalization.gross_salary.toLocaleString()}</span> BDT
           </div>
 
@@ -1126,7 +1134,7 @@ const IncrementEvaluationDialog = ({
                 onChange={(e) => setForm((f) => ({ ...f, average_recommended_pct: parseFloat(e.target.value) || 0 }))}
               />
               <p className="text-xs text-muted-foreground mt-1">
-                Must be within the policy range {finalization.recommended_min_pct}%–{finalization.recommended_max_pct}%. Applied to Basic Salary{" "}
+                Must be within the policy range {formatIncrementRange({ min: finalization.recommended_min_pct, max: finalization.recommended_max_pct })}. Applied to Basic Salary{" "}
                 (<span className="font-mono">{basicBefore.toLocaleString()}</span> BDT).
               </p>
             </div>
