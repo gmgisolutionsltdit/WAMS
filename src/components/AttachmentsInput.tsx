@@ -6,18 +6,20 @@ import { Paperclip, X } from "lucide-react";
 interface Props {
   files: File[];
   onChange: (files: File[]) => void;
+  label?: string;
+  buttonText?: string;
 }
 
 /** Multi-image picker with thumbnail previews, used on request submission forms. */
-export const AttachmentsInput = ({ files, onChange }: Props) => {
+export const AttachmentsInput = ({ files, onChange, label = "Attach Images", buttonText = "Choose Images" }: Props) => {
   const inputRef = useRef<HTMLInputElement>(null);
 
   return (
     <div>
-      <Label>Attach Images <span className="text-xs text-muted-foreground">(optional, multiple allowed)</span></Label>
+      <Label>{label} <span className="text-xs text-muted-foreground">(optional, multiple allowed)</span></Label>
       <div className="flex items-center gap-2 mt-1">
         <Button type="button" variant="outline" size="sm" onClick={() => inputRef.current?.click()}>
-          <Paperclip className="h-4 w-4 mr-1" /> Choose Images
+          <Paperclip className="h-4 w-4 mr-1" /> {buttonText}
         </Button>
         <input
           ref={inputRef}

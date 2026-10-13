@@ -220,7 +220,7 @@ export const PayrollAdjustments = ({ isAdmin }: { isAdmin: boolean }) => {
                 <SummaryTile label="Final" value="PENDING" highlight warn />
               </>
             ) : (
-              <SummaryTile label="Final" value={fmtBDT(finalSalary.final as number)} highlight />
+              <SummaryTile label="Final" value={fmtBDT(breakdown.gross + finalSalary.netAdjustment)} highlight />
             )}
           </CardContent>
           {finalSalary.deductionsExceedCap && (
