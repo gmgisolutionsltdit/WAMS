@@ -17,6 +17,7 @@ import { format } from "date-fns";
 import {
   EVALUATION_SECTIONS, TOTAL_CRITERIA_COUNT, summarizeScores, weightedFinalCategory,
   CATEGORY_BADGE_CLASS, salaryCategoryForGross, SALARY_CATEGORY_LABEL, recommendedIncrementRange, SCORE_SCALE,
+  downloadEvaluationAnswersPDF,
   type CriterionScore, type EvaluationCategory, type SalaryCategory,
 } from "@/lib/performanceEvaluation";
 import {
@@ -121,6 +122,7 @@ const PerformanceEvaluation = () => {
 
   const [answerRequest, setAnswerRequest] = useState<EvalRequest | null>(null);
   const [answerForm, setAnswerForm] = useState(emptyAnswerForm());
+  const [editingEvaluation, setEditingEvaluation] = useState<Evaluation | null>(null);
 
   const [incrementDialogFinalization, setIncrementDialogFinalization] = useState<Finalization | null>(null);
   const [editingIncrementEval, setEditingIncrementEval] = useState<IncrementEval | null>(null);
@@ -229,7 +231,14 @@ const PerformanceEvaluation = () => {
 
   const openAnswer = (req: EvalRequest) => {
     setAnswerRequest(req);
+    setEditingEvaluation(null);
     setAnswerForm(emptyAnswerForm());
+  };
+
+  const openEditAnswer = (ev: Evaluation) => {
+    setEditingEvaluation(ev);
+    setAnswerRequest(null);
+    setAnswerForm({ scores: ev.scores, justification: ev.justification });
   };
 
   const setScore = (criterion: string, score: number) => {
@@ -242,27 +251,37 @@ const PerformanceEvaluation = () => {
   const summary = useMemo(() => summarizeScores(answerForm.scores), [answerForm.scores]);
 
   const submitAnswer = async () => {
-    if (!user || !answerRequest) return;
+    if (!user || (!answerRequest && !editingEvaluation)) return;
     if (!answerForm.justification.trim()) {
       toast.error("Justification is required");
       return;
     }
     setSaving(true);
-    const { error } = await supabase.from("performance_evaluations").insert({
-      request_id: answerRequest.id,
-      employee_id: answerRequest.employee_id,
-      evaluator_id: user.id,
-      scores: answerForm.scores,
-      criteria_count: TOTAL_CRITERIA_COUNT,
-      total_score: summary.total,
-      average_score: summary.average,
-      category: summary.category,
-      justification: answerForm.justification.trim(),
-    });
+    const { error } = editingEvaluation
+      ? await supabase.from("performance_evaluations").update({
+          scores: answerForm.scores,
+          criteria_count: TOTAL_CRITERIA_COUNT,
+          total_score: summary.total,
+          average_score: summary.average,
+          category: summary.category,
+          justification: answerForm.justification.trim(),
+        }).eq("id", editingEvaluation.id)
+      : await supabase.from("performance_evaluations").insert({
+          request_id: answerRequest!.id,
+          employee_id: answerRequest!.employee_id,
+          evaluator_id: user.id,
+          scores: answerForm.scores,
+          criteria_count: TOTAL_CRITERIA_COUNT,
+          total_score: summary.total,
+          average_score: summary.average,
+          category: summary.category,
+          justification: answerForm.justification.trim(),
+        });
     setSaving(false);
     if (error) { toast.error(error.message); return; }
-    toast.success("Evaluation submitted");
+    toast.success(editingEvaluation ? "Evaluation updated" : "Evaluation submitted");
     setAnswerRequest(null);
+    setEditingEvaluation(null);
     fetchAll();
   };
 
@@ -495,7 +514,12 @@ const PerformanceEvaluation = () => {
                       <TableCell>{profileMap[r.employee_id]?.full_name || profileMap[r.employee_id]?.email || "—"}</TableCell>
                       <TableCell className="font-mono text-xs">{ev.average_score} / 5</TableCell>
                       <TableCell><Badge className={CATEGORY_BADGE_CLASS[ev.category]}>{ev.category}</Badge></TableCell>
-                      <TableCell><Button size="sm" variant="outline" onClick={() => setViewEvaluation(ev)}>View Answers</Button></TableCell>
+                      <TableCell>
+                        <div className="flex gap-1">
+                          <Button size="sm" variant="outline" onClick={() => setViewEvaluation(ev)}>View Answers</Button>
+                          <Button size="sm" variant="outline" onClick={() => openEditAnswer(ev)}>Edit</Button>
+                        </div>
+                      </TableCell>
                     </TableRow>
                   );
                 })}
@@ -596,7 +620,10 @@ const PerformanceEvaluation = () => {
                           <TableCell>
                             <div className="flex items-center gap-1">
                               {ev && (
-                                <Button size="sm" variant="outline" onClick={() => setViewEvaluation(ev)}>View Answers</Button>
+                                <>
+                                  <Button size="sm" variant="outline" onClick={() => setViewEvaluation(ev)}>View Answers</Button>
+                                  <Button size="sm" variant="outline" onClick={() => openEditAnswer(ev)}>Edit</Button>
+                                </>
                               )}
                               <Button
                                 variant="ghost" size="icon" className="h-7 w-7 text-destructive hover:text-destructive"
@@ -619,11 +646,13 @@ const PerformanceEvaluation = () => {
         </Card>
       )}
 
-      <Dialog open={!!answerRequest} onOpenChange={(o) => !o && setAnswerRequest(null)}>
+      <Dialog open={!!answerRequest || !!editingEvaluation} onOpenChange={(o) => { if (!o) { setAnswerRequest(null); setEditingEvaluation(null); } }}>
         <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle>
-              Evaluate {answerRequest ? (profileMap[answerRequest.employee_id]?.full_name || profileMap[answerRequest.employee_id]?.email) : ""}
+              {editingEvaluation
+                ? `Edit Evaluation of ${profileMap[editingEvaluation.employee_id]?.full_name || profileMap[editingEvaluation.employee_id]?.email || ""}`
+                : `Evaluate ${answerRequest ? (profileMap[answerRequest.employee_id]?.full_name || profileMap[answerRequest.employee_id]?.email) : ""}`}
             </DialogTitle>
           </DialogHeader>
           <div className="space-y-5">
@@ -693,7 +722,7 @@ const PerformanceEvaluation = () => {
           </div>
           <DialogFooter>
             <Button onClick={submitAnswer} disabled={saving} className="w-full">
-              {saving ? "Submitting…" : "Submit Evaluation"}
+              {saving ? "Saving…" : editingEvaluation ? "Save Changes" : "Submit Evaluation"}
             </Button>
           </DialogFooter>
         </DialogContent>
@@ -753,6 +782,21 @@ const PerformanceEvaluation = () => {
                 <Label className="text-xs">Justification</Label>
                 <p className="text-sm rounded-md border p-2 mt-1 whitespace-pre-wrap">{viewEvaluation.justification || "—"}</p>
               </div>
+
+              <Button
+                variant="outline"
+                onClick={() => downloadEvaluationAnswersPDF({
+                  scores: viewEvaluation.scores,
+                  totalScore: viewEvaluation.total_score,
+                  criteriaCount: viewEvaluation.criteria_count,
+                  averageScore: viewEvaluation.average_score,
+                  category: viewEvaluation.category,
+                  justification: viewEvaluation.justification,
+                  submittedAt: viewEvaluation.created_at,
+                })}
+              >
+                Generate PDF Report
+              </Button>
             </div>
           )}
         </DialogContent>

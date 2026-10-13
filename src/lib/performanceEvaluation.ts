@@ -1,3 +1,5 @@
+import jsPDF from "jspdf";
+
 /** Section 4 of the Employee Performance Evaluation Form: 5 scored categories, 14 criteria total, each scored 1-5. */
 export const EVALUATION_SECTIONS: { key: string; title: string; criteria: string[] }[] = [
   {
@@ -142,3 +144,99 @@ export const weightedFinalCategory = (evaluations: { average_score: number; weig
   const weightedAverage = Math.round((weightedSum / totalWeight) * 100) / 100;
   return { weightedAverage, category: categoryForAverage(weightedAverage) };
 };
+
+/**
+ * The "View Answers" popup's contents as a downloadable PDF — deliberately
+ * takes no evaluator or employee name/identifier, only the scored criteria,
+ * comments, justification and summary, so the report stays anonymous.
+ */
+export function downloadEvaluationAnswersPDF(args: {
+  scores: CriterionScore[];
+  totalScore: number;
+  criteriaCount: number;
+  averageScore: number;
+  category: EvaluationCategory;
+  justification: string;
+  submittedAt: string;
+  companyName?: string;
+}) {
+  const { scores, totalScore, criteriaCount, averageScore, category, justification, submittedAt } = args;
+  const company = args.companyName || "Workforce & Attendance Management System (WAMS)";
+  const doc = new jsPDF({ unit: "pt", format: "a4" });
+  const left = 48;
+  const right = 555;
+  let y = 56;
+
+  const ensureSpace = (needed: number) => {
+    if (y + needed > 800) {
+      doc.addPage();
+      y = 56;
+    }
+  };
+
+  doc.setFontSize(18);
+  doc.text(company, left, y);
+  y += 22;
+  doc.setFontSize(13);
+  doc.text("Performance Evaluation — Answers", left, y);
+  y += 20;
+  doc.setFontSize(9);
+  doc.setTextColor(120);
+  doc.text(`Submitted: ${new Date(submittedAt).toLocaleDateString()}`, left, y);
+  doc.setTextColor(0);
+  y += 20;
+
+  doc.setDrawColor(180);
+  doc.line(left, y, right, y);
+  y += 20;
+
+  doc.setFontSize(11);
+  doc.text(`Total Score: ${totalScore} / ${criteriaCount * 5}`, left, y);
+  y += 16;
+  doc.text(`Average Score: ${averageScore} / 5`, left, y);
+  y += 16;
+  doc.text(`Category: ${category}`, left, y);
+  y += 24;
+
+  EVALUATION_SECTIONS.forEach((section) => {
+    ensureSpace(30);
+    doc.setFontSize(12);
+    doc.text(`${section.key}. ${section.title}`, left, y);
+    y += 18;
+    section.criteria.forEach((criterion) => {
+      const answer = scores.find((s) => s.criterion === criterion);
+      ensureSpace(32);
+      doc.setFontSize(9);
+      const criterionLines = doc.splitTextToSize(criterion, 420);
+      doc.text(criterionLines, left, y);
+      doc.text(`${answer?.score ?? "—"} / 5`, right, y, { align: "right" });
+      y += criterionLines.length * 11 + 2;
+      if (answer?.comment) {
+        doc.setTextColor(120);
+        const commentLines = doc.splitTextToSize(answer.comment, 480);
+        ensureSpace(commentLines.length * 11 + 4);
+        doc.text(commentLines, left, y);
+        doc.setTextColor(0);
+        y += commentLines.length * 11 + 4;
+      }
+      y += 6;
+    });
+    y += 8;
+  });
+
+  ensureSpace(60);
+  doc.setFontSize(11);
+  doc.text("Justification", left, y);
+  y += 16;
+  doc.setFontSize(9);
+  const justificationLines = doc.splitTextToSize(justification || "—", 500);
+  ensureSpace(justificationLines.length * 12);
+  doc.text(justificationLines, left, y);
+  y += justificationLines.length * 12 + 16;
+
+  doc.setFontSize(8);
+  doc.setTextColor(150);
+  doc.text(`Generated: ${new Date().toLocaleString()}`, left, y);
+
+  doc.save(`Performance_Evaluation_Answers_${new Date(submittedAt).toISOString().slice(0, 10)}.pdf`);
+}
