@@ -1222,7 +1222,7 @@ const IncrementEvaluationDialog = ({
         <DialogHeader><DialogTitle>{existing ? "Edit Increment Decision" : "Increment Evaluation"} — {employeeName}</DialogTitle></DialogHeader>
         <div className="space-y-5">
           <div className="rounded-md bg-muted/40 p-3 text-xs">
-            {salaryCategoryLabel(finalization.salary_category, salaryBands)} · {finalization.final_category} · Policy range{" "}
+            {salaryCategoryLabel(finalization.salary_category)} · {finalization.final_category} · Policy range{" "}
             <span className="font-mono">{formatIncrementRange({ min: finalization.recommended_min_pct, max: finalization.recommended_max_pct })}</span> · Gross salary{" "}
             <span className="font-mono">{finalization.gross_salary.toLocaleString()}</span> BDT
           </div>
