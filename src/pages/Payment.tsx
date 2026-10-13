@@ -37,7 +37,7 @@ const Payment = () => {
   const [loans, setLoans] = useState<any[]>([]);
 
   const [requestOpen, setRequestOpen] = useState(false);
-  const [loanRequestForm, setLoanRequestForm] = useState({ amount: "", reason: "", installments: "1", month: format(new Date(), "yyyy-MM") });
+  const [loanRequestForm, setLoanRequestForm] = useState({ amount: "", reason: "", installments: "1", month: format(new Date(), "yyyy-MM"), requestDate: format(new Date(), "yyyy-MM-dd") });
 
   const [deductDialogId, setDeductDialogId] = useState<string | null>(null);
   const [recording, setRecording] = useState(false);
@@ -75,6 +75,7 @@ const Payment = () => {
       monthly_deduction: monthlyDeduction,
       remaining_balance: amount,
       month: loanRequestForm.month ? `${loanRequestForm.month}-01` : null,
+      request_date: loanRequestForm.requestDate || format(new Date(), "yyyy-MM-dd"),
     }).select().single();
     if (error) {
       if ((error as any).code === "23505") return toast.error("You already have an active loan request.");
@@ -82,7 +83,7 @@ const Payment = () => {
     }
     toast.success("Loan requested");
     setRequestOpen(false);
-    setLoanRequestForm({ amount: "", reason: "", installments: "1", month: format(new Date(), "yyyy-MM") });
+    setLoanRequestForm({ amount: "", reason: "", installments: "1", month: format(new Date(), "yyyy-MM"), requestDate: format(new Date(), "yyyy-MM-dd") });
     await notifyManagersAndAdmins(
       "Loan Requested",
       `${user.email} requested a loan of ${amount}.`,
@@ -167,10 +168,13 @@ const Payment = () => {
   const renderRow = (loan: any, showEmployee: boolean) => (
     <TableRow key={loan.id}>
       {showEmployee && <TableCell>{loan.profiles?.full_name || loan.profiles?.email || "—"}</TableCell>}
-      <TableCell>{format(new Date(loan.created_at), "MMM d, yyyy")}</TableCell>
+      <TableCell>{format(new Date(`${loan.request_date || loan.created_at}`), "MMM d, yyyy")}</TableCell>
       <TableCell className="font-semibold">{Number(loan.amount).toLocaleString()}</TableCell>
       <TableCell className="text-xs text-muted-foreground max-w-[200px] truncate">{loan.reason || "—"}</TableCell>
-      <TableCell>{loan.installments} installment{loan.installments === 1 ? "" : "s"} · {Number(loan.monthly_deduction).toLocaleString()}/mo</TableCell>
+      <TableCell>
+        {loan.installments} installment{loan.installments === 1 ? "" : "s"} · {Number(loan.monthly_deduction).toLocaleString()}
+        {loan.month ? `/${format(new Date(`${loan.month}T00:00:00`), "MMMM")}` : ""}
+      </TableCell>
       <TableCell>{Number(loan.remaining_balance).toLocaleString()} left</TableCell>
       <TableCell>
         <div className="flex items-center gap-1 flex-wrap">
@@ -223,7 +227,7 @@ const Payment = () => {
 
         <TabsContent value="loans" className="space-y-4">
           <div className="flex justify-end">
-            <Dialog open={requestOpen} onOpenChange={(o) => { setRequestOpen(o); if (!o) setLoanRequestForm({ amount: "", reason: "", installments: "1", month: format(new Date(), "yyyy-MM") }); }}>
+            <Dialog open={requestOpen} onOpenChange={(o) => { setRequestOpen(o); if (!o) setLoanRequestForm({ amount: "", reason: "", installments: "1", month: format(new Date(), "yyyy-MM"), requestDate: format(new Date(), "yyyy-MM-dd") }); }}>
               <DialogTrigger asChild><Button><Plus className="h-4 w-4 mr-1" />Request Loan</Button></DialogTrigger>
               <DialogContent>
                 <DialogHeader><DialogTitle>Request a Loan</DialogTitle></DialogHeader>
@@ -232,7 +236,8 @@ const Payment = () => {
                     <div><Label>Amount</Label><Input type="number" value={loanRequestForm.amount} onChange={(e) => setLoanRequestForm((f) => ({ ...f, amount: e.target.value }))} /></div>
                     <div><Label>Installments</Label><Input type="number" min="1" value={loanRequestForm.installments} onChange={(e) => setLoanRequestForm((f) => ({ ...f, installments: e.target.value }))} /></div>
                   </div>
-                  <div><Label>Month</Label><Input type="month" value={loanRequestForm.month} onChange={(e) => setLoanRequestForm((f) => ({ ...f, month: e.target.value }))} /></div>
+                  <div><Label>Request Date</Label><Input type="date" value={loanRequestForm.requestDate} onChange={(e) => setLoanRequestForm((f) => ({ ...f, requestDate: e.target.value }))} /></div>
+                  <div><Label>Installment Month</Label><Input type="month" value={loanRequestForm.month} onChange={(e) => setLoanRequestForm((f) => ({ ...f, month: e.target.value }))} /></div>
                   <div><Label>Reason</Label><Textarea value={loanRequestForm.reason} onChange={(e) => setLoanRequestForm((f) => ({ ...f, reason: e.target.value }))} /></div>
                 </div>
                 <DialogFooter><Button onClick={submitLoanRequest}>Submit</Button></DialogFooter>
@@ -298,9 +303,9 @@ const Payment = () => {
 export default Payment;
 
 /* =======================================================================
- * Admin Loan Panel — summary cards, then filters, then the filterable all-
+ * Admin Loan Panel — filters, then summary cards, then the filterable all-
  * employees loan history table (reusing Payment's own renderRow/loans state,
- * no separate fetch). Order: cards, filters, history — in that order.
+ * no separate fetch). Order: filters, cards, history — in that order.
  * ===================================================================== */
 
 function AdminLoanPanel({ loans, renderRow }: { loans: any[]; renderRow: (loan: any, showEmployee: boolean) => JSX.Element }) {
@@ -355,11 +360,6 @@ function AdminLoanPanel({ loans, renderRow }: { loans: any[]; renderRow: (loan: 
 
   return (
     <div className="space-y-4">
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-        <Card><CardHeader className="pb-2"><CardDescription>Total Loan Balance</CardDescription><CardTitle>{summary.totalLoanBalance.toLocaleString()}</CardTitle></CardHeader></Card>
-        <Card><CardHeader className="pb-2"><CardDescription>Total Current Balance</CardDescription><CardTitle>{summary.totalCurrentBalance.toLocaleString()}</CardTitle></CardHeader></Card>
-      </div>
-
       <Card>
         <CardHeader>
           <CardTitle className="text-base">Filters</CardTitle>
@@ -401,6 +401,11 @@ function AdminLoanPanel({ loans, renderRow }: { loans: any[]; renderRow: (loan: 
           </div>
         </CardHeader>
       </Card>
+
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+        <Card><CardHeader className="pb-2"><CardDescription>Total Loan Balance</CardDescription><CardTitle>{summary.totalLoanBalance.toLocaleString()}</CardTitle></CardHeader></Card>
+        <Card><CardHeader className="pb-2"><CardDescription>Total Current Balance</CardDescription><CardTitle>{summary.totalCurrentBalance.toLocaleString()}</CardTitle></CardHeader></Card>
+      </div>
 
       <Card>
         <CardHeader><CardTitle className="text-base">Loan History</CardTitle></CardHeader>
@@ -524,7 +529,7 @@ function MyPaymentsTab() {
   }, [selectedUserId, month]);
 
   const loanDue = loan ? Math.min(Number(loan.monthly_deduction), Number(loan.remaining_balance)) : 0;
-  const netPayment = finalSalaryNoExpense + expenseOutstanding - loanDue;
+  const netPayment = finalSalaryNoExpense - expenseOutstanding - loanDue;
 
   const submit = async () => {
     if (!user || !selectedUserId) return;
@@ -638,7 +643,7 @@ function MyPaymentsTab() {
                 <div className="text-sm font-medium">Net Salary</div>
                 <div className="space-y-1">
                   <div className="flex items-center justify-between text-sm">
-                    <span className="text-muted-foreground">Final Salary</span>
+                    <span className="text-muted-foreground">Gross Salary</span>
                     <span className="font-semibold">{fmtBDT(finalSalary)}</span>
                   </div>
                   <div className="flex items-center justify-between text-sm pt-1">
@@ -679,7 +684,7 @@ function MyPaymentsTab() {
               <div className="rounded-md border p-3 space-y-2">
                 <div className="text-sm font-medium">Net Payment</div>
                 <div className="text-lg font-semibold">{fmtBDT(netPayment)}</div>
-                <p className="text-xs text-muted-foreground">Final Salary (no Expense) + Expense Balance − Loan Due</p>
+                <p className="text-xs text-muted-foreground">Final Salary (no Expense) − Expense Balance − Loan Due</p>
               </div>
             </div>
             <div>
@@ -693,7 +698,7 @@ function MyPaymentsTab() {
                   <AttachmentThumbnails urls={existingAttachments} />
                 </div>
               )}
-              <AttachmentsInput files={attachments} onChange={setAttachments} />
+              <AttachmentsInput files={attachments} onChange={setAttachments} label="Attachment" buttonText="Upload" />
             </div>
             <div className="flex flex-wrap gap-2">
               <Button onClick={submit} disabled={saving || uploading}>{uploading ? "Uploading..." : saving ? "Recording..." : "Record Payment"}</Button>
@@ -767,7 +772,7 @@ function MyPaymentsSummary() {
   }, [user?.id, month]);
 
   const loanDue = loan ? Math.min(Number(loan.monthly_deduction), Number(loan.remaining_balance)) : 0;
-  const netPayment = finalSalaryNoExpense + expenseOutstanding - loanDue;
+  const netPayment = finalSalaryNoExpense - expenseOutstanding - loanDue;
 
   const downloadReceipt = () => {
     downloadPaymentReceiptPDF({
@@ -805,7 +810,7 @@ function MyPaymentsSummary() {
                 <div className="text-sm font-medium">Net Salary</div>
                 <div className="space-y-1">
                   <div className="flex items-center justify-between text-sm">
-                    <span className="text-muted-foreground">Final Salary</span>
+                    <span className="text-muted-foreground">Gross Salary</span>
                     <span className="font-semibold">{fmtBDT(finalSalary)}</span>
                   </div>
                   <div className="flex items-center justify-between text-sm">
@@ -837,7 +842,7 @@ function MyPaymentsSummary() {
               <div className="rounded-md border p-3 space-y-2">
                 <div className="text-sm font-medium">Net Payment</div>
                 <div className="text-lg font-semibold">{fmtBDT(netPayment)}</div>
-                <p className="text-xs text-muted-foreground">Final Salary (no Expense) + Expense Balance − Loan Due</p>
+                <p className="text-xs text-muted-foreground">Final Salary (no Expense) − Expense Balance − Loan Due</p>
               </div>
             </div>
             {settlement?.note && (
