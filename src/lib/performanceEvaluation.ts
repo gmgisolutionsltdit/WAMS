@@ -1,4 +1,5 @@
 import jsPDF from "jspdf";
+import { format } from "date-fns";
 
 /** Section 4 of the Employee Performance Evaluation Form: 5 scored categories, 14 criteria total, each scored 1-5. */
 export const EVALUATION_SECTIONS: { key: string; title: string; criteria: string[] }[] = [
@@ -147,10 +148,13 @@ export const weightedFinalCategory = (evaluations: { average_score: number; weig
 
 /**
  * The "View Answers" popup's contents as a downloadable PDF — deliberately
- * takes no evaluator or employee name/identifier, only the scored criteria,
- * comments, justification and summary, so the report stays anonymous.
+ * takes no evaluator name/identifier, only the employee being evaluated
+ * (name + designation), the scored criteria, comments, justification and
+ * summary — the evaluator stays anonymous.
  */
 export function downloadEvaluationAnswersPDF(args: {
+  employeeName: string;
+  employeeDesignation?: string | null;
   scores: CriterionScore[];
   totalScore: number;
   criteriaCount: number;
@@ -160,7 +164,7 @@ export function downloadEvaluationAnswersPDF(args: {
   submittedAt: string;
   companyName?: string;
 }) {
-  const { scores, totalScore, criteriaCount, averageScore, category, justification, submittedAt } = args;
+  const { employeeName, employeeDesignation, scores, totalScore, criteriaCount, averageScore, category, justification, submittedAt } = args;
   const company = args.companyName || "Workforce & Attendance Management System (WAMS)";
   const doc = new jsPDF({ unit: "pt", format: "a4" });
   const left = 48;
@@ -180,9 +184,14 @@ export function downloadEvaluationAnswersPDF(args: {
   doc.setFontSize(13);
   doc.text("Performance Evaluation — Answers", left, y);
   y += 20;
+  doc.setFontSize(10);
+  doc.text(`Employee: ${employeeName}`, left, y);
+  y += 16;
+  doc.text(`Designation: ${employeeDesignation || "—"}`, left, y);
+  y += 16;
   doc.setFontSize(9);
   doc.setTextColor(120);
-  doc.text(`Submitted: ${new Date(submittedAt).toLocaleDateString()}`, left, y);
+  doc.text(`Submitted: ${format(new Date(submittedAt), "d MMMM yyyy")}`, left, y);
   doc.setTextColor(0);
   y += 20;
 
@@ -232,11 +241,5 @@ export function downloadEvaluationAnswersPDF(args: {
   const justificationLines = doc.splitTextToSize(justification || "—", 500);
   ensureSpace(justificationLines.length * 12);
   doc.text(justificationLines, left, y);
-  y += justificationLines.length * 12 + 16;
-
-  doc.setFontSize(8);
-  doc.setTextColor(150);
-  doc.text(`Generated: ${new Date().toLocaleString()}`, left, y);
-
   doc.save(`Performance_Evaluation_Answers_${new Date(submittedAt).toISOString().slice(0, 10)}.pdf`);
 }
