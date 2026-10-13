@@ -16,9 +16,10 @@ import { toast } from "sonner";
 import { format } from "date-fns";
 import {
   EVALUATION_SECTIONS, TOTAL_CRITERIA_COUNT, summarizeScores, weightedFinalCategory,
-  CATEGORY_BADGE_CLASS, salaryCategoryForGross, SALARY_CATEGORY_LABEL, recommendedIncrementRange, formatIncrementRange,
+  CATEGORY_BADGE_CLASS, salaryCategoryForGross, salaryCategoryLabel, recommendedIncrementRange, formatIncrementRange,
   PERFORMANCE_CATEGORY_GUIDE, downloadEvaluationAnswersPDF,
-  type CriterionScore, type EvaluationCategory, type SalaryCategory,
+  DEFAULT_CATEGORY_THRESHOLDS, DEFAULT_SALARY_BANDS,
+  type CriterionScore, type EvaluationCategory, type SalaryCategory, type CategoryThresholds, type SalaryBands,
 } from "@/lib/performanceEvaluation";
 import {
   COMPANY_SCENARIOS, companyScenario, finalIncrementPct, grossAfterIncrement,
@@ -99,8 +100,8 @@ type Evaluation = {
 
 const emptyRequestForm = () => ({ employee_id: "", evaluator_ids: [] as string[], period_from: "", period_to: "" });
 
-const emptyAnswerForm = (): { scores: CriterionScore[]; justification: string } => ({
-  scores: EVALUATION_SECTIONS.flatMap((s) => s.criteria.map((criterion) => ({ section: s.key, criterion, score: 3, comment: "" }))),
+const emptyAnswerForm = (defaultScore = 2): { scores: CriterionScore[]; justification: string } => ({
+  scores: EVALUATION_SECTIONS.flatMap((s) => s.criteria.map((criterion) => ({ section: s.key, criterion, score: defaultScore, comment: "" }))),
   justification: "",
 });
 
@@ -130,6 +131,18 @@ const PerformanceEvaluation = () => {
   const [viewFinalizationDetails, setViewFinalizationDetails] = useState<Finalization | null>(null);
   const [salaryIncrementMap, setSalaryIncrementMap] = useState<Record<string, SalaryIncrementLink>>({});
 
+  // Admin-editable, future-evaluation-only settings: default criterion
+  // score, Section 6 category thresholds, Section 3 salary bands.
+  const [thresholds, setThresholds] = useState<CategoryThresholds>(DEFAULT_CATEGORY_THRESHOLDS);
+  const [salaryBands, setSalaryBands] = useState<SalaryBands>(DEFAULT_SALARY_BANDS);
+  const [defaultScore, setDefaultScore] = useState(2);
+  const [settingsOpen, setSettingsOpen] = useState(false);
+  const [settingsForm, setSettingsForm] = useState({
+    default_score: "2", threshold_outstanding: "3.6", threshold_above: "2.8", threshold_meet: "2.0",
+    salary_band_b_min: "20000", salary_band_a_min: "40000",
+  });
+  const [savingSettings, setSavingSettings] = useState(false);
+
   const profileMap = useMemo(() => {
     const m: Record<string, Profile> = {};
     profiles.forEach((p) => (m[p.id] = p));
@@ -146,14 +159,32 @@ const PerformanceEvaluation = () => {
       ? supabase.from("performance_evaluations").select("*")
       : supabase.from("performance_evaluations").select("*").eq("evaluator_id", user.id);
 
-    const [{ data: reqs }, { data: evals }, { data: mgrs }] = await Promise.all([
+    const [{ data: reqs }, { data: evals }, { data: mgrs }, { data: settings }] = await Promise.all([
       reqQuery,
       evalQuery,
       supabase.rpc("manager_candidates"),
+      supabase.from("performance_evaluation_settings").select("*").eq("id", "default").maybeSingle(),
     ]);
     setRequests((reqs || []) as EvalRequest[]);
     setEvaluations((evals || []) as unknown as Evaluation[]);
     setEvaluators((mgrs || []) as Profile[]);
+    if (settings) {
+      setThresholds({
+        outstanding: Number(settings.threshold_outstanding),
+        above: Number(settings.threshold_above),
+        meet: Number(settings.threshold_meet),
+      });
+      setSalaryBands({ bMin: Number(settings.salary_band_b_min), aMin: Number(settings.salary_band_a_min) });
+      setDefaultScore(Number(settings.default_score));
+      setSettingsForm({
+        default_score: String(settings.default_score),
+        threshold_outstanding: String(settings.threshold_outstanding),
+        threshold_above: String(settings.threshold_above),
+        threshold_meet: String(settings.threshold_meet),
+        salary_band_b_min: String(settings.salary_band_b_min),
+        salary_band_a_min: String(settings.salary_band_a_min),
+      });
+    }
 
     if (isAdmin) {
       const [{ data: pf }, { data: finals }, { data: incEvals }] = await Promise.all([
@@ -187,6 +218,40 @@ const PerformanceEvaluation = () => {
   }, [user, isAdmin]);
 
   useEffect(() => { fetchAll(); }, [fetchAll]);
+
+  const saveSettings = async () => {
+    if (!user) return;
+    const defaultScoreVal = Math.round(Number(settingsForm.default_score));
+    const outstanding = Number(settingsForm.threshold_outstanding);
+    const above = Number(settingsForm.threshold_above);
+    const meet = Number(settingsForm.threshold_meet);
+    const bMin = Number(settingsForm.salary_band_b_min);
+    const aMin = Number(settingsForm.salary_band_a_min);
+    if (!Number.isFinite(defaultScoreVal) || defaultScoreVal < 1 || defaultScoreVal > 4) {
+      toast.error("Default score must be a whole number from 1 to 4"); return;
+    }
+    if (![outstanding, above, meet].every(Number.isFinite) || !(outstanding > above && above > meet)) {
+      toast.error("Thresholds must be numbers with Outstanding > Above Expectation > Meet Expectation"); return;
+    }
+    if (![bMin, aMin].every(Number.isFinite) || aMin <= bMin || bMin < 0) {
+      toast.error("Salary bands must be numbers with Category A's minimum greater than Category B's"); return;
+    }
+    setSavingSettings(true);
+    const { error } = await supabase.from("performance_evaluation_settings").update({
+      default_score: defaultScoreVal,
+      threshold_outstanding: outstanding,
+      threshold_above: above,
+      threshold_meet: meet,
+      salary_band_b_min: bMin,
+      salary_band_a_min: aMin,
+      updated_by: user.id,
+    }).eq("id", "default");
+    setSavingSettings(false);
+    if (error) { toast.error(error.message); return; }
+    toast.success("Settings saved — applies to future evaluations only");
+    setSettingsOpen(false);
+    fetchAll();
+  };
 
   const toggleRequestEvaluator = (id: string) =>
     setRequestForm((f) => ({
@@ -232,7 +297,7 @@ const PerformanceEvaluation = () => {
   const openAnswer = (req: EvalRequest) => {
     setAnswerRequest(req);
     setEditingEvaluation(null);
-    setAnswerForm(emptyAnswerForm());
+    setAnswerForm(emptyAnswerForm(defaultScore));
   };
 
   const openEditAnswer = (ev: Evaluation) => {
@@ -248,7 +313,7 @@ const PerformanceEvaluation = () => {
     setAnswerForm((f) => ({ ...f, scores: f.scores.map((s) => (s.criterion === criterion ? { ...s, comment } : s)) }));
   };
 
-  const summary = useMemo(() => summarizeScores(answerForm.scores), [answerForm.scores]);
+  const summary = useMemo(() => summarizeScores(answerForm.scores, thresholds), [answerForm.scores, thresholds]);
 
   const submitAnswer = async () => {
     if (!user || (!answerRequest && !editingEvaluation)) return;
@@ -339,7 +404,7 @@ const PerformanceEvaluation = () => {
       toast.error("This employee has no gross salary on file — set it in their profile first");
       return;
     }
-    const salaryCategory = salaryCategoryForGross(gross);
+    const salaryCategory = salaryCategoryForGross(gross, salaryBands);
     const range = recommendedIncrementRange(salaryCategory, final.category);
     const { error } = await supabase.from("performance_evaluation_finalizations").insert({
       employee_id: employeeId,
@@ -384,10 +449,11 @@ const PerformanceEvaluation = () => {
         .filter((x): x is { request: EvalRequest; evaluation: Evaluation } => !!x.evaluation);
       const final = weightedFinalCategory(
         empEvaluations.map(({ request, evaluation }) => ({ average_score: evaluation.average_score, weight: request.weight })),
+        thresholds,
       );
       return { employeeId, requests: empRequests, evaluations: empEvaluations, final };
     });
-  }, [requests, evaluations]);
+  }, [requests, evaluations, thresholds]);
 
   const pendingForMe = requests.filter((r) => r.evaluator_id === user?.id && r.status === "pending");
   const submittedByMe = requests.filter((r) => r.evaluator_id === user?.id && r.status === "submitted");
@@ -407,7 +473,9 @@ const PerformanceEvaluation = () => {
           </p>
         </div>
         {isAdmin && (
-          <Dialog open={requestOpen} onOpenChange={setRequestOpen}>
+          <div className="flex items-center gap-2">
+            <Button variant="outline" onClick={() => setSettingsOpen(true)}>Settings</Button>
+            <Dialog open={requestOpen} onOpenChange={setRequestOpen}>
             <DialogTrigger asChild>
               <Button><Plus className="h-4 w-4 mr-1" /> Request Evaluation</Button>
             </DialogTrigger>
@@ -455,9 +523,66 @@ const PerformanceEvaluation = () => {
                 <Button onClick={submitRequest} disabled={saving}>{saving ? "Requesting…" : "Request Evaluation"}</Button>
               </DialogFooter>
             </DialogContent>
-          </Dialog>
+            </Dialog>
+          </div>
         )}
       </div>
+
+      <Dialog open={settingsOpen} onOpenChange={setSettingsOpen}>
+        <DialogContent className="max-w-lg">
+          <DialogHeader>
+            <DialogTitle>Performance Evaluation Settings</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4 text-sm">
+            <p className="text-xs text-muted-foreground">
+              Applies to future evaluations only — already-submitted evaluations and finalizations keep the figures they were computed with.
+            </p>
+            <div>
+              <Label>Default score per criterion (1-4)</Label>
+              <Input
+                type="number" min="1" max="4" step="1" className="mt-1 w-32"
+                value={settingsForm.default_score}
+                onChange={(e) => setSettingsForm((f) => ({ ...f, default_score: e.target.value }))}
+              />
+            </div>
+            <div>
+              <Label className="text-sm font-medium">Section 6 category thresholds (average score out of 4)</Label>
+              <div className="grid grid-cols-3 gap-3 mt-1">
+                <div>
+                  <Label className="text-xs">Outstanding ≥</Label>
+                  <Input type="number" step="0.1" value={settingsForm.threshold_outstanding} onChange={(e) => setSettingsForm((f) => ({ ...f, threshold_outstanding: e.target.value }))} />
+                </div>
+                <div>
+                  <Label className="text-xs">Above Expectation ≥</Label>
+                  <Input type="number" step="0.1" value={settingsForm.threshold_above} onChange={(e) => setSettingsForm((f) => ({ ...f, threshold_above: e.target.value }))} />
+                </div>
+                <div>
+                  <Label className="text-xs">Meet Expectation ≥</Label>
+                  <Input type="number" step="0.1" value={settingsForm.threshold_meet} onChange={(e) => setSettingsForm((f) => ({ ...f, threshold_meet: e.target.value }))} />
+                </div>
+              </div>
+              <p className="text-xs text-muted-foreground mt-1">Below Meet Expectation's threshold is Below Expectation.</p>
+            </div>
+            <div>
+              <Label className="text-sm font-medium">Section 3 salary range bands (BDT)</Label>
+              <div className="grid grid-cols-2 gap-3 mt-1">
+                <div>
+                  <Label className="text-xs">Category B above</Label>
+                  <Input type="number" step="1" value={settingsForm.salary_band_b_min} onChange={(e) => setSettingsForm((f) => ({ ...f, salary_band_b_min: e.target.value }))} />
+                </div>
+                <div>
+                  <Label className="text-xs">Category A above</Label>
+                  <Input type="number" step="1" value={settingsForm.salary_band_a_min} onChange={(e) => setSettingsForm((f) => ({ ...f, salary_band_a_min: e.target.value }))} />
+                </div>
+              </div>
+              <p className="text-xs text-muted-foreground mt-1">Category C is everything at or below the Category B minimum.</p>
+            </div>
+          </div>
+          <DialogFooter>
+            <Button onClick={saveSettings} disabled={savingSettings}>{savingSettings ? "Saving…" : "Save Settings"}</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       {pendingForMe.length > 0 && (
         <Card>
@@ -512,7 +637,7 @@ const PerformanceEvaluation = () => {
                   return (
                     <TableRow key={r.id}>
                       <TableCell>{profileMap[r.employee_id]?.full_name || profileMap[r.employee_id]?.email || "—"}</TableCell>
-                      <TableCell className="font-mono text-xs">{ev.average_score} / 5</TableCell>
+                      <TableCell className="font-mono text-xs">{ev.average_score} / 4</TableCell>
                       <TableCell><Badge className={CATEGORY_BADGE_CLASS[ev.category]}>{ev.category}</Badge></TableCell>
                       <TableCell>
                         <div className="flex gap-1">
@@ -551,7 +676,7 @@ const PerformanceEvaluation = () => {
                   <p className="font-medium">{profileMap[g.employeeId]?.full_name || profileMap[g.employeeId]?.email || "—"}</p>
                   {g.final && (
                     <div className="flex items-center gap-2 flex-wrap">
-                      <span className="text-xs text-muted-foreground">Weighted average: {g.final.weightedAverage} / 5</span>
+                      <span className="text-xs text-muted-foreground">Weighted average: {g.final.weightedAverage} / 4</span>
                       <Badge className={CATEGORY_BADGE_CLASS[g.final.category]}>{g.final.category}</Badge>
                       <Button size="sm" variant="outline" disabled={!hasSubmitted || !!finalization} onClick={() => finalizeEmployee(g.employeeId, g.requests, g.final!)}>
                         {finalization ? "Finalized" : "Finalize"}
@@ -563,7 +688,7 @@ const PerformanceEvaluation = () => {
                 {finalization && (
                   <div className="rounded-md bg-muted/40 p-3 text-xs space-y-1">
                     <p>
-                      Finalized {format(new Date(finalization.created_at), "MMM d, yyyy")}: {SALARY_CATEGORY_LABEL[finalization.salary_category]},{" "}
+                      Finalized {format(new Date(finalization.created_at), "MMM d, yyyy")}: {salaryCategoryLabel(finalization.salary_category, salaryBands)},{" "}
                       {finalization.final_category} → recommended annual increment{" "}
                       <span className="font-mono">{formatIncrementRange({ min: finalization.recommended_min_pct, max: finalization.recommended_max_pct })}</span> of gross salary{" "}
                       <span className="font-mono">{finalization.gross_salary.toLocaleString()}</span> BDT.
@@ -605,7 +730,7 @@ const PerformanceEvaluation = () => {
                               {r.status === "submitted" ? "Submitted" : "Pending"}
                             </Badge>
                           </TableCell>
-                          <TableCell className="font-mono text-xs">{ev ? `${ev.average_score} / 5` : "—"}</TableCell>
+                          <TableCell className="font-mono text-xs">{ev ? `${ev.average_score} / 4` : "—"}</TableCell>
                           <TableCell>{ev ? <Badge className={CATEGORY_BADGE_CLASS[ev.category]}>{ev.category}</Badge> : "—"}</TableCell>
                           <TableCell>
                             <Input
@@ -658,11 +783,12 @@ const PerformanceEvaluation = () => {
           <div className="space-y-5">
             <Table>
               <TableHeader>
-                <TableRow><TableHead className="w-32">Performance Category</TableHead><TableHead className="w-48">Description</TableHead><TableHead>Expected Contributions and Behaviors</TableHead></TableRow>
+                <TableRow><TableHead className="w-12">Score</TableHead><TableHead className="w-32">Performance Category</TableHead><TableHead className="w-48">Description</TableHead><TableHead>Expected Contributions and Behaviors</TableHead></TableRow>
               </TableHeader>
               <TableBody>
                 {PERFORMANCE_CATEGORY_GUIDE.map((c) => (
                   <TableRow key={c.category}>
+                    <TableCell className="font-mono font-semibold align-top">{c.score}</TableCell>
                     <TableCell className="font-medium align-top">{c.category}</TableCell>
                     <TableCell className="text-xs text-muted-foreground align-top">{c.description}</TableCell>
                     <TableCell className="text-xs text-muted-foreground align-top">
@@ -684,7 +810,7 @@ const PerformanceEvaluation = () => {
                     <div key={criterion} className="rounded-md border p-2 space-y-2">
                       <p className="text-xs">{criterion}</p>
                       <div className="flex items-center gap-1">
-                        {[1, 2, 3, 4, 5].map((n) => (
+                        {[1, 2, 3, 4].map((n) => (
                           <Button
                             key={n}
                             type="button"
@@ -709,8 +835,8 @@ const PerformanceEvaluation = () => {
             ))}
 
             <div className="rounded-lg border bg-muted/40 p-3 text-sm">
-              Total Score: <span className="font-mono">{summary.total} / {TOTAL_CRITERIA_COUNT * 5}</span>{" "}
-              · Average: <span className="font-mono">{summary.average} / 5</span>{" "}
+              Total Score: <span className="font-mono">{summary.total} / {TOTAL_CRITERIA_COUNT * 4}</span>{" "}
+              · Average: <span className="font-mono">{summary.average} / 4</span>{" "}
               · Category: <Badge className={CATEGORY_BADGE_CLASS[summary.category]}>{summary.category}</Badge>
             </div>
 
@@ -743,19 +869,20 @@ const PerformanceEvaluation = () => {
           {viewEvaluation && (
             <div className="space-y-5">
               <div className="rounded-lg border bg-muted/40 p-3 text-sm">
-                Total Score: <span className="font-mono">{viewEvaluation.total_score} / {viewEvaluation.criteria_count * 5}</span>{" "}
-                · Average: <span className="font-mono">{viewEvaluation.average_score} / 5</span>{" "}
+                Total Score: <span className="font-mono">{viewEvaluation.total_score} / {viewEvaluation.criteria_count * 4}</span>{" "}
+                · Average: <span className="font-mono">{viewEvaluation.average_score} / 4</span>{" "}
                 · Category: <Badge className={CATEGORY_BADGE_CLASS[viewEvaluation.category]}>{viewEvaluation.category}</Badge>
                 {" "}· Submitted {format(new Date(viewEvaluation.created_at), "MMM d, yyyy")}
               </div>
 
               <Table>
                 <TableHeader>
-                  <TableRow><TableHead className="w-32">Performance Category</TableHead><TableHead className="w-48">Description</TableHead><TableHead>Expected Contributions and Behaviors</TableHead></TableRow>
+                  <TableRow><TableHead className="w-12">Score</TableHead><TableHead className="w-32">Performance Category</TableHead><TableHead className="w-48">Description</TableHead><TableHead>Expected Contributions and Behaviors</TableHead></TableRow>
                 </TableHeader>
                 <TableBody>
                   {PERFORMANCE_CATEGORY_GUIDE.map((c) => (
                     <TableRow key={c.category}>
+                      <TableCell className="font-mono font-semibold align-top">{c.score}</TableCell>
                       <TableCell className="font-medium align-top">{c.category}</TableCell>
                       <TableCell className="text-xs text-muted-foreground align-top">{c.description}</TableCell>
                       <TableCell className="text-xs text-muted-foreground align-top">
@@ -777,7 +904,7 @@ const PerformanceEvaluation = () => {
                       <div key={criterion} className="rounded-md border p-2 space-y-1">
                         <div className="flex items-start justify-between gap-2">
                           <p className="text-xs flex-1">{criterion}</p>
-                          <Badge variant="outline" className="shrink-0">{answer?.score ?? "—"} / 5</Badge>
+                          <Badge variant="outline" className="shrink-0">{answer?.score ?? "—"} / 4</Badge>
                         </div>
                         {answer?.comment && <p className="text-xs text-muted-foreground">{answer.comment}</p>}
                       </div>
@@ -826,8 +953,8 @@ const PerformanceEvaluation = () => {
               <div className="space-y-4 text-sm">
                 <div className="rounded-md bg-muted/40 p-3 space-y-1">
                   <p>Final Category: <Badge className={CATEGORY_BADGE_CLASS[finalization.final_category]}>{finalization.final_category}</Badge></p>
-                  <p>Weighted Average: <span className="font-mono">{finalization.weighted_average} / 5</span></p>
-                  <p>Salary Category: {SALARY_CATEGORY_LABEL[finalization.salary_category]}</p>
+                  <p>Weighted Average: <span className="font-mono">{finalization.weighted_average} / 4</span></p>
+                  <p>Salary Category: {salaryCategoryLabel(finalization.salary_category, salaryBands)}</p>
                   <p>Recommended Increment Range: <span className="font-mono">{formatIncrementRange({ min: finalization.recommended_min_pct, max: finalization.recommended_max_pct })}</span></p>
                   <p>Gross Salary: <span className="font-mono">{finalization.gross_salary.toLocaleString()}</span> BDT</p>
                   <p className="text-xs text-muted-foreground">Finalized {format(new Date(finalization.created_at), "MMM d, yyyy")}</p>
@@ -1095,7 +1222,7 @@ const IncrementEvaluationDialog = ({
         <DialogHeader><DialogTitle>{existing ? "Edit Increment Decision" : "Increment Evaluation"} — {employeeName}</DialogTitle></DialogHeader>
         <div className="space-y-5">
           <div className="rounded-md bg-muted/40 p-3 text-xs">
-            {SALARY_CATEGORY_LABEL[finalization.salary_category]} · {finalization.final_category} · Policy range{" "}
+            {salaryCategoryLabel(finalization.salary_category)} · {finalization.final_category} · Policy range{" "}
             <span className="font-mono">{formatIncrementRange({ min: finalization.recommended_min_pct, max: finalization.recommended_max_pct })}</span> · Gross salary{" "}
             <span className="font-mono">{finalization.gross_salary.toLocaleString()}</span> BDT
           </div>
