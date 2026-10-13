@@ -57,8 +57,9 @@ export const TOTAL_CRITERIA_COUNT = EVALUATION_SECTIONS.reduce((n, s) => n + s.c
  * behaviors expected at that level. Shown as the reference legend in the
  * Evaluate form, the View Answers popup and its PDF.
  */
-export const PERFORMANCE_CATEGORY_GUIDE: { category: EvaluationCategory; description: string; behaviors: string[] }[] = [
+export const PERFORMANCE_CATEGORY_GUIDE: { score: number; category: EvaluationCategory; description: string; behaviors: string[] }[] = [
   {
+    score: 4,
     category: "Outstanding",
     description: "Exceptional performance exceeding expectations.",
     behaviors: [
@@ -69,6 +70,7 @@ export const PERFORMANCE_CATEGORY_GUIDE: { category: EvaluationCategory; descrip
     ],
   },
   {
+    score: 3,
     category: "Above Expectation",
     description: "Performance consistently meeting and occasionally exceeding expectations.",
     behaviors: [
@@ -79,6 +81,7 @@ export const PERFORMANCE_CATEGORY_GUIDE: { category: EvaluationCategory; descrip
     ],
   },
   {
+    score: 2,
     category: "Meet Expectation",
     description: "Performance meets the required standards and job expectations.",
     behaviors: [
@@ -88,6 +91,7 @@ export const PERFORMANCE_CATEGORY_GUIDE: { category: EvaluationCategory; descrip
     ],
   },
   {
+    score: 1,
     category: "Below Expectation",
     description: "Performance does not meet the required standards.",
     behaviors: [
@@ -108,11 +112,14 @@ export type CriterionScore = {
 
 export type EvaluationCategory = "Outstanding" | "Above Expectation" | "Meet Expectation" | "Below Expectation";
 
-/** Section 6 thresholds, applied to an average score out of 5. */
-export const categoryForAverage = (average: number): EvaluationCategory => {
-  if (average >= 4.5) return "Outstanding";
-  if (average >= 3.5) return "Above Expectation";
-  if (average >= 2.5) return "Meet Expectation";
+/** Section 6 thresholds, applied to an average score out of 4 — admin-editable via performance_evaluation_settings. */
+export type CategoryThresholds = { outstanding: number; above: number; meet: number };
+export const DEFAULT_CATEGORY_THRESHOLDS: CategoryThresholds = { outstanding: 3.6, above: 2.8, meet: 2.0 };
+
+export const categoryForAverage = (average: number, thresholds: CategoryThresholds = DEFAULT_CATEGORY_THRESHOLDS): EvaluationCategory => {
+  if (average >= thresholds.outstanding) return "Outstanding";
+  if (average >= thresholds.above) return "Above Expectation";
+  if (average >= thresholds.meet) return "Meet Expectation";
   return "Below Expectation";
 };
 
@@ -124,25 +131,27 @@ export const CATEGORY_BADGE_CLASS: Record<EvaluationCategory, string> = {
 };
 
 /** Section 5: total and average score from this evaluator's 14 criterion scores. */
-export const summarizeScores = (scores: CriterionScore[]) => {
+export const summarizeScores = (scores: CriterionScore[], thresholds: CategoryThresholds = DEFAULT_CATEGORY_THRESHOLDS) => {
   const total = scores.reduce((sum, s) => sum + (Number(s.score) || 0), 0);
   const average = scores.length ? Math.round((total / scores.length) * 100) / 100 : 0;
-  return { total, average, category: categoryForAverage(average) };
+  return { total, average, category: categoryForAverage(average, thresholds) };
 };
 
-/** Section 3: Employee Category (Salary Range Based), from current gross salary (BDT). */
+/** Section 3: Employee Category (Salary Range Based), from current gross salary (BDT) — bands are admin-editable via performance_evaluation_settings. */
 export type SalaryCategory = "A" | "B" | "C";
+export type SalaryBands = { bMin: number; aMin: number };
+export const DEFAULT_SALARY_BANDS: SalaryBands = { bMin: 20000, aMin: 40000 };
 
-export const SALARY_CATEGORY_LABEL: Record<SalaryCategory, string> = {
-  A: "Category A (Above 40,000 to 60,000 BDT)",
-  B: "Category B (Above 20,000 to 40,000 BDT)",
-  C: "Category C (Up to 20,000 BDT)",
+export const salaryCategoryLabel = (category: SalaryCategory, bands: SalaryBands = DEFAULT_SALARY_BANDS): string => {
+  if (category === "A") return `Category A (Above ${bands.aMin.toLocaleString()} BDT)`;
+  if (category === "B") return `Category B (Above ${bands.bMin.toLocaleString()} to ${bands.aMin.toLocaleString()} BDT)`;
+  return `Category C (Up to ${bands.bMin.toLocaleString()} BDT)`;
 };
 
-/** The form's bands cap at 60,000; a gross above that is treated as Category A, the top band. */
-export const salaryCategoryForGross = (gross: number): SalaryCategory => {
-  if (gross > 40000) return "A";
-  if (gross > 20000) return "B";
+/** A gross above the top band is still treated as Category A. */
+export const salaryCategoryForGross = (gross: number, bands: SalaryBands = DEFAULT_SALARY_BANDS): SalaryCategory => {
+  if (gross > bands.aMin) return "A";
+  if (gross > bands.bMin) return "B";
   return "C";
 };
 
@@ -178,7 +187,10 @@ export const formatIncrementRange = (range: IncrementRange): string =>
   range.min > 0 ? `Above ${range.min} to ${range.max}%` : `0 to ${range.max}% or freeze`;
 
 /** Final Section 6 category when an employee has multiple evaluators, combined via the admin-assigned weight on each. */
-export const weightedFinalCategory = (evaluations: { average_score: number; weight: number }[]): {
+export const weightedFinalCategory = (
+  evaluations: { average_score: number; weight: number }[],
+  thresholds: CategoryThresholds = DEFAULT_CATEGORY_THRESHOLDS,
+): {
   weightedAverage: number;
   category: EvaluationCategory;
 } | null => {
@@ -186,7 +198,7 @@ export const weightedFinalCategory = (evaluations: { average_score: number; weig
   if (totalWeight <= 0) return null;
   const weightedSum = evaluations.reduce((sum, e) => sum + (Number(e.average_score) || 0) * (Number(e.weight) || 0), 0);
   const weightedAverage = Math.round((weightedSum / totalWeight) * 100) / 100;
-  return { weightedAverage, category: categoryForAverage(weightedAverage) };
+  return { weightedAverage, category: categoryForAverage(weightedAverage, thresholds) };
 };
 
 /**
@@ -243,9 +255,9 @@ export function downloadEvaluationAnswersPDF(args: {
   y += 20;
 
   doc.setFontSize(11);
-  doc.text(`Total Score: ${totalScore} / ${criteriaCount * 5}`, left, y);
+  doc.text(`Total Score: ${totalScore} / ${criteriaCount * 4}`, left, y);
   y += 16;
-  doc.text(`Average Score: ${averageScore} / 5`, left, y);
+  doc.text(`Average Score: ${averageScore} / 4`, left, y);
   y += 16;
   doc.text(`Category: ${category}`, left, y);
   y += 24;
@@ -255,11 +267,13 @@ export function downloadEvaluationAnswersPDF(args: {
   doc.setFontSize(11);
   doc.text("Performance Category", left, y);
   y += 16;
-  const catCol = left;
-  const descCol = left + 90;
-  const behaviorCol = left + 230;
+  const scoreCol = left;
+  const catCol = left + 34;
+  const descCol = left + 110;
+  const behaviorCol = left + 250;
   doc.setFontSize(9);
   doc.setFont("helvetica", "bold");
+  doc.text("Score", scoreCol, y);
   doc.text("Category", catCol, y);
   doc.text("Description", descCol, y);
   doc.text("Expected Contributions and Behaviors", behaviorCol, y);
@@ -272,6 +286,7 @@ export function downloadEvaluationAnswersPDF(args: {
     const behaviorLines = c.behaviors.flatMap((b) => doc.splitTextToSize(`- ${b}`, right - behaviorCol));
     const rowLines = Math.max(1, descLines.length, behaviorLines.length);
     ensureSpace(rowLines * 11 + 4);
+    doc.text(String(c.score), scoreCol, y);
     doc.text(c.category, catCol, y);
     doc.text(descLines, descCol, y);
     doc.text(behaviorLines, behaviorCol, y);
@@ -290,7 +305,7 @@ export function downloadEvaluationAnswersPDF(args: {
       doc.setFontSize(9);
       const criterionLines = doc.splitTextToSize(criterion, 420);
       doc.text(criterionLines, left, y);
-      doc.text(`${answer?.score ?? "—"} / 5`, right, y, { align: "right" });
+      doc.text(`${answer?.score ?? "—"} / 4`, right, y, { align: "right" });
       y += criterionLines.length * 11 + 2;
       if (answer?.comment) {
         doc.setTextColor(120);
