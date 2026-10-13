@@ -27,7 +27,7 @@ import {
 } from "@/lib/incrementEvaluation";
 import { notifyEmployee } from "@/lib/notifications";
 
-type Profile = { id: string; full_name: string | null; email: string | null; base_salary?: number | null };
+type Profile = { id: string; full_name: string | null; email: string | null; base_salary?: number | null; designation?: string | null };
 
 type Finalization = {
   id: string;
@@ -157,7 +157,7 @@ const PerformanceEvaluation = () => {
 
     if (isAdmin) {
       const [{ data: pf }, { data: finals }, { data: incEvals }] = await Promise.all([
-        supabase.from("profiles").select("id, full_name, email, base_salary").order("full_name"),
+        supabase.from("profiles").select("id, full_name, email, base_salary, designation").order("full_name"),
         supabase.from("performance_evaluation_finalizations").select("*").order("created_at", { ascending: false }),
         supabase.from("increment_evaluations").select("*"),
       ]);
@@ -180,7 +180,7 @@ const PerformanceEvaluation = () => {
       // falling back to "—" everywhere an employee is shown.
       const employeeIds = Array.from(new Set((reqs || []).map((r) => r.employee_id)));
       if (employeeIds.length > 0) {
-        const { data: pf } = await supabase.from("profiles").select("id, full_name, email").in("id", employeeIds);
+        const { data: pf } = await supabase.from("profiles").select("id, full_name, email, designation").in("id", employeeIds);
         setProfiles((pf || []) as Profile[]);
       }
     }
@@ -786,6 +786,8 @@ const PerformanceEvaluation = () => {
               <Button
                 variant="outline"
                 onClick={() => downloadEvaluationAnswersPDF({
+                  employeeName: profileMap[viewEvaluation.employee_id]?.full_name || profileMap[viewEvaluation.employee_id]?.email || "—",
+                  employeeDesignation: profileMap[viewEvaluation.employee_id]?.designation,
                   scores: viewEvaluation.scores,
                   totalScore: viewEvaluation.total_score,
                   criteriaCount: viewEvaluation.criteria_count,
