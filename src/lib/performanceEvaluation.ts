@@ -52,57 +52,18 @@ export const EVALUATION_SECTIONS: { key: string; title: string; criteria: string
 export const TOTAL_CRITERIA_COUNT = EVALUATION_SECTIONS.reduce((n, s) => n + s.criteria.length, 0);
 
 /**
- * Section 6: the four final Performance Categories an evaluation's average
- * score resolves to (via categoryForAverage) — what each one means and the
- * behaviors expected at that level. Shown as the reference legend in the
- * Evaluate form, the View Answers popup and its PDF.
+ * What each 1-5 per-criterion score means — the reference legend shown in
+ * the Evaluate form, the View Answers popup and its PDF. Admin-editable via
+ * performance_evaluation_settings; values only (5 rows stay fixed).
  */
-export type PerformanceCategoryGuideRow = { score: number; category: EvaluationCategory; description: string; behaviors: string[] };
+export type ScoreScaleRow = { score: number; label: string; description: string };
 
-export const DEFAULT_PERFORMANCE_CATEGORY_GUIDE: PerformanceCategoryGuideRow[] = [
-  {
-    score: 4,
-    category: "Outstanding",
-    description: "Exceptional performance exceeding expectations.",
-    behaviors: [
-      "Consistently exceeds targets and goals.",
-      "Demonstrates leadership and innovation in the role.",
-      "Highly proactive, often leading initiatives beyond their scope.",
-      "Plays a critical role in team success and company growth.",
-    ],
-  },
-  {
-    score: 3,
-    category: "Above Expectation",
-    description: "Performance consistently meeting and occasionally exceeding expectations.",
-    behaviors: [
-      "Regularly meets and exceeds goals in their job.",
-      "Contributes to team success with minimal supervision.",
-      "Takes on additional responsibilities and is reliable.",
-      "Actively seek opportunities for improvement.",
-    ],
-  },
-  {
-    score: 2,
-    category: "Meet Expectation",
-    description: "Performance meets the required standards and job expectations.",
-    behaviors: [
-      "Consistently meets job requirements and performs as expected.",
-      "Follows company guidelines and completes tasks on time.",
-      "Reliable, with consistent performance but limited initiative beyond assigned tasks.",
-    ],
-  },
-  {
-    score: 1,
-    category: "Below Expectation",
-    description: "Performance does not meet the required standards.",
-    behaviors: [
-      "Fails to meet set goals and deadlines.",
-      "Requires frequent supervision or guidance.",
-      "Shows a lack of initiative and contributes minimally to team success.",
-      "Needs improvement in critical job-related skills.",
-    ],
-  },
+export const DEFAULT_SCORE_SCALE: ScoreScaleRow[] = [
+  { score: 1, label: "Poor", description: "Consistently fails to meet expectations" },
+  { score: 2, label: "Below Average", description: "Occasionally meets expectations; needs improvement" },
+  { score: 3, label: "Satisfactory", description: "Meets expectations consistently" },
+  { score: 4, label: "Good", description: "Frequently exceeds expectations" },
+  { score: 5, label: "Excellent", description: "Consistently exceeds expectations" },
 ];
 
 export type CriterionScore = {
@@ -114,9 +75,9 @@ export type CriterionScore = {
 
 export type EvaluationCategory = "Outstanding" | "Above Expectation" | "Meet Expectation" | "Below Expectation";
 
-/** Section 6 thresholds, applied to an average score out of 4 — admin-editable via performance_evaluation_settings. */
+/** Section 6 thresholds, applied to an average score out of 5 — admin-editable via performance_evaluation_settings. */
 export type CategoryThresholds = { outstanding: number; above: number; meet: number };
-export const DEFAULT_CATEGORY_THRESHOLDS: CategoryThresholds = { outstanding: 3.6, above: 2.8, meet: 2.0 };
+export const DEFAULT_CATEGORY_THRESHOLDS: CategoryThresholds = { outstanding: 4.5, above: 3.5, meet: 2.5 };
 
 export const categoryForAverage = (average: number, thresholds: CategoryThresholds = DEFAULT_CATEGORY_THRESHOLDS): EvaluationCategory => {
   if (average >= thresholds.outstanding) return "Outstanding";
@@ -224,10 +185,10 @@ export function downloadEvaluationAnswersPDF(args: {
   justification: string;
   submittedAt: string;
   companyName?: string;
-  categoryGuide?: PerformanceCategoryGuideRow[];
+  scoreScale?: ScoreScaleRow[];
 }) {
   const { employeeName, employeeDesignation, scores, totalScore, criteriaCount, averageScore, category, justification, submittedAt } = args;
-  const categoryGuide = args.categoryGuide || DEFAULT_PERFORMANCE_CATEGORY_GUIDE;
+  const scoreScale = args.scoreScale || DEFAULT_SCORE_SCALE;
   const company = args.companyName || "Workforce & Attendance Management System (WAMS)";
   const doc = new jsPDF({ unit: "pt", format: "a4" });
   const left = 48;
@@ -263,44 +224,39 @@ export function downloadEvaluationAnswersPDF(args: {
   y += 20;
 
   doc.setFontSize(11);
-  doc.text(`Total Score: ${totalScore} / ${criteriaCount * 4}`, left, y);
+  doc.text(`Total Score: ${totalScore} / ${criteriaCount * 5}`, left, y);
   y += 16;
-  doc.text(`Average Score: ${averageScore} / 4`, left, y);
+  doc.text(`Average Score: ${averageScore} / 5`, left, y);
   y += 16;
   doc.text(`Category: ${category}`, left, y);
   y += 24;
 
-  // Performance Category legend, same as the View Answers popup's table.
-  ensureSpace(20);
+  // Score scale legend, same as the View Answers popup's table.
+  ensureSpace(20 + scoreScale.length * 14);
   doc.setFontSize(11);
-  doc.text("Performance Category", left, y);
+  doc.text("Score Scale", left, y);
   y += 16;
   const scoreCol = left;
-  const catCol = left + 34;
-  const descCol = left + 110;
-  const behaviorCol = left + 250;
+  const meaningCol = left + 40;
+  const descCol = left + 150;
   doc.setFontSize(9);
   doc.setFont("helvetica", "bold");
   doc.text("Score", scoreCol, y);
-  doc.text("Category", catCol, y);
+  doc.text("Meaning", meaningCol, y);
   doc.text("Description", descCol, y);
-  doc.text("Expected Contributions and Behaviors", behaviorCol, y);
   doc.setFont("helvetica", "normal");
   y += 12;
   doc.setDrawColor(210);
   doc.line(left, y - 9, right, y - 9);
-  categoryGuide.forEach((c) => {
-    const descLines = doc.splitTextToSize(c.description, behaviorCol - descCol - 8);
-    const behaviorLines = c.behaviors.flatMap((b) => doc.splitTextToSize(`- ${b}`, right - behaviorCol));
-    const rowLines = Math.max(1, descLines.length, behaviorLines.length);
-    ensureSpace(rowLines * 11 + 4);
-    doc.text(String(c.score), scoreCol, y);
-    doc.text(c.category, catCol, y);
+  scoreScale.forEach((s) => {
+    ensureSpace(14);
+    doc.text(String(s.score), scoreCol, y);
+    doc.text(s.label, meaningCol, y);
+    const descLines = doc.splitTextToSize(s.description, right - descCol);
     doc.text(descLines, descCol, y);
-    doc.text(behaviorLines, behaviorCol, y);
-    y += rowLines * 11 + 6;
+    y += Math.max(12, descLines.length * 11);
   });
-  y += 10;
+  y += 12;
 
   EVALUATION_SECTIONS.forEach((section) => {
     ensureSpace(30);
@@ -313,7 +269,7 @@ export function downloadEvaluationAnswersPDF(args: {
       doc.setFontSize(9);
       const criterionLines = doc.splitTextToSize(criterion, 420);
       doc.text(criterionLines, left, y);
-      doc.text(`${answer?.score ?? "—"} / 4`, right, y, { align: "right" });
+      doc.text(`${answer?.score ?? "—"} / 5`, right, y, { align: "right" });
       y += criterionLines.length * 11 + 2;
       if (answer?.comment) {
         doc.setTextColor(120);
