@@ -570,9 +570,11 @@ function MyPaymentsTab() {
   // is checked; unchecked (carried to next month) drops out of Net Payment
   // entirely — Net Salary falls back to Gross Salary (Net Adjustment not
   // counted) rather than to 0, since the gross is being paid regardless.
+  // Expense/Loan use the editable amount boxes (default to the full
+  // outstanding balance) so a partial entry there is reflected here too.
   const netPayment = (netHoursPaidNow ? finalSalaryNoExpense : grossSalary)
-    + (expensePaidNow ? expenseOutstanding : 0)
-    - (loanPaidNow ? loanDue : 0);
+    + (expensePaidNow ? (Number(expenseAmount) || 0) : 0)
+    - (loanPaidNow ? (Number(loanAmount) || 0) : 0);
 
   const submit = async () => {
     if (!user || !selectedUserId) return;
@@ -920,10 +922,13 @@ function MyPaymentsSummary() {
 
   const loanDue = loan ? Math.min(Number(loan.monthly_deduction), Number(loan.remaining_balance)) : 0;
   // Mirrors MyPaymentsTab's formula using the settlement's own saved
-  // Adjust Now flags (defaulting to checked when nothing's recorded yet).
+  // Adjust Now flags (defaulting to checked when nothing's recorded yet) and
+  // its recorded paid amounts (falling back to the full outstanding balance
+  // before anything's been recorded) — so a partial amount the admin entered
+  // shows here too, not the full balance.
   const netPayment = ((settlement ? settlement.net_hours_paid : true) ? finalSalaryNoExpense : grossSalary)
-    + ((settlement ? settlement.expense_paid : true) ? expenseOutstanding : 0)
-    - ((settlement ? settlement.loan_paid : true) ? loanDue : 0);
+    + ((settlement ? settlement.expense_paid : true) ? (settlement ? Number(settlement.expense_amount_paid) || 0 : expenseOutstanding) : 0)
+    - ((settlement ? settlement.loan_paid : true) ? (settlement ? Number(settlement.loan_amount_paid) || 0 : loanDue) : 0);
 
   const downloadReceipt = () => {
     downloadPaymentReceiptPDF({
