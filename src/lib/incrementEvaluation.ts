@@ -1,15 +1,33 @@
 /** Section 1 of the Increment Evaluation Form: company performance scenario and its approved increment-factor range. */
 export type CompanyScenario = "strong" | "average" | "weak" | "freeze";
 
-export const COMPANY_SCENARIOS: { value: CompanyScenario; label: string; detail: string; range: { min: number; max: number } | null }[] = [
-  { value: "strong", label: "Strong", detail: "Financial backup 2 years+", range: { min: 80, max: 100 } },
-  { value: "average", label: "Average", detail: "Financial backup 1 year+", range: { min: 60, max: 80 } },
-  { value: "weak", label: "Weak", detail: "Financial backup below 1 year", range: { min: 0, max: 60 } },
-  { value: "freeze", label: "Increment Freeze", detail: "Final increment = 0%", range: null },
+/** Ranges are admin-editable via performance_evaluation_settings.company_scenario_ranges; label/detail/freeze stay fixed (same form, values-only editing). */
+export type CompanyScenarioRange = { min: number; max: number };
+export type CompanyScenarioRanges = Record<"strong" | "average" | "weak", CompanyScenarioRange>;
+
+export const DEFAULT_COMPANY_SCENARIO_RANGES: CompanyScenarioRanges = {
+  strong: { min: 80, max: 100 },
+  average: { min: 60, max: 80 },
+  weak: { min: 0, max: 60 },
+};
+
+const SCENARIO_META: { value: CompanyScenario; label: string; detail: string }[] = [
+  { value: "strong", label: "Strong", detail: "Financial backup 2 years+" },
+  { value: "average", label: "Average", detail: "Financial backup 1 year+" },
+  { value: "weak", label: "Weak", detail: "Financial backup below 1 year" },
+  { value: "freeze", label: "Increment Freeze", detail: "Final increment = 0%" },
 ];
 
-export const companyScenario = (value: CompanyScenario) =>
-  COMPANY_SCENARIOS.find((s) => s.value === value) ?? COMPANY_SCENARIOS[0];
+export const companyScenarios = (
+  ranges: CompanyScenarioRanges = DEFAULT_COMPANY_SCENARIO_RANGES,
+): { value: CompanyScenario; label: string; detail: string; range: CompanyScenarioRange | null }[] =>
+  SCENARIO_META.map((s) => ({ ...s, range: s.value === "freeze" ? null : ranges[s.value] }));
+
+/** @deprecated use companyScenarios(ranges) so admin-edited ranges apply; kept for any caller that genuinely wants the hardcoded defaults. */
+export const COMPANY_SCENARIOS = companyScenarios();
+
+export const companyScenario = (value: CompanyScenario, ranges: CompanyScenarioRanges = DEFAULT_COMPANY_SCENARIO_RANGES) =>
+  companyScenarios(ranges).find((s) => s.value === value) ?? companyScenarios(ranges)[0];
 
 /** Section 2: Final Annual Increment % = (Recommended % × Approved Increment Factor %) ÷ 100. */
 export const finalIncrementPct = (averageRecommendedPct: number, approvedFactorPct: number, scenario: CompanyScenario): number => {

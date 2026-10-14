@@ -17,13 +17,15 @@ import { format } from "date-fns";
 import {
   EVALUATION_SECTIONS, TOTAL_CRITERIA_COUNT, summarizeScores, weightedFinalCategory,
   CATEGORY_BADGE_CLASS, salaryCategoryForGross, salaryCategoryLabel, recommendedIncrementRange, formatIncrementRange,
-  PERFORMANCE_CATEGORY_GUIDE, downloadEvaluationAnswersPDF,
-  DEFAULT_CATEGORY_THRESHOLDS, DEFAULT_SALARY_BANDS,
+  DEFAULT_PERFORMANCE_CATEGORY_GUIDE, downloadEvaluationAnswersPDF,
+  DEFAULT_CATEGORY_THRESHOLDS, DEFAULT_SALARY_BANDS, DEFAULT_INCREMENT_POLICY,
   type CriterionScore, type EvaluationCategory, type SalaryCategory, type CategoryThresholds, type SalaryBands,
+  type PerformanceCategoryGuideRow, type IncrementPolicy, type IncrementRange,
 } from "@/lib/performanceEvaluation";
 import {
-  COMPANY_SCENARIOS, companyScenario, finalIncrementPct, grossAfterIncrement,
+  companyScenarios, companyScenario, finalIncrementPct, grossAfterIncrement,
   basicFromGross, incrementAmountFromBasic,
+  DEFAULT_COMPANY_SCENARIO_RANGES, type CompanyScenarioRanges,
   RETENTION_CHECKLIST_ITEMS, RETENTION_PERIODS, type CompanyScenario,
 } from "@/lib/incrementEvaluation";
 import { notifyEmployee } from "@/lib/notifications";
@@ -100,6 +102,9 @@ type Evaluation = {
 
 const emptyRequestForm = () => ({ employee_id: "", evaluator_ids: [] as string[], period_from: "", period_to: "" });
 
+const SALARY_CATEGORIES: SalaryCategory[] = ["A", "B", "C"];
+const PERFORMANCE_CATEGORIES: EvaluationCategory[] = ["Outstanding", "Above Expectation", "Meet Expectation", "Below Expectation"];
+
 const emptyAnswerForm = (defaultScore = 2): { scores: CriterionScore[]; justification: string } => ({
   scores: EVALUATION_SECTIONS.flatMap((s) => s.criteria.map((criterion) => ({ section: s.key, criterion, score: defaultScore, comment: "" }))),
   justification: "",
@@ -132,15 +137,22 @@ const PerformanceEvaluation = () => {
   const [salaryIncrementMap, setSalaryIncrementMap] = useState<Record<string, SalaryIncrementLink>>({});
 
   // Admin-editable, future-evaluation-only settings: default criterion
-  // score, Section 6 category thresholds, Section 3 salary bands.
+  // score, Section 6 category thresholds, Section 3 salary bands, the
+  // Section 6 category guide (description/behaviors) and the Section 6A
+  // increment policy matrix. Values only — the row/column shape (4
+  // performance categories, 3 salary categories) stays fixed.
   const [thresholds, setThresholds] = useState<CategoryThresholds>(DEFAULT_CATEGORY_THRESHOLDS);
   const [salaryBands, setSalaryBands] = useState<SalaryBands>(DEFAULT_SALARY_BANDS);
   const [defaultScore, setDefaultScore] = useState(2);
+  const [categoryGuide, setCategoryGuide] = useState<PerformanceCategoryGuideRow[]>(DEFAULT_PERFORMANCE_CATEGORY_GUIDE);
+  const [incrementPolicy, setIncrementPolicy] = useState<IncrementPolicy>(DEFAULT_INCREMENT_POLICY);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [settingsForm, setSettingsForm] = useState({
     default_score: "2", threshold_outstanding: "3.6", threshold_above: "2.8", threshold_meet: "2.0",
     salary_band_b_min: "20000", salary_band_a_min: "40000",
   });
+  const [guideForm, setGuideForm] = useState<PerformanceCategoryGuideRow[]>(DEFAULT_PERFORMANCE_CATEGORY_GUIDE);
+  const [policyForm, setPolicyForm] = useState<IncrementPolicy>(DEFAULT_INCREMENT_POLICY);
   const [savingSettings, setSavingSettings] = useState(false);
 
   const profileMap = useMemo(() => {
@@ -184,6 +196,12 @@ const PerformanceEvaluation = () => {
         salary_band_b_min: String(settings.salary_band_b_min),
         salary_band_a_min: String(settings.salary_band_a_min),
       });
+      const guide = (settings.performance_category_guide as PerformanceCategoryGuideRow[] | null) || DEFAULT_PERFORMANCE_CATEGORY_GUIDE;
+      setCategoryGuide(guide);
+      setGuideForm(guide.map((c) => ({ ...c, behaviors: [...c.behaviors] })));
+      const policy = (settings.increment_policy as IncrementPolicy | null) || DEFAULT_INCREMENT_POLICY;
+      setIncrementPolicy(policy);
+      setPolicyForm(policy);
     }
 
     if (isAdmin) {
@@ -236,6 +254,14 @@ const PerformanceEvaluation = () => {
     if (![bMin, aMin].every(Number.isFinite) || aMin <= bMin || bMin < 0) {
       toast.error("Salary bands must be numbers with Category A's minimum greater than Category B's"); return;
     }
+    if (guideForm.some((c) => !c.description.trim() || c.behaviors.length === 0 || c.behaviors.some((b) => !b.trim()))) {
+      toast.error("Every Performance Category needs a description and at least one non-empty behavior"); return;
+    }
+    const policyRows = (["A", "B", "C"] as SalaryCategory[]).flatMap((sc) =>
+      (["Outstanding", "Above Expectation", "Meet Expectation", "Below Expectation"] as EvaluationCategory[]).map((pc) => policyForm[sc][pc]));
+    if (policyRows.some((r) => !Number.isFinite(r.min) || !Number.isFinite(r.max) || r.min < 0 || r.max < r.min)) {
+      toast.error("Every increment range needs a minimum ≤ maximum, both 0 or greater"); return;
+    }
     setSavingSettings(true);
     const { error } = await supabase.from("performance_evaluation_settings").update({
       default_score: defaultScoreVal,
@@ -244,6 +270,8 @@ const PerformanceEvaluation = () => {
       threshold_meet: meet,
       salary_band_b_min: bMin,
       salary_band_a_min: aMin,
+      performance_category_guide: guideForm,
+      increment_policy: policyForm,
       updated_by: user.id,
     }).eq("id", "default");
     setSavingSettings(false);
@@ -252,6 +280,24 @@ const PerformanceEvaluation = () => {
     setSettingsOpen(false);
     fetchAll();
   };
+
+  const updateGuideField = (category: EvaluationCategory, field: "description", value: string) =>
+    setGuideForm((rows) => rows.map((r) => (r.category === category ? { ...r, [field]: value } : r)));
+  const updateGuideBehavior = (category: EvaluationCategory, index: number, value: string) =>
+    setGuideForm((rows) => rows.map((r) => (r.category === category ? { ...r, behaviors: r.behaviors.map((b, i) => (i === index ? value : b)) } : r)));
+  const addGuideBehavior = (category: EvaluationCategory) =>
+    setGuideForm((rows) => rows.map((r) => (r.category === category ? { ...r, behaviors: [...r.behaviors, ""] } : r)));
+  const removeGuideBehavior = (category: EvaluationCategory, index: number) =>
+    setGuideForm((rows) => rows.map((r) => (r.category === category ? { ...r, behaviors: r.behaviors.filter((_, i) => i !== index) } : r)));
+
+  const updatePolicyCell = (salaryCategory: SalaryCategory, performanceCategory: EvaluationCategory, field: keyof IncrementRange, value: string) =>
+    setPolicyForm((p) => ({
+      ...p,
+      [salaryCategory]: {
+        ...p[salaryCategory],
+        [performanceCategory]: { ...p[salaryCategory][performanceCategory], [field]: Number(value) },
+      },
+    }));
 
   const toggleRequestEvaluator = (id: string) =>
     setRequestForm((f) => ({
@@ -405,7 +451,7 @@ const PerformanceEvaluation = () => {
       return;
     }
     const salaryCategory = salaryCategoryForGross(gross, salaryBands);
-    const range = recommendedIncrementRange(salaryCategory, final.category);
+    const range = recommendedIncrementRange(salaryCategory, final.category, incrementPolicy);
     const { error } = await supabase.from("performance_evaluation_finalizations").insert({
       employee_id: employeeId,
       finalized_by: user.id,
@@ -474,7 +520,16 @@ const PerformanceEvaluation = () => {
         </div>
         {isAdmin && (
           <div className="flex items-center gap-2">
-            <Button variant="outline" onClick={() => setSettingsOpen(true)}>Settings</Button>
+            <Button
+              variant="outline"
+              onClick={() => {
+                setGuideForm(categoryGuide.map((c) => ({ ...c, behaviors: [...c.behaviors] })));
+                setPolicyForm(JSON.parse(JSON.stringify(incrementPolicy)));
+                setSettingsOpen(true);
+              }}
+            >
+              Settings
+            </Button>
             <Dialog open={requestOpen} onOpenChange={setRequestOpen}>
             <DialogTrigger asChild>
               <Button><Plus className="h-4 w-4 mr-1" /> Request Evaluation</Button>
@@ -529,14 +584,16 @@ const PerformanceEvaluation = () => {
       </div>
 
       <Dialog open={settingsOpen} onOpenChange={setSettingsOpen}>
-        <DialogContent className="max-w-lg">
+        <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle>Performance Evaluation Settings</DialogTitle>
           </DialogHeader>
-          <div className="space-y-4 text-sm">
+          <div className="space-y-6 text-sm">
             <p className="text-xs text-muted-foreground">
               Applies to future evaluations only — already-submitted evaluations and finalizations keep the figures they were computed with.
+              Values only: each table's rows and columns are fixed to match the official evaluation form.
             </p>
+
             <div>
               <Label>Default score per criterion (1-4)</Label>
               <Input
@@ -545,38 +602,150 @@ const PerformanceEvaluation = () => {
                 onChange={(e) => setSettingsForm((f) => ({ ...f, default_score: e.target.value }))}
               />
             </div>
+
+            {/* Table 1: Employee Salary Category vs Salary Range */}
             <div>
-              <Label className="text-sm font-medium">Section 6 category thresholds (average score out of 4)</Label>
-              <div className="grid grid-cols-3 gap-3 mt-1">
-                <div>
-                  <Label className="text-xs">Outstanding ≥</Label>
-                  <Input type="number" step="0.1" value={settingsForm.threshold_outstanding} onChange={(e) => setSettingsForm((f) => ({ ...f, threshold_outstanding: e.target.value }))} />
-                </div>
-                <div>
-                  <Label className="text-xs">Above Expectation ≥</Label>
-                  <Input type="number" step="0.1" value={settingsForm.threshold_above} onChange={(e) => setSettingsForm((f) => ({ ...f, threshold_above: e.target.value }))} />
-                </div>
-                <div>
-                  <Label className="text-xs">Meet Expectation ≥</Label>
-                  <Input type="number" step="0.1" value={settingsForm.threshold_meet} onChange={(e) => setSettingsForm((f) => ({ ...f, threshold_meet: e.target.value }))} />
-                </div>
+              <Label className="text-sm font-medium">1. Employee Salary Category — Salary Range (BDT)</Label>
+              <div className="overflow-x-auto mt-1">
+                <Table>
+                  <TableHeader>
+                    <TableRow><TableHead>Employee Category</TableHead><TableHead>Salary Range (BDT)</TableHead></TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    <TableRow>
+                      <TableCell className="font-medium">A</TableCell>
+                      <TableCell className="flex items-center gap-2 flex-wrap">
+                        Above <Input type="number" step="1" className="w-28 inline-block" value={settingsForm.salary_band_a_min} onChange={(e) => setSettingsForm((f) => ({ ...f, salary_band_a_min: e.target.value }))} /> BDT
+                      </TableCell>
+                    </TableRow>
+                    <TableRow>
+                      <TableCell className="font-medium">B</TableCell>
+                      <TableCell className="flex items-center gap-2 flex-wrap">
+                        Above <Input type="number" step="1" className="w-28 inline-block" value={settingsForm.salary_band_b_min} onChange={(e) => setSettingsForm((f) => ({ ...f, salary_band_b_min: e.target.value }))} /> to {settingsForm.salary_band_a_min || "—"} BDT
+                      </TableCell>
+                    </TableRow>
+                    <TableRow>
+                      <TableCell className="font-medium">C</TableCell>
+                      <TableCell>Up to {settingsForm.salary_band_b_min || "—"} BDT</TableCell>
+                    </TableRow>
+                  </TableBody>
+                </Table>
               </div>
-              <p className="text-xs text-muted-foreground mt-1">Below Meet Expectation's threshold is Below Expectation.</p>
             </div>
+
+            {/* Table 3: thresholds that resolve an average score to a Performance Category */}
             <div>
-              <Label className="text-sm font-medium">Section 3 salary range bands (BDT)</Label>
-              <div className="grid grid-cols-2 gap-3 mt-1">
-                <div>
-                  <Label className="text-xs">Category B above</Label>
-                  <Input type="number" step="1" value={settingsForm.salary_band_b_min} onChange={(e) => setSettingsForm((f) => ({ ...f, salary_band_b_min: e.target.value }))} />
-                </div>
-                <div>
-                  <Label className="text-xs">Category A above</Label>
-                  <Input type="number" step="1" value={settingsForm.salary_band_a_min} onChange={(e) => setSettingsForm((f) => ({ ...f, salary_band_a_min: e.target.value }))} />
-                </div>
+              <Label className="text-sm font-medium">3. Employee Performance Category After Weighted Average (score out of 4)</Label>
+              <div className="overflow-x-auto mt-1">
+                <Table>
+                  <TableHeader>
+                    <TableRow><TableHead>Performance Category</TableHead><TableHead>Minimum Average Score</TableHead></TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    <TableRow>
+                      <TableCell className="font-medium">Outstanding</TableCell>
+                      <TableCell><Input type="number" step="0.1" className="w-24" value={settingsForm.threshold_outstanding} onChange={(e) => setSettingsForm((f) => ({ ...f, threshold_outstanding: e.target.value }))} /></TableCell>
+                    </TableRow>
+                    <TableRow>
+                      <TableCell className="font-medium">Above Expectation</TableCell>
+                      <TableCell><Input type="number" step="0.1" className="w-24" value={settingsForm.threshold_above} onChange={(e) => setSettingsForm((f) => ({ ...f, threshold_above: e.target.value }))} /></TableCell>
+                    </TableRow>
+                    <TableRow>
+                      <TableCell className="font-medium">Meet Expectation</TableCell>
+                      <TableCell><Input type="number" step="0.1" className="w-24" value={settingsForm.threshold_meet} onChange={(e) => setSettingsForm((f) => ({ ...f, threshold_meet: e.target.value }))} /></TableCell>
+                    </TableRow>
+                    <TableRow>
+                      <TableCell className="font-medium">Below Expectation</TableCell>
+                      <TableCell className="text-muted-foreground">Below Meet Expectation's minimum</TableCell>
+                    </TableRow>
+                  </TableBody>
+                </Table>
               </div>
-              <p className="text-xs text-muted-foreground mt-1">Category C is everything at or below the Category B minimum.</p>
             </div>
+
+            {/* Table 4: Performance Category guide (description + behaviors) */}
+            <div>
+              <Label className="text-sm font-medium">4. Employee Performance Category — Description &amp; Expected Contributions and Behaviors</Label>
+              <div className="space-y-3 mt-1">
+                {guideForm.map((row) => (
+                  <div key={row.category} className="rounded-md border p-3 space-y-2">
+                    <div className="font-medium">{row.score} — {row.category}</div>
+                    <div>
+                      <Label className="text-xs">Description</Label>
+                      <Textarea
+                        rows={2}
+                        value={row.description}
+                        onChange={(e) => updateGuideField(row.category, "description", e.target.value)}
+                      />
+                    </div>
+                    <div>
+                      <Label className="text-xs">Expected Contributions and Behaviors</Label>
+                      <div className="space-y-1 mt-1">
+                        {row.behaviors.map((b, i) => (
+                          <div key={i} className="flex items-center gap-2">
+                            <Input value={b} onChange={(e) => updateGuideBehavior(row.category, i, e.target.value)} />
+                            <Button
+                              type="button" size="icon" variant="ghost" className="text-destructive hover:text-destructive shrink-0"
+                              onClick={() => removeGuideBehavior(row.category, i)}
+                              disabled={row.behaviors.length <= 1}
+                            >
+                              <Trash2 className="h-4 w-4" />
+                            </Button>
+                          </div>
+                        ))}
+                      </div>
+                      <Button type="button" size="sm" variant="outline" className="mt-2" onClick={() => addGuideBehavior(row.category)}>
+                        <Plus className="h-3.5 w-3.5 mr-1" /> Add Behavior
+                      </Button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            {/* Table 5: Increment Range matrix — salary category x performance category */}
+            <div>
+              <Label className="text-sm font-medium">5. Employee Salary Category vs. Employee Performance Category — Annual Increment Range (%)</Label>
+              <div className="overflow-x-auto mt-1">
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>Category</TableHead>
+                      {PERFORMANCE_CATEGORIES.map((pc) => <TableHead key={pc}>{pc}</TableHead>)}
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {SALARY_CATEGORIES.map((sc) => (
+                      <TableRow key={sc}>
+                        <TableCell className="font-medium">{sc}</TableCell>
+                        {PERFORMANCE_CATEGORIES.map((pc) => (
+                          <TableCell key={pc}>
+                            <div className="flex items-center gap-1">
+                              <Input
+                                type="number" step="1" className="w-16"
+                                value={policyForm[sc][pc].min}
+                                onChange={(e) => updatePolicyCell(sc, pc, "min", e.target.value)}
+                              />
+                              <span>–</span>
+                              <Input
+                                type="number" step="1" className="w-16"
+                                value={policyForm[sc][pc].max}
+                                onChange={(e) => updatePolicyCell(sc, pc, "max", e.target.value)}
+                              />
+                              <span>%</span>
+                            </div>
+                          </TableCell>
+                        ))}
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              </div>
+            </div>
+
+            <p className="text-xs text-muted-foreground">
+              Table 2 (Company Performance scenario ranges used in Increment Evaluation) is edited from that step itself — open "Decide Increment" for a finalized employee.
+            </p>
           </div>
           <DialogFooter>
             <Button onClick={saveSettings} disabled={savingSettings}>{savingSettings ? "Saving…" : "Save Settings"}</Button>
@@ -588,7 +757,7 @@ const PerformanceEvaluation = () => {
         <Card>
           <CardHeader>
             <CardTitle className="text-base">Evaluations Requested of You</CardTitle>
-            <CardDescription>Score each criterion 1–5; the total, average and category are calculated for you.</CardDescription>
+            <CardDescription>Score each criterion 1–4; the total, average and category are calculated for you.</CardDescription>
           </CardHeader>
           <CardContent>
             <Table>
@@ -786,7 +955,7 @@ const PerformanceEvaluation = () => {
                 <TableRow><TableHead className="w-12">Score</TableHead><TableHead className="w-32">Performance Category</TableHead><TableHead className="w-48">Description</TableHead><TableHead>Expected Contributions and Behaviors</TableHead></TableRow>
               </TableHeader>
               <TableBody>
-                {PERFORMANCE_CATEGORY_GUIDE.map((c) => (
+                {categoryGuide.map((c) => (
                   <TableRow key={c.category}>
                     <TableCell className="font-mono font-semibold align-top">{c.score}</TableCell>
                     <TableCell className="font-medium align-top">{c.category}</TableCell>
@@ -880,7 +1049,7 @@ const PerformanceEvaluation = () => {
                   <TableRow><TableHead className="w-12">Score</TableHead><TableHead className="w-32">Performance Category</TableHead><TableHead className="w-48">Description</TableHead><TableHead>Expected Contributions and Behaviors</TableHead></TableRow>
                 </TableHeader>
                 <TableBody>
-                  {PERFORMANCE_CATEGORY_GUIDE.map((c) => (
+                  {categoryGuide.map((c) => (
                     <TableRow key={c.category}>
                       <TableCell className="font-mono font-semibold align-top">{c.score}</TableCell>
                       <TableCell className="font-medium align-top">{c.category}</TableCell>
@@ -930,6 +1099,7 @@ const PerformanceEvaluation = () => {
                   category: viewEvaluation.category,
                   justification: viewEvaluation.justification,
                   submittedAt: viewEvaluation.created_at,
+                  categoryGuide,
                 })}
               >
                 Generate PDF Report
@@ -1098,8 +1268,45 @@ const IncrementEvaluationDialog = ({
   const { user } = useAuth();
   const [form, setForm] = useState(() => emptyIncrementForm(finalization, existing, existingEffectiveFrom));
   const [saving, setSaving] = useState(false);
+  const [scenarioRanges, setScenarioRanges] = useState<CompanyScenarioRanges>(DEFAULT_COMPANY_SCENARIO_RANGES);
+  const [editingRanges, setEditingRanges] = useState(false);
+  const [rangesForm, setRangesForm] = useState<CompanyScenarioRanges>(DEFAULT_COMPANY_SCENARIO_RANGES);
+  const [savingRanges, setSavingRanges] = useState(false);
 
-  const scenario = companyScenario(form.company_scenario);
+  useEffect(() => {
+    (async () => {
+      const { data } = await supabase.from("performance_evaluation_settings").select("company_scenario_ranges").eq("id", "default").single();
+      const ranges = (data?.company_scenario_ranges as CompanyScenarioRanges | null) || DEFAULT_COMPANY_SCENARIO_RANGES;
+      setScenarioRanges(ranges);
+      setRangesForm(ranges);
+      if (!existing) {
+        setForm((f) => ({ ...f, approved_increment_factor_pct: companyScenario(f.company_scenario, ranges).range?.max ?? 0 }));
+      }
+    })();
+  }, [existing]);
+
+  const saveRanges = async () => {
+    for (const key of ["strong", "average", "weak"] as const) {
+      if (rangesForm[key].min < 0 || rangesForm[key].max < 0 || rangesForm[key].min > rangesForm[key].max) {
+        toast.error(`Invalid range for "${key}" scenario`);
+        return;
+      }
+    }
+    setSavingRanges(true);
+    try {
+      const { error } = await supabase.from("performance_evaluation_settings").update({ company_scenario_ranges: rangesForm, updated_by: user?.id }).eq("id", "default");
+      if (error) throw error;
+      setScenarioRanges(rangesForm);
+      setEditingRanges(false);
+      toast.success("Company performance ranges updated");
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Failed to save ranges");
+    } finally {
+      setSavingRanges(false);
+    }
+  };
+
+  const scenario = companyScenario(form.company_scenario, scenarioRanges);
   // Annual increment is applied only on Basic Salary, not gross.
   const basicBefore = basicFromGross(finalization.gross_salary);
   const basePct = finalIncrementPct(form.average_recommended_pct, form.approved_increment_factor_pct, form.company_scenario);
@@ -1175,7 +1382,7 @@ const IncrementEvaluationDialog = ({
         retention_amount: retentionAmount > 0 ? retentionAmount : null,
         gross_salary_before: finalization.gross_salary,
         gross_salary_after: grossAfter,
-        reason: `Performance: ${finalization.final_category} (weighted avg ${finalization.weighted_average}/5)${retentionAmount > 0 ? "; includes a retention increment" : ""}.`,
+        reason: `Performance: ${finalization.final_category} (weighted avg ${finalization.weighted_average}/4)${retentionAmount > 0 ? "; includes a retention increment" : ""}.`,
       };
 
       if (existing) {
@@ -1228,21 +1435,50 @@ const IncrementEvaluationDialog = ({
           </div>
 
           <div>
-            <p className="text-sm font-medium mb-2">Section 1: Annual Increment</p>
-            <div className="grid grid-cols-2 gap-2">
-              {COMPANY_SCENARIOS.map((s) => (
-                <button
-                  key={s.value}
-                  type="button"
-                  className={`rounded-md border p-2 text-left text-xs ${form.company_scenario === s.value ? "border-primary bg-primary/5" : ""}`}
-                  onClick={() => setForm((f) => ({ ...f, company_scenario: s.value, approved_increment_factor_pct: s.range?.max ?? 0 }))}
-                >
-                  <p className="font-medium">{s.label}</p>
-                  <p className="text-muted-foreground">{s.detail}</p>
-                  <p className="text-muted-foreground">{s.range ? `${s.range.min}% – ${s.range.max}%` : "0%"}</p>
-                </button>
-              ))}
+            <div className="flex items-center justify-between mb-2">
+              <p className="text-sm font-medium">Section 1: Annual Increment</p>
+              <Button variant="ghost" size="sm" onClick={() => { setRangesForm(scenarioRanges); setEditingRanges((v) => !v); }}>
+                {editingRanges ? "Cancel" : "Edit Ranges"}
+              </Button>
             </div>
+            {editingRanges ? (
+              <div className="space-y-2 rounded-md border p-3">
+                <p className="text-xs text-muted-foreground">Values only — Strong/Average/Weak stay fixed; only their increment-factor % ranges are editable. Increment Freeze is always 0%.</p>
+                {(["strong", "average", "weak"] as const).map((key) => (
+                  <div key={key} className="flex items-center gap-2">
+                    <span className="w-20 text-xs font-medium capitalize">{key}</span>
+                    <Input
+                      type="number" step="1" className="h-8"
+                      value={rangesForm[key].min}
+                      onChange={(e) => setRangesForm((r) => ({ ...r, [key]: { ...r[key], min: parseFloat(e.target.value) || 0 } }))}
+                    />
+                    <span className="text-xs text-muted-foreground">to</span>
+                    <Input
+                      type="number" step="1" className="h-8"
+                      value={rangesForm[key].max}
+                      onChange={(e) => setRangesForm((r) => ({ ...r, [key]: { ...r[key], max: parseFloat(e.target.value) || 0 } }))}
+                    />
+                    <span className="text-xs text-muted-foreground">%</span>
+                  </div>
+                ))}
+                <Button size="sm" onClick={saveRanges} disabled={savingRanges}>{savingRanges ? "Saving..." : "Save Ranges"}</Button>
+              </div>
+            ) : (
+              <div className="grid grid-cols-2 gap-2">
+                {companyScenarios(scenarioRanges).map((s) => (
+                  <button
+                    key={s.value}
+                    type="button"
+                    className={`rounded-md border p-2 text-left text-xs ${form.company_scenario === s.value ? "border-primary bg-primary/5" : ""}`}
+                    onClick={() => setForm((f) => ({ ...f, company_scenario: s.value, approved_increment_factor_pct: s.range?.max ?? 0 }))}
+                  >
+                    <p className="font-medium">{s.label}</p>
+                    <p className="text-muted-foreground">{s.detail}</p>
+                    <p className="text-muted-foreground">{s.range ? `${s.range.min}% – ${s.range.max}%` : "0%"}</p>
+                  </button>
+                ))}
+              </div>
+            )}
             {form.company_scenario !== "freeze" && (
               <div className="mt-2">
                 <Label>Approved Increment Factor %</Label>
