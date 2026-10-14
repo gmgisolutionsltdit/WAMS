@@ -17,10 +17,10 @@ import { format } from "date-fns";
 import {
   EVALUATION_SECTIONS, TOTAL_CRITERIA_COUNT, summarizeScores, weightedFinalCategory,
   CATEGORY_BADGE_CLASS, salaryCategoryForGross, salaryCategoryLabel, recommendedIncrementRange, formatIncrementRange,
-  DEFAULT_PERFORMANCE_CATEGORY_GUIDE, downloadEvaluationAnswersPDF,
+  DEFAULT_SCORE_SCALE, downloadEvaluationAnswersPDF,
   DEFAULT_CATEGORY_THRESHOLDS, DEFAULT_SALARY_BANDS, DEFAULT_INCREMENT_POLICY,
   type CriterionScore, type EvaluationCategory, type SalaryCategory, type CategoryThresholds, type SalaryBands,
-  type PerformanceCategoryGuideRow, type IncrementPolicy, type IncrementRange,
+  type ScoreScaleRow, type IncrementPolicy, type IncrementRange,
 } from "@/lib/performanceEvaluation";
 import {
   companyScenarios, companyScenario, finalIncrementPct, grossAfterIncrement,
@@ -105,7 +105,7 @@ const emptyRequestForm = () => ({ employee_id: "", evaluator_ids: [] as string[]
 const SALARY_CATEGORIES: SalaryCategory[] = ["A", "B", "C"];
 const PERFORMANCE_CATEGORIES: EvaluationCategory[] = ["Outstanding", "Above Expectation", "Meet Expectation", "Below Expectation"];
 
-const emptyAnswerForm = (defaultScore = 2): { scores: CriterionScore[]; justification: string } => ({
+const emptyAnswerForm = (defaultScore = 3): { scores: CriterionScore[]; justification: string } => ({
   scores: EVALUATION_SECTIONS.flatMap((s) => s.criteria.map((criterion) => ({ section: s.key, criterion, score: defaultScore, comment: "" }))),
   justification: "",
 });
@@ -138,20 +138,20 @@ const PerformanceEvaluation = () => {
 
   // Admin-editable, future-evaluation-only settings: default criterion
   // score, Section 6 category thresholds, Section 3 salary bands, the
-  // Section 6 category guide (description/behaviors) and the Section 6A
-  // increment policy matrix. Values only — the row/column shape (4
-  // performance categories, 3 salary categories) stays fixed.
+  // per-criterion score scale (label/description) and the Section 6A
+  // increment policy matrix. Values only — the row/column shape (5 scores,
+  // 4 performance categories, 3 salary categories) stays fixed.
   const [thresholds, setThresholds] = useState<CategoryThresholds>(DEFAULT_CATEGORY_THRESHOLDS);
   const [salaryBands, setSalaryBands] = useState<SalaryBands>(DEFAULT_SALARY_BANDS);
-  const [defaultScore, setDefaultScore] = useState(2);
-  const [categoryGuide, setCategoryGuide] = useState<PerformanceCategoryGuideRow[]>(DEFAULT_PERFORMANCE_CATEGORY_GUIDE);
+  const [defaultScore, setDefaultScore] = useState(3);
+  const [scoreScale, setScoreScale] = useState<ScoreScaleRow[]>(DEFAULT_SCORE_SCALE);
   const [incrementPolicy, setIncrementPolicy] = useState<IncrementPolicy>(DEFAULT_INCREMENT_POLICY);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [settingsForm, setSettingsForm] = useState({
-    default_score: "2", threshold_outstanding: "3.6", threshold_above: "2.8", threshold_meet: "2.0",
+    default_score: "3", threshold_outstanding: "4.5", threshold_above: "3.5", threshold_meet: "2.5",
     salary_band_b_min: "20000", salary_band_a_min: "40000",
   });
-  const [guideForm, setGuideForm] = useState<PerformanceCategoryGuideRow[]>(DEFAULT_PERFORMANCE_CATEGORY_GUIDE);
+  const [scoreScaleForm, setScoreScaleForm] = useState<ScoreScaleRow[]>(DEFAULT_SCORE_SCALE);
   const [policyForm, setPolicyForm] = useState<IncrementPolicy>(DEFAULT_INCREMENT_POLICY);
   const [savingSettings, setSavingSettings] = useState(false);
 
@@ -196,9 +196,9 @@ const PerformanceEvaluation = () => {
         salary_band_b_min: String(settings.salary_band_b_min),
         salary_band_a_min: String(settings.salary_band_a_min),
       });
-      const guide = (settings.performance_category_guide as PerformanceCategoryGuideRow[] | null) || DEFAULT_PERFORMANCE_CATEGORY_GUIDE;
-      setCategoryGuide(guide);
-      setGuideForm(guide.map((c) => ({ ...c, behaviors: [...c.behaviors] })));
+      const scale = (settings.performance_category_guide as ScoreScaleRow[] | null) || DEFAULT_SCORE_SCALE;
+      setScoreScale(scale);
+      setScoreScaleForm(scale.map((s) => ({ ...s })));
       const policy = (settings.increment_policy as IncrementPolicy | null) || DEFAULT_INCREMENT_POLICY;
       setIncrementPolicy(policy);
       setPolicyForm(policy);
@@ -245,8 +245,8 @@ const PerformanceEvaluation = () => {
     const meet = Number(settingsForm.threshold_meet);
     const bMin = Number(settingsForm.salary_band_b_min);
     const aMin = Number(settingsForm.salary_band_a_min);
-    if (!Number.isFinite(defaultScoreVal) || defaultScoreVal < 1 || defaultScoreVal > 4) {
-      toast.error("Default score must be a whole number from 1 to 4"); return;
+    if (!Number.isFinite(defaultScoreVal) || defaultScoreVal < 1 || defaultScoreVal > 5) {
+      toast.error("Default score must be a whole number from 1 to 5"); return;
     }
     if (![outstanding, above, meet].every(Number.isFinite) || !(outstanding > above && above > meet)) {
       toast.error("Thresholds must be numbers with Outstanding > Above Expectation > Meet Expectation"); return;
@@ -254,8 +254,8 @@ const PerformanceEvaluation = () => {
     if (![bMin, aMin].every(Number.isFinite) || aMin <= bMin || bMin < 0) {
       toast.error("Salary bands must be numbers with Category A's minimum greater than Category B's"); return;
     }
-    if (guideForm.some((c) => !c.description.trim() || c.behaviors.length === 0 || c.behaviors.some((b) => !b.trim()))) {
-      toast.error("Every Performance Category needs a description and at least one non-empty behavior"); return;
+    if (scoreScaleForm.some((s) => !s.label.trim() || !s.description.trim())) {
+      toast.error("Every score needs a label and a description"); return;
     }
     const policyRows = (["A", "B", "C"] as SalaryCategory[]).flatMap((sc) =>
       (["Outstanding", "Above Expectation", "Meet Expectation", "Below Expectation"] as EvaluationCategory[]).map((pc) => policyForm[sc][pc]));
@@ -270,7 +270,7 @@ const PerformanceEvaluation = () => {
       threshold_meet: meet,
       salary_band_b_min: bMin,
       salary_band_a_min: aMin,
-      performance_category_guide: guideForm,
+      performance_category_guide: scoreScaleForm,
       increment_policy: policyForm,
       updated_by: user.id,
     }).eq("id", "default");
@@ -281,14 +281,8 @@ const PerformanceEvaluation = () => {
     fetchAll();
   };
 
-  const updateGuideField = (category: EvaluationCategory, field: "description", value: string) =>
-    setGuideForm((rows) => rows.map((r) => (r.category === category ? { ...r, [field]: value } : r)));
-  const updateGuideBehavior = (category: EvaluationCategory, index: number, value: string) =>
-    setGuideForm((rows) => rows.map((r) => (r.category === category ? { ...r, behaviors: r.behaviors.map((b, i) => (i === index ? value : b)) } : r)));
-  const addGuideBehavior = (category: EvaluationCategory) =>
-    setGuideForm((rows) => rows.map((r) => (r.category === category ? { ...r, behaviors: [...r.behaviors, ""] } : r)));
-  const removeGuideBehavior = (category: EvaluationCategory, index: number) =>
-    setGuideForm((rows) => rows.map((r) => (r.category === category ? { ...r, behaviors: r.behaviors.filter((_, i) => i !== index) } : r)));
+  const updateScoreScaleField = (score: number, field: "label" | "description", value: string) =>
+    setScoreScaleForm((rows) => rows.map((r) => (r.score === score ? { ...r, [field]: value } : r)));
 
   const updatePolicyCell = (salaryCategory: SalaryCategory, performanceCategory: EvaluationCategory, field: keyof IncrementRange, value: string) =>
     setPolicyForm((p) => ({
@@ -523,7 +517,7 @@ const PerformanceEvaluation = () => {
             <Button
               variant="outline"
               onClick={() => {
-                setGuideForm(categoryGuide.map((c) => ({ ...c, behaviors: [...c.behaviors] })));
+                setScoreScaleForm(scoreScale.map((s) => ({ ...s })));
                 setPolicyForm(JSON.parse(JSON.stringify(incrementPolicy)));
                 setSettingsOpen(true);
               }}
@@ -595,9 +589,9 @@ const PerformanceEvaluation = () => {
             </p>
 
             <div>
-              <Label>Default score per criterion (1-4)</Label>
+              <Label>Default score per criterion (1-5)</Label>
               <Input
-                type="number" min="1" max="4" step="1" className="mt-1 w-32"
+                type="number" min="1" max="5" step="1" className="mt-1 w-32"
                 value={settingsForm.default_score}
                 onChange={(e) => setSettingsForm((f) => ({ ...f, default_score: e.target.value }))}
               />
@@ -635,7 +629,7 @@ const PerformanceEvaluation = () => {
 
             {/* Table 3: thresholds that resolve an average score to a Performance Category */}
             <div>
-              <Label className="text-sm font-medium">3. Employee Performance Category After Weighted Average (score out of 4)</Label>
+              <Label className="text-sm font-medium">3. Employee Performance Category After Weighted Average (score out of 5)</Label>
               <div className="overflow-x-auto mt-1">
                 <Table>
                   <TableHeader>
@@ -663,43 +657,28 @@ const PerformanceEvaluation = () => {
               </div>
             </div>
 
-            {/* Table 4: Performance Category guide (description + behaviors) */}
+            {/* Table 4: per-criterion Score Scale (label + description) */}
             <div>
-              <Label className="text-sm font-medium">4. Employee Performance Category — Description &amp; Expected Contributions and Behaviors</Label>
-              <div className="space-y-3 mt-1">
-                {guideForm.map((row) => (
-                  <div key={row.category} className="rounded-md border p-3 space-y-2">
-                    <div className="font-medium">{row.score} — {row.category}</div>
-                    <div>
-                      <Label className="text-xs">Description</Label>
-                      <Textarea
-                        rows={2}
-                        value={row.description}
-                        onChange={(e) => updateGuideField(row.category, "description", e.target.value)}
-                      />
-                    </div>
-                    <div>
-                      <Label className="text-xs">Expected Contributions and Behaviors</Label>
-                      <div className="space-y-1 mt-1">
-                        {row.behaviors.map((b, i) => (
-                          <div key={i} className="flex items-center gap-2">
-                            <Input value={b} onChange={(e) => updateGuideBehavior(row.category, i, e.target.value)} />
-                            <Button
-                              type="button" size="icon" variant="ghost" className="text-destructive hover:text-destructive shrink-0"
-                              onClick={() => removeGuideBehavior(row.category, i)}
-                              disabled={row.behaviors.length <= 1}
-                            >
-                              <Trash2 className="h-4 w-4" />
-                            </Button>
-                          </div>
-                        ))}
-                      </div>
-                      <Button type="button" size="sm" variant="outline" className="mt-2" onClick={() => addGuideBehavior(row.category)}>
-                        <Plus className="h-3.5 w-3.5 mr-1" /> Add Behavior
-                      </Button>
-                    </div>
-                  </div>
-                ))}
+              <Label className="text-sm font-medium">4. Score Scale — what each 1-5 per-criterion score means</Label>
+              <div className="overflow-x-auto mt-1">
+                <Table>
+                  <TableHeader>
+                    <TableRow><TableHead className="w-16">Score</TableHead><TableHead className="w-40">Meaning</TableHead><TableHead>Description</TableHead></TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {scoreScaleForm.map((row) => (
+                      <TableRow key={row.score}>
+                        <TableCell className="font-mono font-semibold">{row.score}</TableCell>
+                        <TableCell>
+                          <Input value={row.label} onChange={(e) => updateScoreScaleField(row.score, "label", e.target.value)} />
+                        </TableCell>
+                        <TableCell>
+                          <Input value={row.description} onChange={(e) => updateScoreScaleField(row.score, "description", e.target.value)} />
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
               </div>
             </div>
 
@@ -757,7 +736,7 @@ const PerformanceEvaluation = () => {
         <Card>
           <CardHeader>
             <CardTitle className="text-base">Evaluations Requested of You</CardTitle>
-            <CardDescription>Score each criterion 1–4; the total, average and category are calculated for you.</CardDescription>
+            <CardDescription>Score each criterion 1–5; the total, average and category are calculated for you.</CardDescription>
           </CardHeader>
           <CardContent>
             <Table>
@@ -806,7 +785,7 @@ const PerformanceEvaluation = () => {
                   return (
                     <TableRow key={r.id}>
                       <TableCell>{profileMap[r.employee_id]?.full_name || profileMap[r.employee_id]?.email || "—"}</TableCell>
-                      <TableCell className="font-mono text-xs">{ev.average_score} / 4</TableCell>
+                      <TableCell className="font-mono text-xs">{ev.average_score} / 5</TableCell>
                       <TableCell><Badge className={CATEGORY_BADGE_CLASS[ev.category]}>{ev.category}</Badge></TableCell>
                       <TableCell>
                         <div className="flex gap-1">
@@ -845,7 +824,7 @@ const PerformanceEvaluation = () => {
                   <p className="font-medium">{profileMap[g.employeeId]?.full_name || profileMap[g.employeeId]?.email || "—"}</p>
                   {g.final && (
                     <div className="flex items-center gap-2 flex-wrap">
-                      <span className="text-xs text-muted-foreground">Weighted average: {g.final.weightedAverage} / 4</span>
+                      <span className="text-xs text-muted-foreground">Weighted average: {g.final.weightedAverage} / 5</span>
                       <Badge className={CATEGORY_BADGE_CLASS[g.final.category]}>{g.final.category}</Badge>
                       <Button size="sm" variant="outline" disabled={!hasSubmitted || !!finalization} onClick={() => finalizeEmployee(g.employeeId, g.requests, g.final!)}>
                         {finalization ? "Finalized" : "Finalize"}
@@ -899,7 +878,7 @@ const PerformanceEvaluation = () => {
                               {r.status === "submitted" ? "Submitted" : "Pending"}
                             </Badge>
                           </TableCell>
-                          <TableCell className="font-mono text-xs">{ev ? `${ev.average_score} / 4` : "—"}</TableCell>
+                          <TableCell className="font-mono text-xs">{ev ? `${ev.average_score} / 5` : "—"}</TableCell>
                           <TableCell>{ev ? <Badge className={CATEGORY_BADGE_CLASS[ev.category]}>{ev.category}</Badge> : "—"}</TableCell>
                           <TableCell>
                             <Input
@@ -952,19 +931,14 @@ const PerformanceEvaluation = () => {
           <div className="space-y-5">
             <Table>
               <TableHeader>
-                <TableRow><TableHead className="w-12">Score</TableHead><TableHead className="w-32">Performance Category</TableHead><TableHead className="w-48">Description</TableHead><TableHead>Expected Contributions and Behaviors</TableHead></TableRow>
+                <TableRow><TableHead className="w-12">Score</TableHead><TableHead className="w-40">Meaning</TableHead><TableHead>Description</TableHead></TableRow>
               </TableHeader>
               <TableBody>
-                {categoryGuide.map((c) => (
-                  <TableRow key={c.category}>
-                    <TableCell className="font-mono font-semibold align-top">{c.score}</TableCell>
-                    <TableCell className="font-medium align-top">{c.category}</TableCell>
-                    <TableCell className="text-xs text-muted-foreground align-top">{c.description}</TableCell>
-                    <TableCell className="text-xs text-muted-foreground align-top">
-                      <ul className="list-disc list-inside space-y-0.5">
-                        {c.behaviors.map((b) => <li key={b}>{b}</li>)}
-                      </ul>
-                    </TableCell>
+                {scoreScale.map((s) => (
+                  <TableRow key={s.score}>
+                    <TableCell className="font-mono font-semibold align-top">{s.score}</TableCell>
+                    <TableCell className="font-medium align-top">{s.label}</TableCell>
+                    <TableCell className="text-xs text-muted-foreground align-top">{s.description}</TableCell>
                   </TableRow>
                 ))}
               </TableBody>
@@ -979,7 +953,7 @@ const PerformanceEvaluation = () => {
                     <div key={criterion} className="rounded-md border p-2 space-y-2">
                       <p className="text-xs">{criterion}</p>
                       <div className="flex items-center gap-1">
-                        {[1, 2, 3, 4].map((n) => (
+                        {[1, 2, 3, 4, 5].map((n) => (
                           <Button
                             key={n}
                             type="button"
@@ -1004,8 +978,8 @@ const PerformanceEvaluation = () => {
             ))}
 
             <div className="rounded-lg border bg-muted/40 p-3 text-sm">
-              Total Score: <span className="font-mono">{summary.total} / {TOTAL_CRITERIA_COUNT * 4}</span>{" "}
-              · Average: <span className="font-mono">{summary.average} / 4</span>{" "}
+              Total Score: <span className="font-mono">{summary.total} / {TOTAL_CRITERIA_COUNT * 5}</span>{" "}
+              · Average: <span className="font-mono">{summary.average} / 5</span>{" "}
               · Category: <Badge className={CATEGORY_BADGE_CLASS[summary.category]}>{summary.category}</Badge>
             </div>
 
@@ -1038,27 +1012,22 @@ const PerformanceEvaluation = () => {
           {viewEvaluation && (
             <div className="space-y-5">
               <div className="rounded-lg border bg-muted/40 p-3 text-sm">
-                Total Score: <span className="font-mono">{viewEvaluation.total_score} / {viewEvaluation.criteria_count * 4}</span>{" "}
-                · Average: <span className="font-mono">{viewEvaluation.average_score} / 4</span>{" "}
+                Total Score: <span className="font-mono">{viewEvaluation.total_score} / {viewEvaluation.criteria_count * 5}</span>{" "}
+                · Average: <span className="font-mono">{viewEvaluation.average_score} / 5</span>{" "}
                 · Category: <Badge className={CATEGORY_BADGE_CLASS[viewEvaluation.category]}>{viewEvaluation.category}</Badge>
                 {" "}· Submitted {format(new Date(viewEvaluation.created_at), "MMM d, yyyy")}
               </div>
 
               <Table>
                 <TableHeader>
-                  <TableRow><TableHead className="w-12">Score</TableHead><TableHead className="w-32">Performance Category</TableHead><TableHead className="w-48">Description</TableHead><TableHead>Expected Contributions and Behaviors</TableHead></TableRow>
+                  <TableRow><TableHead className="w-12">Score</TableHead><TableHead className="w-40">Meaning</TableHead><TableHead>Description</TableHead></TableRow>
                 </TableHeader>
                 <TableBody>
-                  {categoryGuide.map((c) => (
-                    <TableRow key={c.category}>
-                      <TableCell className="font-mono font-semibold align-top">{c.score}</TableCell>
-                      <TableCell className="font-medium align-top">{c.category}</TableCell>
-                      <TableCell className="text-xs text-muted-foreground align-top">{c.description}</TableCell>
-                      <TableCell className="text-xs text-muted-foreground align-top">
-                        <ul className="list-disc list-inside space-y-0.5">
-                          {c.behaviors.map((b) => <li key={b}>{b}</li>)}
-                        </ul>
-                      </TableCell>
+                  {scoreScale.map((s) => (
+                    <TableRow key={s.score}>
+                      <TableCell className="font-mono font-semibold align-top">{s.score}</TableCell>
+                      <TableCell className="font-medium align-top">{s.label}</TableCell>
+                      <TableCell className="text-xs text-muted-foreground align-top">{s.description}</TableCell>
                     </TableRow>
                   ))}
                 </TableBody>
@@ -1073,7 +1042,7 @@ const PerformanceEvaluation = () => {
                       <div key={criterion} className="rounded-md border p-2 space-y-1">
                         <div className="flex items-start justify-between gap-2">
                           <p className="text-xs flex-1">{criterion}</p>
-                          <Badge variant="outline" className="shrink-0">{answer?.score ?? "—"} / 4</Badge>
+                          <Badge variant="outline" className="shrink-0">{answer?.score ?? "—"} / 5</Badge>
                         </div>
                         {answer?.comment && <p className="text-xs text-muted-foreground">{answer.comment}</p>}
                       </div>
@@ -1099,7 +1068,7 @@ const PerformanceEvaluation = () => {
                   category: viewEvaluation.category,
                   justification: viewEvaluation.justification,
                   submittedAt: viewEvaluation.created_at,
-                  categoryGuide,
+                  scoreScale,
                 })}
               >
                 Generate PDF Report
@@ -1123,7 +1092,7 @@ const PerformanceEvaluation = () => {
               <div className="space-y-4 text-sm">
                 <div className="rounded-md bg-muted/40 p-3 space-y-1">
                   <p>Final Category: <Badge className={CATEGORY_BADGE_CLASS[finalization.final_category]}>{finalization.final_category}</Badge></p>
-                  <p>Weighted Average: <span className="font-mono">{finalization.weighted_average} / 4</span></p>
+                  <p>Weighted Average: <span className="font-mono">{finalization.weighted_average} / 5</span></p>
                   <p>Salary Category: {salaryCategoryLabel(finalization.salary_category, salaryBands)}</p>
                   <p>Recommended Increment Range: <span className="font-mono">{formatIncrementRange({ min: finalization.recommended_min_pct, max: finalization.recommended_max_pct })}</span></p>
                   <p>Gross Salary: <span className="font-mono">{finalization.gross_salary.toLocaleString()}</span> BDT</p>
@@ -1382,7 +1351,7 @@ const IncrementEvaluationDialog = ({
         retention_amount: retentionAmount > 0 ? retentionAmount : null,
         gross_salary_before: finalization.gross_salary,
         gross_salary_after: grossAfter,
-        reason: `Performance: ${finalization.final_category} (weighted avg ${finalization.weighted_average}/4)${retentionAmount > 0 ? "; includes a retention increment" : ""}.`,
+        reason: `Performance: ${finalization.final_category} (weighted avg ${finalization.weighted_average}/5)${retentionAmount > 0 ? "; includes a retention increment" : ""}.`,
       };
 
       if (existing) {
