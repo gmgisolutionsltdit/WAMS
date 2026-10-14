@@ -57,7 +57,9 @@ export const TOTAL_CRITERIA_COUNT = EVALUATION_SECTIONS.reduce((n, s) => n + s.c
  * behaviors expected at that level. Shown as the reference legend in the
  * Evaluate form, the View Answers popup and its PDF.
  */
-export const PERFORMANCE_CATEGORY_GUIDE: { score: number; category: EvaluationCategory; description: string; behaviors: string[] }[] = [
+export type PerformanceCategoryGuideRow = { score: number; category: EvaluationCategory; description: string; behaviors: string[] };
+
+export const DEFAULT_PERFORMANCE_CATEGORY_GUIDE: PerformanceCategoryGuideRow[] = [
   {
     score: 4,
     category: "Outstanding",
@@ -156,9 +158,10 @@ export const salaryCategoryForGross = (gross: number, bands: SalaryBands = DEFAU
 };
 
 export type IncrementRange = { min: number; max: number };
+export type IncrementPolicy = Record<SalaryCategory, Record<EvaluationCategory, IncrementRange>>;
 
 /** Section 6A: Annual Increment Range Table (Policy Reference) — % range by salary category x performance category. */
-const INCREMENT_POLICY: Record<SalaryCategory, Record<EvaluationCategory, IncrementRange>> = {
+export const DEFAULT_INCREMENT_POLICY: IncrementPolicy = {
   A: {
     "Outstanding": { min: 20, max: 30 },
     "Above Expectation": { min: 10, max: 20 },
@@ -179,8 +182,11 @@ const INCREMENT_POLICY: Record<SalaryCategory, Record<EvaluationCategory, Increm
   },
 };
 
-export const recommendedIncrementRange = (salaryCategory: SalaryCategory, performanceCategory: EvaluationCategory): IncrementRange =>
-  INCREMENT_POLICY[salaryCategory][performanceCategory];
+export const recommendedIncrementRange = (
+  salaryCategory: SalaryCategory,
+  performanceCategory: EvaluationCategory,
+  policy: IncrementPolicy = DEFAULT_INCREMENT_POLICY,
+): IncrementRange => policy[salaryCategory][performanceCategory];
 
 /** "Above 20 to 30%" (min > 0) or "0 to 5% or freeze" (min = 0, i.e. Below Expectation) — the policy table's own wording. */
 export const formatIncrementRange = (range: IncrementRange): string =>
@@ -218,8 +224,10 @@ export function downloadEvaluationAnswersPDF(args: {
   justification: string;
   submittedAt: string;
   companyName?: string;
+  categoryGuide?: PerformanceCategoryGuideRow[];
 }) {
   const { employeeName, employeeDesignation, scores, totalScore, criteriaCount, averageScore, category, justification, submittedAt } = args;
+  const categoryGuide = args.categoryGuide || DEFAULT_PERFORMANCE_CATEGORY_GUIDE;
   const company = args.companyName || "Workforce & Attendance Management System (WAMS)";
   const doc = new jsPDF({ unit: "pt", format: "a4" });
   const left = 48;
@@ -281,7 +289,7 @@ export function downloadEvaluationAnswersPDF(args: {
   y += 12;
   doc.setDrawColor(210);
   doc.line(left, y - 9, right, y - 9);
-  PERFORMANCE_CATEGORY_GUIDE.forEach((c) => {
+  categoryGuide.forEach((c) => {
     const descLines = doc.splitTextToSize(c.description, behaviorCol - descCol - 8);
     const behaviorLines = c.behaviors.flatMap((b) => doc.splitTextToSize(`- ${b}`, right - behaviorCol));
     const rowLines = Math.max(1, descLines.length, behaviorLines.length);
