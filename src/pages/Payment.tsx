@@ -291,7 +291,7 @@ const Payment = () => {
                     <TableRow>
                       {canApprove && <TableHead>Employee</TableHead>}
                       <TableHead>Date</TableHead><TableHead>Amount</TableHead>
-                      <TableHead>Reason</TableHead><TableHead>Installments</TableHead><TableHead>Month</TableHead><TableHead>Balance</TableHead><TableHead>Status</TableHead><TableHead></TableHead>
+                      <TableHead>Reason</TableHead><TableHead>Installments</TableHead><TableHead>Installment Month</TableHead><TableHead>Balance</TableHead><TableHead>Status</TableHead><TableHead></TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
@@ -452,7 +452,7 @@ function AdminLoanPanel({ loans, renderRow }: { loans: any[]; renderRow: (loan: 
               <TableHeader>
                 <TableRow>
                   <TableHead>Employee</TableHead><TableHead>Date</TableHead><TableHead>Amount</TableHead>
-                  <TableHead>Reason</TableHead><TableHead>Installments</TableHead><TableHead>Month</TableHead><TableHead>Balance</TableHead><TableHead>Status</TableHead><TableHead></TableHead>
+                  <TableHead>Reason</TableHead><TableHead>Installments</TableHead><TableHead>Installment Month</TableHead><TableHead>Balance</TableHead><TableHead>Status</TableHead><TableHead></TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
