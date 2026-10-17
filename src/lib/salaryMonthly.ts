@@ -56,7 +56,7 @@ export const computeMonthlySalaryRows = async (
   const rangeEnd = format(new Date(ey, em, 0), "yyyy-MM-dd");
 
   const monthDates = sortedMonths.map((m) => `${m}-01`);
-  const [{ data: profiles }, { data: attRows }, { data: holidayRows }, { data: leaveRows }, { data: recoveryRows }, { data: loanActionRows }, { data: settlementRows }] = await Promise.all([
+  const [{ data: profiles }, { data: attRows }, { data: holidayRows }, { data: leaveRows }, { data: recoveryRows }, { data: loanActionRows }, { data: settlementRows }, { data: otRows }] = await Promise.all([
     supabase.from("profiles").select("id, full_name, email, base_salary, office_start_time, late_grace_minutes, standard_daily_hours, unpaid_break_minutes, working_days, company_wing").in("id", targetIds),
     supabase.from("attendance_logs").select("id, user_id, date, clock_in, clock_out, break_minutes, late_minutes, penalty_minutes, penalty_reviewed").in("user_id", targetIds).gte("date", rangeStart).lte("date", rangeEnd),
     supabase.from("holidays").select("holiday_date, name, wing"),
@@ -64,6 +64,10 @@ export const computeMonthlySalaryRows = async (
     supabase.from("expense_recovery_actions").select("user_id, amount, action_type, month").in("user_id", targetIds).in("month", monthDates),
     supabase.from("personal_advance_actions").select("user_id, amount, action_type, month").in("user_id", targetIds).eq("action_type", "payroll_deduction").in("month", monthDates),
     supabase.from("payroll_settlements").select("user_id, month, net_hours_paid").in("user_id", targetIds).in("month", monthDates),
+    // OT Payment is based on approved overtime requests only (same "Approved
+    // Overtime" figure Reports > Performance History shows) - not actual
+    // worked overtime from attendance.
+    supabase.from("overtime_requests").select("user_id, date, requested_hours").in("user_id", targetIds).eq("status", "approved").gte("date", rangeStart).lte("date", rangeEnd),
   ]);
 
   type ProfileRow = Schedule & { id: string; full_name: string | null; email: string | null; base_salary: number | null };
@@ -80,12 +84,18 @@ export const computeMonthlySalaryRows = async (
     leaveByUser.set(r.user_id, set);
   });
 
-  const totals = new Map<string, { otActualMinutes: number; dueMinutes: number }>();
-  targetIds.forEach((id) => sortedMonths.forEach((m) => totals.set(`${id}|${m}`, { otActualMinutes: 0, dueMinutes: 0 })));
+  const totals = new Map<string, { dueMinutes: number }>();
+  targetIds.forEach((id) => sortedMonths.forEach((m) => totals.set(`${id}|${m}`, { dueMinutes: 0 })));
 
-  // Mirrors PayrollAdjustments.tsx's own fetchAll exactly (Due/Overtime
-  // including the late-arrival penalty), just grouped by month instead of
-  // computed for one fixed month at a time.
+  const approvedOTMinutes = new Map<string, number>();
+  ((otRows || []) as { user_id: string; date: string; requested_hours: number }[]).forEach((r) => {
+    const key = `${r.user_id}|${r.date.slice(0, 7)}`;
+    approvedOTMinutes.set(key, (approvedOTMinutes.get(key) || 0) + Math.round(Number(r.requested_hours || 0) * 60));
+  });
+
+  // Mirrors PayrollAdjustments.tsx's own fetchAll exactly (Due including the
+  // late-arrival penalty), just grouped by month instead of computed for one
+  // fixed month at a time.
   const days = mergeDailySessions((attRows || []) as AttendanceSession[]);
   days.forEach((day) => {
     const userId = day.userId as string;
@@ -103,10 +113,6 @@ export const computeMonthlySalaryRows = async (
     const worked = day.workedSeconds / 3600;
     const closed = !day.open && !!day.lastOut;
 
-    if (nonWorking && !onLeave && worked > 0) {
-      t.otActualMinutes += Math.round(worked * 60);
-    }
-
     const liveArrival = evaluateArrival(day.firstIn, schedule);
     const storedArrival = day.penaltyReviewed
       ? { late: day.penaltyMinutes > 0, lateMinutes: day.lateMinutes, penaltyMinutes: day.penaltyMinutes }
@@ -117,9 +123,6 @@ export const computeMonthlySalaryRows = async (
 
     if (!nonWorking && closed && worked < requiredWithPenalty) {
       t.dueMinutes += Math.round((requiredWithPenalty - worked) * 60);
-    }
-    if (!nonWorking && closed && worked > requiredWithPenalty) {
-      t.otActualMinutes += Math.round((worked - requiredWithPenalty) * 60);
     }
   });
 
@@ -149,8 +152,8 @@ export const computeMonthlySalaryRows = async (
     const breakdown = salaryBreakdown(gross);
     sortedMonths.forEach((month) => {
       const key = `${id}|${month}`;
-      const t = totals.get(key) || { otActualMinutes: 0, dueMinutes: 0 };
-      const otPayment = perMinuteRate(gross) * t.otActualMinutes;
+      const t = totals.get(key) || { dueMinutes: 0 };
+      const otPayment = perMinuteRate(gross) * (approvedOTMinutes.get(key) || 0);
       const dueDeduction = perMinuteRate(gross) * t.dueMinutes;
       const recoveryTotal = recoveryTotals.get(key) || 0;
       const finalSalary = computeFinalSalary({

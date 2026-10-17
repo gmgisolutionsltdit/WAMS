@@ -26,7 +26,7 @@ export const PayrollAdjustments = ({ isAdmin }: { isAdmin: boolean }) => {
   const [employees, setEmployees] = useState<{ id: string; full_name: string | null; email: string | null }[]>([]);
   const [selectedUserId, setSelectedUserId] = useState<string>("");
   const [schedule, setSchedule] = useState<Schedule | null>(null);
-  const [reportTotals, setReportTotals] = useState({ otActualMinutes: 0, dueMinutes: 0 });
+  const [reportTotals, setReportTotals] = useState({ approvedOTMinutes: 0, dueMinutes: 0 });
   const [dueAdjustments, setDueAdjustments] = useState<DueAdjRow[]>([]);
   const [recoveryActions, setRecoveryActions] = useState<RecoveryAction[]>([]);
   const [loading, setLoading] = useState(true);
@@ -50,7 +50,7 @@ export const PayrollAdjustments = ({ isAdmin }: { isAdmin: boolean }) => {
     setLoading(true);
     try {
       const [{ data: prof }, { data: attRows }, { data: holidayRows }, { data: leaveRows },
-        { data: dueAdjRows }, { data: recoveryRows }] = await Promise.all([
+        { data: dueAdjRows }, { data: recoveryRows }, { data: otRows }] = await Promise.all([
         supabase.from("profiles").select("id, base_salary, office_start_time, late_grace_minutes, standard_daily_hours, unpaid_break_minutes, working_days, company_wing").eq("id", targetUserId).maybeSingle(),
         supabase.from("attendance_logs").select("id, user_id, date, clock_in, clock_out, break_minutes, late_minutes, penalty_minutes, penalty_reviewed")
           .eq("user_id", targetUserId).gte("date", monthStartISO).lte("date", monthEndISO),
@@ -60,6 +60,11 @@ export const PayrollAdjustments = ({ isAdmin }: { isAdmin: boolean }) => {
           .eq("user_id", targetUserId).eq("month", monthStartISO).order("created_at", { ascending: false }),
         supabase.from("expense_recovery_actions").select("id, action_type, amount")
           .eq("user_id", targetUserId).eq("month", monthStartISO).order("created_at", { ascending: false }),
+        // OT Payment is based on approved overtime requests only (same
+        // "Approved Overtime" figure Reports > Performance History shows) -
+        // not actual worked overtime from attendance.
+        supabase.from("overtime_requests").select("requested_hours")
+          .eq("user_id", targetUserId).eq("status", "approved").gte("date", monthStartISO).lte("date", monthEndISO),
       ]);
 
       const sched = (prof as Schedule) || null;
@@ -83,7 +88,6 @@ export const PayrollAdjustments = ({ isAdmin }: { isAdmin: boolean }) => {
         const required = netRequiredHours(sched);
         const weekend = weekendDaysFor(sched);
         const days = mergeDailySessions((attRows || []) as AttendanceSession[]);
-        let otActualMinutes = 0;
         let dueMinutesWithPenalty = 0;
         days.forEach((day) => {
           const dayKind = classifyDay(day.date, holidayMap, weekend);
@@ -92,13 +96,9 @@ export const PayrollAdjustments = ({ isAdmin }: { isAdmin: boolean }) => {
           const worked = day.workedSeconds / 3600;
           const closed = !day.open && !!day.lastOut;
 
-          if (nonWorking && !onLeave && worked > 0) {
-            otActualMinutes += Math.round(worked * 60);
-          }
-
-          // Due/Overtime totals for the Salary Summary match the Reports tab
-          // exactly: the late-arrival penalty adds to today's requirement
-          // before Due/Overtime are measured against it (0 when not late).
+          // Due totals for the Salary Summary match the Reports tab exactly:
+          // the late-arrival penalty adds to today's requirement before Due
+          // is measured against it (0 when not late).
           const liveArrival = evaluateArrival(day.firstIn, sched);
           const storedArrival = day.penaltyReviewed
             ? { late: day.penaltyMinutes > 0, lateMinutes: day.lateMinutes, penaltyMinutes: day.penaltyMinutes }
@@ -109,13 +109,12 @@ export const PayrollAdjustments = ({ isAdmin }: { isAdmin: boolean }) => {
           if (!nonWorking && closed && worked < requiredWithPenalty) {
             dueMinutesWithPenalty += Math.round((requiredWithPenalty - worked) * 60);
           }
-          if (!nonWorking && closed && worked > requiredWithPenalty) {
-            otActualMinutes += Math.round((worked - requiredWithPenalty) * 60);
-          }
         });
-        setReportTotals({ otActualMinutes, dueMinutes: dueMinutesWithPenalty });
+        const approvedOTMinutes = ((otRows || []) as { requested_hours: number }[])
+          .reduce((sum, r) => sum + Math.round(Number(r.requested_hours || 0) * 60), 0);
+        setReportTotals({ approvedOTMinutes, dueMinutes: dueMinutesWithPenalty });
       } else {
-        setReportTotals({ otActualMinutes: 0, dueMinutes: 0 });
+        setReportTotals({ approvedOTMinutes: 0, dueMinutes: 0 });
       }
     } finally {
       setLoading(false);
@@ -137,12 +136,14 @@ export const PayrollAdjustments = ({ isAdmin }: { isAdmin: boolean }) => {
     [dueAdjustments],
   );
 
-  // Calculated straight from this month's Reports totals (actual Overtime
-  // and Due Time, including the late-arrival penalty) at the plain
-  // per-minute rate, for both admin and employee/manager views — the same
-  // formula computeMonthlySalaryRows uses for the Monthly Salary Summary
-  // table, so the Salary Summary cards here always match that table.
-  const otPaymentDisplay = useMemo(() => perMinuteRate(gross) * reportTotals.otActualMinutes, [gross, reportTotals.otActualMinutes]);
+  // OT Payment is calculated from this month's Approved Overtime (approved
+  // overtime_requests hours only, same figure Reports > Performance History
+  // shows), at the plain per-minute rate; Due Time still comes straight from
+  // actual attendance, including the late-arrival penalty — for both admin
+  // and employee/manager views. Same formula computeMonthlySalaryRows uses
+  // for the Monthly Salary Summary table, so the Salary Summary cards here
+  // always match that table.
+  const otPaymentDisplay = useMemo(() => perMinuteRate(gross) * reportTotals.approvedOTMinutes, [gross, reportTotals.approvedOTMinutes]);
   const dueDeductionDisplay = useMemo(() => perMinuteRate(gross) * reportTotals.dueMinutes, [gross, reportTotals.dueMinutes]);
 
   const finalSalary = useMemo(
