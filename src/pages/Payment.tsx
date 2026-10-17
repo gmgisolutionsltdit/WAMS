@@ -205,8 +205,8 @@ const Payment = () => {
       <TableCell className="text-xs text-muted-foreground max-w-[200px] truncate">{loan.reason || "—"}</TableCell>
       <TableCell>
         {loan.installments} installment{loan.installments === 1 ? "" : "s"} · {Number(loan.monthly_deduction).toLocaleString()}
-        {loan.month ? `/${format(new Date(`${loan.month}T00:00:00`), "MMMM")}` : ""}
       </TableCell>
+      <TableCell>{loan.month ? format(new Date(`${loan.month}T00:00:00`), "MMMM yyyy") : "—"}</TableCell>
       <TableCell>{Number(loan.remaining_balance).toLocaleString()} left</TableCell>
       <TableCell>
         <div className="flex items-center gap-1 flex-wrap">
@@ -291,7 +291,7 @@ const Payment = () => {
                     <TableRow>
                       {canApprove && <TableHead>Employee</TableHead>}
                       <TableHead>Date</TableHead><TableHead>Amount</TableHead>
-                      <TableHead>Reason</TableHead><TableHead>Installments</TableHead><TableHead>Balance</TableHead><TableHead>Status</TableHead><TableHead></TableHead>
+                      <TableHead>Reason</TableHead><TableHead>Installments</TableHead><TableHead>Month</TableHead><TableHead>Balance</TableHead><TableHead>Status</TableHead><TableHead></TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
@@ -452,12 +452,12 @@ function AdminLoanPanel({ loans, renderRow }: { loans: any[]; renderRow: (loan: 
               <TableHeader>
                 <TableRow>
                   <TableHead>Employee</TableHead><TableHead>Date</TableHead><TableHead>Amount</TableHead>
-                  <TableHead>Reason</TableHead><TableHead>Installments</TableHead><TableHead>Balance</TableHead><TableHead>Status</TableHead><TableHead></TableHead>
+                  <TableHead>Reason</TableHead><TableHead>Installments</TableHead><TableHead>Month</TableHead><TableHead>Balance</TableHead><TableHead>Status</TableHead><TableHead></TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
                 {filteredLoans.length === 0 ? (
-                  <TableRow><TableCell colSpan={8} className="text-center text-muted-foreground">No loan requests</TableCell></TableRow>
+                  <TableRow><TableCell colSpan={9} className="text-center text-muted-foreground">No loan requests</TableCell></TableRow>
                 ) : filteredLoans.map((loan) => renderRow(loan, true))}
               </TableBody>
             </Table>
