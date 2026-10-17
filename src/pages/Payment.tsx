@@ -534,7 +534,9 @@ function MyPaymentsTab() {
           .order("created_at", { ascending: true }).limit(1).maybeSingle(),
         supabase.from("payroll_settlements").select("*").eq("user_id", selectedUserId).eq("month", `${month}-01`).maybeSingle(),
         supabase.from("expense_claims").select("amount, entry_type, recovered_amount").eq("user_id", selectedUserId).eq("status", "approved").lte("claim_date", monthEndISO),
-        supabase.from("payroll_settlements").select("expense_amount_paid").eq("user_id", selectedUserId),
+        // Excludes the viewed month's own settlement — that's the one being
+        // decided right now, not a prior payment to subtract out.
+        supabase.from("payroll_settlements").select("expense_amount_paid").eq("user_id", selectedUserId).neq("month", `${month}-01`),
       ]);
 
       const row = rows[0];
@@ -546,8 +548,13 @@ function MyPaymentsTab() {
       setNetHoursPaidNow(settlement ? settlement.net_hours_paid : true);
       setExpensePaidNow(settlement ? settlement.expense_paid : true);
       setLoanPaidNow(settlement ? settlement.loan_paid : true);
+      // Both amount boxes always default to the live due figure, even when
+      // a settlement already exists for this month — never to whatever was
+      // last saved, so a since-changed balance (or an old, since-fixed save)
+      // never gets stuck showing a stale number. Still fully editable from
+      // there, and saving again overwrites the settlement either way.
       const loanDue = Math.min(Number(loanRow?.monthly_deduction || 0), Number(loanRow?.remaining_balance || 0));
-      setLoanAmount(String(settlement ? settlement.loan_amount_paid : loanDue));
+      setLoanAmount(String(loanDue));
 
       // Expense net balance as of the viewed month (every approved claim
       // dated by then) minus every prior settlement's expense_amount_paid -
@@ -557,9 +564,7 @@ function MyPaymentsTab() {
       const paidSoFar = (priorSettlements || []).reduce((s, p) => s + Number(p.expense_amount_paid || 0), 0);
       const outstanding = expenseTotal - advanceOutstanding - paidSoFar;
       setExpenseOutstanding(outstanding);
-      // Defaults to the balance as-is (can be negative) so the box always
-      // starts showing exactly what's due, editable from there.
-      setExpenseAmount(String(settlement ? settlement.expense_amount_paid : outstanding));
+      setExpenseAmount(String(outstanding));
       setNote(settlement?.note || "");
       setExistingAttachments(settlement?.attachments || []);
       setAttachments([]);
