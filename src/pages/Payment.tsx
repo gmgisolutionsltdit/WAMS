@@ -743,7 +743,7 @@ function MyPaymentsTab() {
                   <Checkbox checked={expensePaidNow} onCheckedChange={(v) => setExpensePaidNow(!!v)} />
                   Adjust Now (unchecked = carry to next month)
                 </label>
-                <Input type="number" value={expenseAmount} onChange={(e) => setExpenseAmount(e.target.value)} disabled={!expensePaidNow} />
+                <Input type="number" value={expenseAmount} onChange={(e) => setExpenseAmount(e.target.value)} disabled={!expensePaidNow || expenseOutstanding <= 0} />
               </div>
               <div className="rounded-md border p-3 space-y-2">
                 <div className="text-sm font-medium">Loan Due</div>
@@ -754,7 +754,7 @@ function MyPaymentsTab() {
                   <Checkbox checked={loanPaidNow} onCheckedChange={(v) => setLoanPaidNow(!!v)} disabled={!loan} />
                   Adjust Now (unchecked = carry to next month)
                 </label>
-                <Input type="number" value={loanAmount} onChange={(e) => setLoanAmount(e.target.value)} disabled={!loan || !loanPaidNow} />
+                <Input type="number" value={loanAmount} onChange={(e) => setLoanAmount(e.target.value)} disabled={!loan || !loanPaidNow || loanDue <= 0} />
                 {loan && <p className="text-xs text-muted-foreground">{fmtBDT(loan.remaining_balance)} remaining balance</p>}
               </div>
               <div className="rounded-md border p-3 space-y-2">
