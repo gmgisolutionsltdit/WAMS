@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -508,6 +508,18 @@ function MyPaymentsTab() {
   const [attachments, setAttachments] = useState<File[]>([]);
   const [existingAttachments, setExistingAttachments] = useState<string[]>([]);
   const [uploading, setUploading] = useState(false);
+  const [paymentHistory, setPaymentHistory] = useState<PayrollSettlementRow[]>([]);
+
+  const fetchPaymentHistory = useCallback(async () => {
+    const { data } = await supabase
+      .from("payroll_settlements")
+      .select("*, profiles!payroll_settlements_user_id_fkey(full_name, email)")
+      .order("month", { ascending: false })
+      .order("created_at", { ascending: false });
+    setPaymentHistory(data || []);
+  }, []);
+
+  useEffect(() => { fetchPaymentHistory(); }, [fetchPaymentHistory]);
 
   useEffect(() => {
     (async () => {
@@ -647,6 +659,7 @@ function MyPaymentsTab() {
       }
 
       toast.success("Payment recorded");
+      fetchPaymentHistory();
       const monthLabel = format(new Date(`${month}-01`), "MMMM yyyy");
       const recordedEmployeeName = employees.find((e) => e.id === selectedUserId)?.full_name
         || employees.find((e) => e.id === selectedUserId)?.email || "An employee";
@@ -700,7 +713,16 @@ function MyPaymentsTab() {
     });
   };
 
+  // Net Payment for a recorded settlement: same "only counts while adjusted"
+  // rule as the live card above, minus the live gross-salary fallback (not
+  // stored on the settlement row itself) for an unchecked Net Salary.
+  const netPaymentForHistoryRow = (h: PayrollSettlementRow) =>
+    (h.net_hours_paid ? Number(h.net_hours_amount) || 0 : 0)
+    + (h.expense_paid ? Number(h.expense_amount_paid) || 0 : 0)
+    - (h.loan_paid ? Number(h.loan_amount_paid) || 0 : 0);
+
   return (
+    <div className="space-y-4">
     <Card>
       <CardHeader>
         <CardTitle>My Payments</CardTitle>
@@ -805,6 +827,43 @@ function MyPaymentsTab() {
         )}
       </CardContent>
     </Card>
+
+    <Card>
+      <CardHeader><CardTitle className="text-base">Payment History</CardTitle></CardHeader>
+      <CardContent>
+        <div className="overflow-x-auto">
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead>Employee</TableHead>
+                <TableHead>Month</TableHead>
+                <TableHead>Net Salary</TableHead>
+                <TableHead className="text-right">Expense Balance</TableHead>
+                <TableHead className="text-right">Loan Due</TableHead>
+                <TableHead className="text-right">Net Payment</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {paymentHistory.length === 0 ? (
+                <TableRow><TableCell colSpan={6} className="text-center text-muted-foreground py-6">No payments recorded yet</TableCell></TableRow>
+              ) : paymentHistory.map((h) => (
+                <TableRow key={h.id}>
+                  <TableCell>{h.profiles?.full_name || h.profiles?.email || "—"}</TableCell>
+                  <TableCell className="whitespace-nowrap">{format(new Date(h.month), "MMM yyyy")}</TableCell>
+                  <TableCell>
+                    <Badge variant="outline">{h.net_hours_paid ? `Paid ${fmtBDT(h.net_hours_amount)}` : "Carried forward"}</Badge>
+                  </TableCell>
+                  <TableCell className="text-right">{h.expense_paid ? fmtBDT(h.expense_amount_paid) : "—"}</TableCell>
+                  <TableCell className="text-right">{h.loan_paid ? fmtBDT(-Number(h.loan_amount_paid)) : "—"}</TableCell>
+                  <TableCell className="text-right font-semibold">{fmtBDT(netPaymentForHistoryRow(h))}</TableCell>
+                </TableRow>
+              ))}
+            </TableBody>
+          </Table>
+        </div>
+      </CardContent>
+    </Card>
+    </div>
   );
 }
 
