@@ -557,7 +557,9 @@ function MyPaymentsTab() {
       const paidSoFar = (priorSettlements || []).reduce((s, p) => s + Number(p.expense_amount_paid || 0), 0);
       const outstanding = expenseTotal - advanceOutstanding - paidSoFar;
       setExpenseOutstanding(outstanding);
-      setExpenseAmount(String(settlement ? settlement.expense_amount_paid : Math.max(0, outstanding)));
+      // Defaults to the balance as-is (can be negative) so the box always
+      // starts showing exactly what's due, editable from there.
+      setExpenseAmount(String(settlement ? settlement.expense_amount_paid : outstanding));
       setNote(settlement?.note || "");
       setExistingAttachments(settlement?.attachments || []);
       setAttachments([]);
@@ -586,7 +588,9 @@ function MyPaymentsTab() {
       const allAttachments = [...existingAttachments, ...newUrls];
 
       const loanPaid = loanPaidNow ? Math.max(0, Number(loanAmount) || 0) : 0;
-      const expensePaid = expensePaidNow ? Math.max(0, Number(expenseAmount) || 0) : 0;
+      // Expense can be negative (an outstanding advance recovery) — not
+      // clamped to 0 like Loan, since that would silently drop it.
+      const expensePaid = expensePaidNow ? (Number(expenseAmount) || 0) : 0;
       const { data: settlement, error } = await supabase.from("payroll_settlements").upsert({
         user_id: selectedUserId,
         month: `${month}-01`,
@@ -743,7 +747,7 @@ function MyPaymentsTab() {
                   <Checkbox checked={expensePaidNow} onCheckedChange={(v) => setExpensePaidNow(!!v)} />
                   Adjust Now (unchecked = carry to next month)
                 </label>
-                <Input type="number" value={expenseAmount} onChange={(e) => setExpenseAmount(e.target.value)} disabled={!expensePaidNow || expenseOutstanding <= 0} />
+                <Input type="number" value={expenseAmount} onChange={(e) => setExpenseAmount(e.target.value)} disabled={!expensePaidNow || expenseOutstanding === 0} />
               </div>
               <div className="rounded-md border p-3 space-y-2">
                 <div className="text-sm font-medium">Loan Due</div>
