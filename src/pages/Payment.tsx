@@ -554,7 +554,9 @@ function MyPaymentsTab() {
       // never gets stuck showing a stale number. Still fully editable from
       // there, and saving again overwrites the settlement either way.
       const loanDue = Math.min(Number(loanRow?.monthly_deduction || 0), Number(loanRow?.remaining_balance || 0));
-      setLoanAmount(String(loanDue));
+      // Shown negative, same convention as the Loan Due badge and Expense's
+      // own box — a deduction, not an addition.
+      setLoanAmount(String(loanDue > 0 ? -loanDue : 0));
 
       // Expense net balance as of the viewed month (every approved claim
       // dated by then) minus every prior settlement's expense_amount_paid -
@@ -579,9 +581,11 @@ function MyPaymentsTab() {
   // counted) rather than to 0, since the gross is being paid regardless.
   // Expense/Loan use the editable amount boxes (default to the full
   // outstanding balance) so a partial entry there is reflected here too.
+  // Both are added directly — Loan's box is negative by convention (a
+  // deduction), same as Expense's box can be.
   const netPayment = (netHoursPaidNow ? finalSalaryNoExpense : grossSalary)
     + (expensePaidNow ? (Number(expenseAmount) || 0) : 0)
-    - (loanPaidNow ? (Number(loanAmount) || 0) : 0);
+    + (loanPaidNow ? (Number(loanAmount) || 0) : 0);
 
   const submit = async () => {
     if (!user || !selectedUserId) return;
@@ -592,7 +596,11 @@ function MyPaymentsTab() {
       setUploading(false);
       const allAttachments = [...existingAttachments, ...newUrls];
 
-      const loanPaid = loanPaidNow ? Math.max(0, Number(loanAmount) || 0) : 0;
+      // Stored as a positive magnitude — the box shows it negative, but the
+      // ledger delta below and every other reader of loan_amount_paid
+      // (receipts, history, the employee's own summary) expect a plain
+      // amount paid, same as before this box started showing it negative.
+      const loanPaid = loanPaidNow ? Math.abs(Number(loanAmount) || 0) : 0;
       // Expense can be negative (an outstanding advance recovery) — not
       // clamped to 0 like Loan, since that would silently drop it.
       const expensePaid = expensePaidNow ? (Number(expenseAmount) || 0) : 0;
@@ -686,7 +694,7 @@ function MyPaymentsTab() {
       netAdjustment,
       finalSalaryNoExpense,
       expensePaid: Number(expenseAmount) || 0,
-      loanPaid: Number(loanAmount) || 0,
+      loanPaid: Math.abs(Number(loanAmount) || 0),
       netPayment,
       note,
     });
