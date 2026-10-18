@@ -2,7 +2,7 @@ import { useSortable } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
-import { Calendar as CalendarIcon, AlertTriangle, MessageSquare } from "lucide-react";
+import { Calendar as CalendarIcon, AlertTriangle, MessageSquare, CheckSquare } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 export type KanbanTask = {
@@ -38,9 +38,19 @@ interface Props {
   onClick: () => void;
   isOverlay?: boolean;
   commentCount?: number;
+  checklistTotal?: number;
+  checklistDone?: number;
 }
 
-export function KanbanCard({ task, assignee, onClick, isOverlay, commentCount = 0 }: Props) {
+export function KanbanCard({
+  task,
+  assignee,
+  onClick,
+  isOverlay,
+  commentCount = 0,
+  checklistTotal = 0,
+  checklistDone = 0,
+}: Props) {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
     id: task.id,
     data: { type: "task", task },
@@ -115,6 +125,12 @@ export function KanbanCard({ task, assignee, onClick, isOverlay, commentCount = 
             <span className="inline-flex items-center gap-1">
               <MessageSquare className="h-3 w-3" />
               {commentCount}
+            </span>
+          )}
+          {checklistTotal > 0 && (
+            <span className="inline-flex items-center gap-1">
+              <CheckSquare className="h-3 w-3" />
+              {checklistDone}/{checklistTotal}
             </span>
           )}
         </div>

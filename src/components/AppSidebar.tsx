@@ -25,7 +25,7 @@ const employeeItems = [
   { title: "Payment", url: "/payment", icon: HandCoins },
   { title: "Notice Board", url: "/notices", icon: Megaphone },
   { title: "SOP", url: "/sop", icon: BookOpenCheck },
-  { title: "Projects", url: "/projects", icon: FolderKanban },
+  { title: "Tasks", url: "/tasks", icon: FolderKanban },
 ];
 
 const managerItems = [

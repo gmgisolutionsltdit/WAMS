@@ -16,25 +16,25 @@ import { toast } from "sonner";
 import { Plus, FolderKanban, ArrowRight } from "lucide-react";
 import { useRealtimeSubscription } from "@/hooks/useRealtimeSubscription";
 
-type Project = {
+type Board = {
   id: string; key: string; name: string; description: string | null;
   wing: string | null; owner_id: string; archived: boolean;
 };
 
-const Projects = () => {
+const Tasks = () => {
   const { user } = useAuth();
   const navigate = useNavigate();
-  const [projects, setProjects] = useState<Project[]>([]);
+  const [boards, setBoards] = useState<Board[]>([]);
   const [open, setOpen] = useState(false);
   const [form, setForm] = useState({ key: "", name: "", description: "", wing: "GMGI" });
 
-  const fetchProjects = useCallback(async () => {
+  const fetchBoards = useCallback(async () => {
     const { data } = await supabase.from("projects").select("*").order("created_at", { ascending: false });
-    setProjects((data || []) as Project[]);
+    setBoards((data || []) as Board[]);
   }, []);
 
-  useEffect(() => { fetchProjects(); }, [fetchProjects]);
-  useRealtimeSubscription("projects", fetchProjects, "projects-list");
+  useEffect(() => { fetchBoards(); }, [fetchBoards]);
+  useRealtimeSubscription("projects", fetchBoards, "task-boards-list");
 
   const create = async () => {
     if (!form.key || !form.name) { toast.error("Key and name required"); return; }
@@ -67,29 +67,29 @@ const Projects = () => {
       ]);
     }
 
-    toast.success("Project created");
+    toast.success("Board created");
     setOpen(false);
     setForm({ key: "", name: "", description: "", wing: "GMGI" });
-    fetchProjects();
+    fetchBoards();
   };
 
   return (
     <div className="space-y-4">
       <div className="flex items-center justify-between flex-wrap gap-2">
         <h2 className="text-2xl font-semibold flex items-center gap-2">
-          <FolderKanban className="h-6 w-6" /> Projects
+          <FolderKanban className="h-6 w-6" /> Tasks
         </h2>
         <Dialog open={open} onOpenChange={setOpen}>
           <DialogTrigger asChild>
-            <Button><Plus className="mr-1 h-4 w-4" /> New Project</Button>
+            <Button><Plus className="mr-1 h-4 w-4" /> New Board</Button>
           </DialogTrigger>
           <DialogContent>
             <DialogHeader>
-              <DialogTitle>Create Project</DialogTitle>
-              <DialogDescription>Projects are work spaces with kanban boards and tickets.</DialogDescription>
+              <DialogTitle>Create Task Board</DialogTitle>
+              <DialogDescription>Task boards are work spaces with kanban columns and tasks.</DialogDescription>
             </DialogHeader>
             <div className="space-y-3">
-              <div><Label>Project Key (e.g. ENG)</Label><Input value={form.key} onChange={(e) => setForm((f) => ({ ...f, key: e.target.value }))} maxLength={10} /></div>
+              <div><Label>Board Key (e.g. ENG)</Label><Input value={form.key} onChange={(e) => setForm((f) => ({ ...f, key: e.target.value }))} maxLength={10} /></div>
               <div><Label>Name</Label><Input value={form.name} onChange={(e) => setForm((f) => ({ ...f, name: e.target.value }))} /></div>
               <div><Label>Description</Label><Textarea value={form.description} onChange={(e) => setForm((f) => ({ ...f, description: e.target.value }))} /></div>
               <div>
@@ -108,15 +108,15 @@ const Projects = () => {
         </Dialog>
       </div>
 
-      {projects.length === 0 ? (
+      {boards.length === 0 ? (
         <Card><CardContent className="p-12 text-center text-muted-foreground">
           <FolderKanban className="h-12 w-12 mx-auto mb-3 opacity-50" />
-          <p>No projects yet. Create your first project to start organizing tasks.</p>
+          <p>No boards yet. Create your first board to start organizing tasks.</p>
         </CardContent></Card>
       ) : (
         <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-3">
-          {projects.map((p) => (
-            <Card key={p.id} className="cursor-pointer hover:border-primary transition-colors" onClick={() => navigate(`/projects/${p.id}`)}>
+          {boards.map((p) => (
+            <Card key={p.id} className="cursor-pointer hover:border-primary transition-colors" onClick={() => navigate(`/tasks/${p.id}`)}>
               <CardHeader className="pb-2">
                 <CardTitle className="flex items-center justify-between">
                   <span className="flex items-center gap-2">
@@ -138,4 +138,4 @@ const Projects = () => {
   );
 };
 
-export default Projects;
+export default Tasks;

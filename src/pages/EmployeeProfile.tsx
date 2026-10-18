@@ -1173,7 +1173,7 @@ const EmployeeProfile = () => {
               <CardContent className="space-y-3">
                 {projects.length === 0 ? (
                   <p className="text-xs text-muted-foreground">
-                    No active projects yet — create one on the Projects page to assign it here.
+                    No active boards yet — create one on the Tasks page to assign it here.
                   </p>
                 ) : (
                   <div className="flex flex-wrap gap-2 rounded-md border p-2 max-h-32 overflow-y-auto">
@@ -1227,7 +1227,7 @@ const EmployeeProfile = () => {
                           <TableCell className="font-medium max-w-[320px] truncate">{t.title}</TableCell>
                           <TableCell>
                             {t.projects?.name ? (
-                              <Link to={`/projects/${t.project_id}`} className="text-primary hover:underline">
+                              <Link to={`/tasks/${t.project_id}`} className="text-primary hover:underline">
                                 {t.projects.name}
                               </Link>
                             ) : "—"}

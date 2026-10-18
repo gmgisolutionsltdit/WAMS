@@ -1,5 +1,5 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { BrowserRouter, Route, Routes, Navigate } from "react-router-dom";
+import { BrowserRouter, Route, Routes, Navigate, useParams } from "react-router-dom";
 import { Toaster as Sonner } from "@/components/ui/sonner";
 import { Toaster } from "@/components/ui/toaster";
 import { TooltipProvider } from "@/components/ui/tooltip";
@@ -15,8 +15,8 @@ import SettingsPage from "./pages/SettingsPage";
 import EmployeeManagement from "./pages/EmployeeManagement";
 import Holidays from "./pages/Holidays";
 import LeaveManagement from "./pages/LeaveManagement";
-import Projects from "./pages/Projects";
-import ProjectBoard from "./pages/ProjectBoard";
+import Tasks from "./pages/Tasks";
+import TaskBoard from "./pages/TaskBoard";
 import { ErrorBoundary } from "./components/ErrorBoundary";
 import Login from "./pages/Login";
 
@@ -60,6 +60,12 @@ const RoleGate = ({ children, allow }: { children: ReactNode; allow: ("admin" | 
   return <>{children}</>;
 };
 
+/** Old /projects/:id bookmarks keep working after the Tasks rename. */
+const ProjectRedirect = () => {
+  const { id } = useParams<{ id: string }>();
+  return <Navigate to={`/tasks/${id}`} replace />;
+};
+
 const AppRoutes = () => (
   <Routes>
     <Route path="/login" element={<PublicOnlyRoute><Login /></PublicOnlyRoute>} />
@@ -78,8 +84,10 @@ const AppRoutes = () => (
     <Route path="/employees/:id" element={<ProtectedRoute><EmployeeProfile /></ProtectedRoute>} />
     <Route path="/holidays" element={<ProtectedRoute><RoleGate allow={["admin"]}><Holidays /></RoleGate></ProtectedRoute>} />
     <Route path="/leave" element={<ProtectedRoute><LeaveManagement /></ProtectedRoute>} />
-    <Route path="/projects" element={<ProtectedRoute><Projects /></ProtectedRoute>} />
-    <Route path="/projects/:id" element={<ProtectedRoute><ErrorBoundary fallbackTitle="Couldn't open this project"><ProjectBoard /></ErrorBoundary></ProtectedRoute>} />
+    <Route path="/tasks" element={<ProtectedRoute><Tasks /></ProtectedRoute>} />
+    <Route path="/tasks/:id" element={<ProtectedRoute><ErrorBoundary fallbackTitle="Couldn't open this board"><TaskBoard /></ErrorBoundary></ProtectedRoute>} />
+    <Route path="/projects" element={<Navigate to="/tasks" replace />} />
+    <Route path="/projects/:id" element={<ProjectRedirect />} />
     <Route path="/payroll" element={<Navigate to="/payment" replace />} />
     <Route path="/salary-increments" element={<ProtectedRoute><RoleGate allow={["admin"]}><SalaryIncrements /></RoleGate></ProtectedRoute>} />
     <Route path="/loans" element={<ProtectedRoute><RoleGate allow={["admin"]}><Loans /></RoleGate></ProtectedRoute>} />

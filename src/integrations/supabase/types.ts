@@ -2183,6 +2183,44 @@ export type Database = {
           },
         ]
       }
+      task_checklist_items: {
+        Row: {
+          created_at: string
+          created_by: string
+          done: boolean
+          id: string
+          position: number
+          task_id: string
+          text: string
+        }
+        Insert: {
+          created_at?: string
+          created_by: string
+          done?: boolean
+          id?: string
+          position?: number
+          task_id: string
+          text: string
+        }
+        Update: {
+          created_at?: string
+          created_by?: string
+          done?: boolean
+          id?: string
+          position?: number
+          task_id?: string
+          text?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "task_checklist_items_task_id_fkey"
+            columns: ["task_id"]
+            isOneToOne: false
+            referencedRelation: "tasks"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       task_columns: {
         Row: {
           board_id: string

@@ -137,7 +137,7 @@ export const ProjectMemberSelector = ({ projectId, project, members, onChanged }
       <DialogContent className="max-w-2xl">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
-            <Users className="h-4 w-4" /> Project Members
+            <Users className="h-4 w-4" /> Board Members
           </DialogTitle>
           <DialogDescription>
             Select people who should collaborate on this project. Direct subordinates and{" "}
