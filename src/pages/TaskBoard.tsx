@@ -1,4 +1,4 @@
-import { useEffect, useState, useCallback, useMemo } from "react";
+import { useEffect, useState, useCallback, useMemo, useRef } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { useAuth } from "@/contexts/AuthContext";
 import { supabase } from "@/integrations/supabase/client";
@@ -13,7 +13,7 @@ import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription,
 } from "@/components/ui/dialog";
 import { toast } from "sonner";
-import { ArrowLeft, Plus, MessageSquare, Loader2, AlertCircle } from "lucide-react";
+import { ArrowLeft, Plus, MessageSquare, Loader2, AlertCircle, CheckSquare, X } from "lucide-react";
 import { useRealtimeSubscription } from "@/hooks/useRealtimeSubscription";
 import { EmployeePicker } from "@/components/EmployeePicker";
 import { ProjectMemberSelector } from "@/components/ProjectMemberSelector";
@@ -32,10 +32,11 @@ import { arrayMove } from "@dnd-kit/sortable";
 import { KanbanColumn, KanbanColumnData } from "@/components/kanban/KanbanColumn";
 import { KanbanCard, KanbanTask, Profile } from "@/components/kanban/KanbanCard";
 import { KanbanEmptyState } from "@/components/kanban/KanbanEmptyState";
+import { cn } from "@/lib/utils";
 
 const PRIORITIES = ["low", "medium", "high", "urgent"];
 
-const ProjectBoard = () => {
+const TaskBoard = () => {
   const { id: projectId } = useParams<{ id: string }>();
   const navigate = useNavigate();
   const { user } = useAuth();
@@ -53,6 +54,9 @@ const ProjectBoard = () => {
   const [draggingTask, setDraggingTask] = useState<KanbanTask | null>(null);
   const [comments, setComments] = useState<any[]>([]);
   const [newComment, setNewComment] = useState("");
+  const [checklistItems, setChecklistItems] = useState<any[]>([]);
+  const [newChecklistItem, setNewChecklistItem] = useState("");
+  const [checklistCounts, setChecklistCounts] = useState<Record<string, { done: number; total: number }>>({});
 
   const [createOpen, setCreateOpen] = useState(false);
   const [createColId, setCreateColId] = useState<string | null>(null);
@@ -87,7 +91,7 @@ const ProjectBoard = () => {
       .select("id")
       .single();
     if (error || !created) {
-      console.error("[ProjectBoard] failed to create board:", error);
+      console.error("[TaskBoard] failed to create board:", error);
       return null;
     }
     const { error: colErr } = await supabase.from("task_columns").insert([
@@ -95,7 +99,7 @@ const ProjectBoard = () => {
       { board_id: created.id, name: "In Progress", status: "in_progress", position: 1 },
       { board_id: created.id, name: "Completed", status: "done", position: 2 },
     ]);
-    if (colErr) console.error("[ProjectBoard] failed to seed columns:", colErr);
+    if (colErr) console.error("[TaskBoard] failed to seed columns:", colErr);
     return created.id;
   }, []);
 
@@ -110,7 +114,7 @@ const ProjectBoard = () => {
       ]);
       if (pjErr) throw pjErr;
       if (!pj) {
-        setLoadError("Project not found or you don't have access.");
+        setLoadError("Board not found or you don't have access.");
         setLoading(false);
         return;
       }
@@ -120,7 +124,7 @@ const ProjectBoard = () => {
 
       const bId = await ensureBoard(projectId);
       if (!bId) {
-        setLoadError("Could not load or create the board for this project.");
+        setLoadError("Could not load or create this board.");
         setLoading(false);
         return;
       }
@@ -133,8 +137,25 @@ const ProjectBoard = () => {
       setColumns((cols || []) as KanbanColumnData[]);
       setTasks((tks || []) as KanbanTask[]);
       setTaskCounter((tks || []).length);
+
+      const taskIds = (tks || []).map((t: any) => t.id);
+      if (taskIds.length > 0) {
+        const { data: items } = await supabase
+          .from("task_checklist_items")
+          .select("task_id, done")
+          .in("task_id", taskIds);
+        const counts: Record<string, { done: number; total: number }> = {};
+        (items || []).forEach((it: any) => {
+          if (!counts[it.task_id]) counts[it.task_id] = { done: 0, total: 0 };
+          counts[it.task_id].total += 1;
+          if (it.done) counts[it.task_id].done += 1;
+        });
+        setChecklistCounts(counts);
+      } else {
+        setChecklistCounts({});
+      }
     } catch (e: any) {
-      console.error("[ProjectBoard] fetchAll error:", e);
+      console.error("[TaskBoard] fetchAll error:", e);
       setLoadError(e.message || "Failed to load project.");
     } finally {
       setLoading(false);
@@ -144,6 +165,7 @@ const ProjectBoard = () => {
   useEffect(() => { fetchAll(); }, [fetchAll]);
   useRealtimeSubscription("tasks", fetchAll, `tasks-${projectId}`);
   useRealtimeSubscription("task_columns", fetchAll, `cols-${projectId}`);
+  useRealtimeSubscription("task_checklist_items", fetchAll, `checklist-${projectId}`);
 
   const memberProfiles = useMemo(() => {
     const ids = new Set(members.map((m) => m.user_id));
@@ -272,14 +294,53 @@ const ProjectBoard = () => {
     setCreateOpen(false);
   };
 
+  const openTaskIdRef = useRef<string | null>(null);
+
   const openTask = async (t: KanbanTask) => {
     setActiveTask(t);
-    const { data } = await supabase
-      .from("task_comments")
-      .select("*")
-      .eq("task_id", t.id)
-      .order("created_at");
+    openTaskIdRef.current = t.id;
+    const [{ data }, { data: checklist }] = await Promise.all([
+      supabase.from("task_comments").select("*").eq("task_id", t.id).order("created_at"),
+      supabase.from("task_checklist_items").select("*").eq("task_id", t.id).order("position"),
+    ]);
+    if (openTaskIdRef.current !== t.id) return;
     setComments(data || []);
+    setChecklistItems(checklist || []);
+  };
+
+  const refreshChecklist = async (taskId: string) => {
+    const { data } = await supabase
+      .from("task_checklist_items")
+      .select("*")
+      .eq("task_id", taskId)
+      .order("position");
+    if (openTaskIdRef.current !== taskId) return;
+    setChecklistItems(data || []);
+  };
+
+  const addChecklistItem = async () => {
+    if (!activeTask || !newChecklistItem.trim()) return;
+    const { error } = await supabase.from("task_checklist_items").insert({
+      task_id: activeTask.id,
+      text: newChecklistItem.trim(),
+      position: checklistItems.length,
+      created_by: user!.id,
+    });
+    if (error) { toast.error(error.message); return; }
+    setNewChecklistItem("");
+    refreshChecklist(activeTask.id);
+  };
+
+  const toggleChecklistItem = async (itemId: string, done: boolean) => {
+    const { error } = await supabase.from("task_checklist_items").update({ done }).eq("id", itemId);
+    if (error) { toast.error(error.message); return; }
+    if (activeTask) refreshChecklist(activeTask.id);
+  };
+
+  const deleteChecklistItem = async (itemId: string) => {
+    const { error } = await supabase.from("task_checklist_items").delete().eq("id", itemId);
+    if (error) { toast.error(error.message); return; }
+    if (activeTask) refreshChecklist(activeTask.id);
   };
 
   const updateTask = async (patch: Partial<KanbanTask>) => {
@@ -339,10 +400,10 @@ const ProjectBoard = () => {
     return (
       <div className="max-w-md mx-auto py-16 text-center">
         <AlertCircle className="h-10 w-10 mx-auto text-destructive mb-3" />
-        <h3 className="font-semibold mb-1">Couldn't open this project</h3>
+        <h3 className="font-semibold mb-1">Couldn't open this board</h3>
         <p className="text-sm text-muted-foreground mb-4">{loadError || "Unknown error"}</p>
-        <Button variant="outline" onClick={() => navigate("/projects")}>
-          <ArrowLeft className="h-4 w-4 mr-1" /> Back to Projects
+        <Button variant="outline" onClick={() => navigate("/tasks")}>
+          <ArrowLeft className="h-4 w-4 mr-1" /> Back to Tasks
         </Button>
       </div>
     );
@@ -356,7 +417,7 @@ const ProjectBoard = () => {
       {/* Header */}
       <div className="flex items-center justify-between flex-wrap gap-2">
         <div className="flex items-center gap-3">
-          <Button size="icon" variant="ghost" onClick={() => navigate("/projects")}>
+          <Button size="icon" variant="ghost" onClick={() => navigate("/tasks")}>
             <ArrowLeft className="h-4 w-4" />
           </Button>
           <div>
@@ -412,6 +473,7 @@ const ProjectBoard = () => {
                 onOpenTask={openTask}
                 onDeleteColumn={deleteColumn}
                 canDelete={isOwnerOrAdmin}
+                checklistCounts={checklistCounts}
               />
             ))}
           </div>
@@ -493,7 +555,7 @@ const ProjectBoard = () => {
       </Dialog>
 
       {/* Task Detail Dialog */}
-      <Dialog open={!!activeTask} onOpenChange={(o) => !o && setActiveTask(null)}>
+      <Dialog open={!!activeTask} onOpenChange={(o) => { if (!o) { setActiveTask(null); openTaskIdRef.current = null; } }}>
         <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
           {activeTask && (
             <>
@@ -518,6 +580,46 @@ const ProjectBoard = () => {
                       onBlur={(e) => updateTask({ description: e.target.value })}
                       rows={5}
                     />
+                  </div>
+                  <div>
+                    <Label className="flex items-center gap-1">
+                      <CheckSquare className="h-3 w-3" /> Checklist
+                      {checklistItems.length > 0 && (
+                        <span className="text-xs text-muted-foreground font-normal">
+                          ({checklistItems.filter((i) => i.done).length}/{checklistItems.length})
+                        </span>
+                      )}
+                    </Label>
+                    <div className="space-y-1 my-2">
+                      {checklistItems.map((item) => (
+                        <div key={item.id} className="flex items-center gap-2 group">
+                          <input
+                            type="checkbox"
+                            checked={item.done}
+                            onChange={(e) => toggleChecklistItem(item.id, e.target.checked)}
+                            className="h-4 w-4"
+                          />
+                          <span className={cn("flex-1 text-sm", item.done && "line-through text-muted-foreground")}>
+                            {item.text}
+                          </span>
+                          <button
+                            onClick={() => deleteChecklistItem(item.id)}
+                            className="opacity-0 group-hover:opacity-100 text-muted-foreground hover:text-destructive"
+                          >
+                            <X className="h-3.5 w-3.5" />
+                          </button>
+                        </div>
+                      ))}
+                    </div>
+                    <div className="flex gap-2">
+                      <Input
+                        value={newChecklistItem}
+                        onChange={(e) => setNewChecklistItem(e.target.value)}
+                        placeholder="Add checklist item..."
+                        onKeyDown={(e) => e.key === "Enter" && addChecklistItem()}
+                      />
+                      <Button size="sm" onClick={addChecklistItem}>Add</Button>
+                    </div>
                   </div>
                   <div>
                     <Label className="flex items-center gap-1"><MessageSquare className="h-3 w-3" /> Comments</Label>
@@ -602,4 +704,4 @@ const ProjectBoard = () => {
   );
 };
 
-export default ProjectBoard;
+export default TaskBoard;

@@ -26,6 +26,7 @@ interface Props {
   onOpenTask: (task: KanbanTask) => void;
   onDeleteColumn?: (columnId: string) => void;
   canDelete?: boolean;
+  checklistCounts?: Record<string, { done: number; total: number }>;
 }
 
 const COLUMN_ACCENT: Record<string, string> = {
@@ -43,6 +44,7 @@ export function KanbanColumn({
   onOpenTask,
   onDeleteColumn,
   canDelete,
+  checklistCounts,
 }: Props) {
   const { setNodeRef, isOver } = useDroppable({
     id: column.id,
@@ -124,6 +126,8 @@ export function KanbanColumn({
                 task={t}
                 assignee={profiles.find((p) => p.id === t.assignee_id) || null}
                 onClick={() => onOpenTask(t)}
+                checklistTotal={checklistCounts?.[t.id]?.total || 0}
+                checklistDone={checklistCounts?.[t.id]?.done || 0}
               />
             ))
           )}
