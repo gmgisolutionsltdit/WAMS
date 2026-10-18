@@ -1,4 +1,4 @@
-import { useEffect, useState, useCallback, useMemo } from "react";
+import { useEffect, useState, useCallback, useMemo, useRef } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { useAuth } from "@/contexts/AuthContext";
 import { supabase } from "@/integrations/supabase/client";
@@ -294,12 +294,16 @@ const TaskBoard = () => {
     setCreateOpen(false);
   };
 
+  const openTaskIdRef = useRef<string | null>(null);
+
   const openTask = async (t: KanbanTask) => {
     setActiveTask(t);
+    openTaskIdRef.current = t.id;
     const [{ data }, { data: checklist }] = await Promise.all([
       supabase.from("task_comments").select("*").eq("task_id", t.id).order("created_at"),
       supabase.from("task_checklist_items").select("*").eq("task_id", t.id).order("position"),
     ]);
+    if (openTaskIdRef.current !== t.id) return;
     setComments(data || []);
     setChecklistItems(checklist || []);
   };
@@ -310,6 +314,7 @@ const TaskBoard = () => {
       .select("*")
       .eq("task_id", taskId)
       .order("position");
+    if (openTaskIdRef.current !== taskId) return;
     setChecklistItems(data || []);
   };
 
@@ -550,7 +555,7 @@ const TaskBoard = () => {
       </Dialog>
 
       {/* Task Detail Dialog */}
-      <Dialog open={!!activeTask} onOpenChange={(o) => !o && setActiveTask(null)}>
+      <Dialog open={!!activeTask} onOpenChange={(o) => { if (!o) { setActiveTask(null); openTaskIdRef.current = null; } }}>
         <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
           {activeTask && (
             <>

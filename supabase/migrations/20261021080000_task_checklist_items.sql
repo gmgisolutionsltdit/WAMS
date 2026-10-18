@@ -15,11 +15,35 @@ ALTER TABLE public.task_checklist_items ENABLE ROW LEVEL SECURITY;
 CREATE POLICY "Members view checklist items" ON public.task_checklist_items FOR SELECT TO authenticated USING (
   EXISTS (SELECT 1 FROM public.tasks t WHERE t.id = task_id AND (public.is_project_member(auth.uid(), t.project_id) OR t.assignee_id = auth.uid() OR public.has_role(auth.uid(),'admin')))
 );
-CREATE POLICY "Members manage checklist items" ON public.task_checklist_items FOR ALL TO authenticated USING (
+CREATE POLICY "Members create checklist items" ON public.task_checklist_items FOR INSERT TO authenticated WITH CHECK (
+  created_by = auth.uid()
+  AND EXISTS (SELECT 1 FROM public.tasks t WHERE t.id = task_id AND (public.project_role_of(auth.uid(), t.project_id) IN ('owner','member') OR t.assignee_id = auth.uid() OR public.has_role(auth.uid(),'admin')))
+);
+CREATE POLICY "Members update checklist items" ON public.task_checklist_items FOR UPDATE TO authenticated USING (
   EXISTS (SELECT 1 FROM public.tasks t WHERE t.id = task_id AND (public.project_role_of(auth.uid(), t.project_id) IN ('owner','member') OR t.assignee_id = auth.uid() OR public.has_role(auth.uid(),'admin')))
 ) WITH CHECK (
   EXISTS (SELECT 1 FROM public.tasks t WHERE t.id = task_id AND (public.project_role_of(auth.uid(), t.project_id) IN ('owner','member') OR t.assignee_id = auth.uid() OR public.has_role(auth.uid(),'admin')))
 );
+CREATE POLICY "Members delete checklist items" ON public.task_checklist_items FOR DELETE TO authenticated USING (
+  EXISTS (SELECT 1 FROM public.tasks t WHERE t.id = task_id AND (public.project_role_of(auth.uid(), t.project_id) IN ('owner','member') OR t.assignee_id = auth.uid() OR public.has_role(auth.uid(),'admin')))
+);
+
+-- Belt-and-braces: even though app code never changes created_by after insert,
+-- no WITH CHECK clause can diff against the pre-update row, so a direct API
+-- call could otherwise reassign authorship. Pin it server-side instead.
+CREATE OR REPLACE FUNCTION public.lock_task_checklist_item_created_by()
+RETURNS TRIGGER
+LANGUAGE plpgsql AS $$
+BEGIN
+  NEW.created_by := OLD.created_by;
+  RETURN NEW;
+END;
+$$;
+
+DROP TRIGGER IF EXISTS trg_lock_checklist_item_created_by ON public.task_checklist_items;
+CREATE TRIGGER trg_lock_checklist_item_created_by
+  BEFORE UPDATE ON public.task_checklist_items
+  FOR EACH ROW EXECUTE FUNCTION public.lock_task_checklist_item_created_by();
 
 ALTER TABLE public.task_checklist_items REPLICA IDENTITY FULL;
 DO $$
