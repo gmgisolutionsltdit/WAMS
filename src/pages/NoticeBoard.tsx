@@ -75,12 +75,17 @@ const NoticeBoard = () => {
     const ids = Array.from(new Set(
       combined.flatMap((r) => [r.user_id, r.approver_id, r.approved_by]).filter(Boolean)
     ));
+    const map: Record<string, string> = {};
     if (ids.length) {
       const { data: profs } = await supabase.from("profiles").select("id, full_name, email").in("id", ids);
-      const map: Record<string, string> = {};
       (profs || []).forEach((p: any) => { map[p.id] = p.full_name || p.email || "Unknown"; });
-      setNamesByUser(map);
     }
+    // Profile RLS only lets a regular employee read their own profile, so the
+    // query above never resolves their manager's/admin's name for their own
+    // requests — this RPC is scoped server-side to just those deciders.
+    const { data: deciderNames } = await supabase.rpc("my_request_decider_names");
+    (deciderNames || []).forEach((d) => { map[d.user_id] = d.full_name || "Unknown"; });
+    setNamesByUser(map);
   };
 
   useEffect(() => { fetchNotices(); fetchActivity(); }, []);
