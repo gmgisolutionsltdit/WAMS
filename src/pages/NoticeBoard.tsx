@@ -10,7 +10,7 @@ import { Badge } from "@/components/ui/badge";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogFooter } from "@/components/ui/dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
-import { Megaphone, Pin, Plus, Trash2, CalendarClock } from "lucide-react";
+import { Megaphone, Pin, Plus, Archive, CalendarClock } from "lucide-react";
 import { Checkbox } from "@/components/ui/checkbox";
 import { toast } from "sonner";
 import { format } from "date-fns";
@@ -160,8 +160,8 @@ const NoticeBoard = () => {
     fetchNotices();
   };
 
-  const remove = async (id: string) => {
-    if (!confirm("Delete notice?")) return;
+  const archive = async (id: string) => {
+    if (!confirm("Archive notice?")) return;
     await supabase.rpc("soft_delete_notices", { _ids: [id] });
     fetchNotices();
   };
@@ -174,9 +174,9 @@ const NoticeBoard = () => {
     });
   };
 
-  const removeSelected = async () => {
+  const archiveSelected = async () => {
     if (selectedNotices.size === 0) return;
-    if (!confirm(`Delete ${selectedNotices.size} selected notice${selectedNotices.size === 1 ? "" : "s"}?`)) return;
+    if (!confirm(`Archive ${selectedNotices.size} selected notice${selectedNotices.size === 1 ? "" : "s"}?`)) return;
     await supabase.rpc("soft_delete_notices", { _ids: Array.from(selectedNotices) });
     setSelectedNotices(new Set());
     fetchNotices();
@@ -277,12 +277,12 @@ const NoticeBoard = () => {
       {notices.length > 0 && (
         <div className="flex items-center gap-2">
           <Button
-            variant="destructive"
+            variant="outline"
             size="sm"
             disabled={selectedNotices.size === 0}
-            onClick={removeSelected}
+            onClick={archiveSelected}
           >
-            <Trash2 className="h-4 w-4 mr-1" /> Delete Selected{selectedNotices.size > 0 ? ` (${selectedNotices.size})` : ""}
+            <Archive className="h-4 w-4 mr-1" /> Archive Selected{selectedNotices.size > 0 ? ` (${selectedNotices.size})` : ""}
           </Button>
           {selectedNotices.size > 0 && (
             <Button variant="ghost" size="sm" onClick={() => setSelectedNotices(new Set())}>Clear selection</Button>
@@ -318,12 +318,12 @@ const NoticeBoard = () => {
                     </CardDescription>
                     </div>
                   </div>
-                  {canManage && (
-                    <div className="flex gap-1">
+                  <div className="flex gap-1">
+                    {canManage && (
                       <Button size="icon" variant="ghost" onClick={()=>togglePin(n)}><Pin className={`h-4 w-4 ${n.pinned ? "fill-primary text-primary" : ""}`} /></Button>
-                      <Button size="icon" variant="ghost" onClick={()=>remove(n.id)}><Trash2 className="h-4 w-4 text-destructive" /></Button>
-                    </div>
-                  )}
+                    )}
+                    <Button size="icon" variant="ghost" onClick={()=>archive(n.id)} aria-label="Archive notice"><Archive className="h-4 w-4 text-muted-foreground" /></Button>
+                  </div>
                 </div>
               </CardHeader>
               <CardContent>
