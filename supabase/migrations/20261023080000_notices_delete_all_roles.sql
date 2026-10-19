@@ -5,8 +5,19 @@
 -- content or to resurrect one.
 CREATE OR REPLACE FUNCTION public.soft_delete_notices(_ids UUID[])
 RETURNS VOID
-LANGUAGE SQL SECURITY DEFINER SET search_path = public AS $$
+LANGUAGE PLPGSQL SECURITY DEFINER SET search_path = public AS $$
+BEGIN
+  IF auth.uid() IS NULL THEN
+    RAISE EXCEPTION 'Not authenticated';
+  END IF;
   UPDATE public.notices SET is_active = FALSE WHERE id = ANY(_ids);
+END;
 $$;
 
+-- A new SECURITY DEFINER function grants EXECUTE to PUBLIC by default,
+-- which (combined with SECURITY DEFINER) would let an unauthenticated
+-- caller on the public API invoke it directly. Lock it down to
+-- `authenticated` only — the auth.uid() check above is belt-and-braces
+-- on top of that grant, not a substitute for it.
+REVOKE EXECUTE ON FUNCTION public.soft_delete_notices(UUID[]) FROM PUBLIC;
 GRANT EXECUTE ON FUNCTION public.soft_delete_notices(UUID[]) TO authenticated;
