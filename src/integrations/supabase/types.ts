@@ -2841,6 +2841,10 @@ export type Database = {
         Args: { _user_ids: string[] }
         Returns: { user_id: string; role: string }[]
       }
+      my_request_decider_names: {
+        Args: Record<PropertyKey, never>
+        Returns: { user_id: string; full_name: string | null }[]
+      }
       manager_candidates: {
         Args: Record<PropertyKey, never>
         Returns: { id: string; full_name: string | null; email: string | null }[]

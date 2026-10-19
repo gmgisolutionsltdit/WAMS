@@ -153,7 +153,8 @@ export const ManualTimeEntryDialog = ({ onSubmitted, trigger, initial, supersede
   const gmgiTime = Math.max(0, parseFloat(form.gmgi_time) || 0);
   const gmTime = Math.max(0, parseFloat(form.gm_time) || 0);
   const taskTimeTotal = Math.round((gmgiTime + gmTime) * 100) / 100;
-  const taskTimeExceedsDuration = taskTimeTotal > computed.total;
+  const taskTimeMismatch = Math.abs(taskTimeTotal - computed.total) > 0.01;
+  const hasAnyTaskTime = gmgiTime > 0 || gmTime > 0;
 
   const submit = async () => {
     if (!user) return;
@@ -165,8 +166,12 @@ export const ManualTimeEntryDialog = ({ onSubmitted, trigger, initial, supersede
       toast.error("Clock out must be after clock in");
       return;
     }
-    if (taskTimeExceedsDuration) {
-      toast.error("GMGI Time + GM Time cannot exceed the entry's duration");
+    if (!hasAnyTaskTime) {
+      toast.error("Enter GMGI Time or GM Time");
+      return;
+    }
+    if (taskTimeMismatch) {
+      toast.error("GMGI Time + GM Time must equal the entry's duration");
       return;
     }
     setSaving(true);
@@ -325,8 +330,8 @@ export const ManualTimeEntryDialog = ({ onSubmitted, trigger, initial, supersede
               />
             </div>
           </div>
-          <p className={`text-xs -mt-2 ${taskTimeExceedsDuration ? "text-destructive" : "text-muted-foreground"}`}>
-            Total time: {taskTimeTotal}h (GMGI + GM) — must be ≤ duration ({computed.total}h)
+          <p className={`text-xs -mt-2 ${taskTimeMismatch ? "text-destructive" : "text-muted-foreground"}`}>
+            Total time: {taskTimeTotal}h (GMGI + GM) — must be = Work time ({computed.total}h)
           </p>
           <div>
             <Label>Reason</Label>

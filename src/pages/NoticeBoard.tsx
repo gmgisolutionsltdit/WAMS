@@ -11,6 +11,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, Dialog
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
 import { Megaphone, Pin, Plus, Trash2, CalendarClock } from "lucide-react";
+import { Checkbox } from "@/components/ui/checkbox";
 import { toast } from "sonner";
 import { format } from "date-fns";
 import { useRealtimeSubscription } from "@/hooks/useRealtimeSubscription";
@@ -32,11 +33,11 @@ const NoticeBoard = () => {
 
   const [activity, setActivity] = useState<any[]>([]);
   const [namesByUser, setNamesByUser] = useState<Record<string, string>>({});
-  const [rolesByUser, setRolesByUser] = useState<Record<string, string>>({});
   const [leaveTypeNames, setLeaveTypeNames] = useState<Record<string, string>>({});
   const [filterDate, setFilterDate] = useState("");
   const [filterUser, setFilterUser] = useState("all");
   const [filterType, setFilterType] = useState("all");
+  const [selectedNotices, setSelectedNotices] = useState<Set<string>>(new Set());
 
   const fetchNotices = async () => {
     const { data } = await supabase.from("notices").select("*").eq("is_active", true).order("pinned", { ascending: false }).order("published_at", { ascending: false });
@@ -74,18 +75,17 @@ const NoticeBoard = () => {
     const ids = Array.from(new Set(
       combined.flatMap((r) => [r.user_id, r.approver_id, r.approved_by]).filter(Boolean)
     ));
+    const map: Record<string, string> = {};
     if (ids.length) {
-      const [{ data: profs }, { data: roles }] = await Promise.all([
-        supabase.from("profiles").select("id, full_name, email").in("id", ids),
-        supabase.rpc("role_labels_for", { _user_ids: ids }),
-      ]);
-      const map: Record<string, string> = {};
+      const { data: profs } = await supabase.from("profiles").select("id, full_name, email").in("id", ids);
       (profs || []).forEach((p: any) => { map[p.id] = p.full_name || p.email || "Unknown"; });
-      setNamesByUser(map);
-      const roleMap: Record<string, string> = {};
-      (roles || []).forEach((r: any) => { roleMap[r.user_id] = r.role; });
-      setRolesByUser(roleMap);
     }
+    // Profile RLS only lets a regular employee read their own profile, so the
+    // query above never resolves their manager's/admin's name for their own
+    // requests — this RPC is scoped server-side to just those deciders.
+    const { data: deciderNames } = await supabase.rpc("my_request_decider_names");
+    (deciderNames || []).forEach((d) => { map[d.user_id] = d.full_name || "Unknown"; });
+    setNamesByUser(map);
   };
 
   useEffect(() => { fetchNotices(); fetchActivity(); }, []);
@@ -95,10 +95,9 @@ const NoticeBoard = () => {
   useRealtimeSubscription("overtime_requests", fetchActivity, "notice-board-ot");
 
   /**
-   * Own request (viewer === requester) shows *who decided it* (their
-   * manager or admin — the role, since that's what matters to an
-   * employee, not the individual's name). Viewing someone else's request
-   * (a manager/admin looking at their team) shows whose request it is
+   * Own request (viewer === requester) shows *who decided it* — the
+   * decider's actual name. Viewing someone else's request (a
+   * manager/admin looking at their team) shows whose request it is
    * instead — the "by ..." decider suffix is dropped since it's not
    * useful there (you already know who you or your peers are).
    */
@@ -106,10 +105,8 @@ const NoticeBoard = () => {
     const who = namesByUser[r.user_id] || "Someone";
     const isOwn = !!user && r.user_id === user.id;
     const deciderId = r.approver_id || r.approved_by;
-    const deciderRole = deciderId ? rolesByUser[deciderId] : undefined;
-    const decidedSuffix = isOwn && deciderRole
-      ? ` by ${deciderRole === "admin" ? "Admin" : deciderRole === "manager" ? "Manager" : deciderRole}`
-      : "";
+    const deciderName = deciderId ? namesByUser[deciderId] : undefined;
+    const decidedSuffix = isOwn && deciderName ? ` by ${deciderName}` : "";
     if (r._kind === "leave") {
       const typeName = leaveTypeNames[r.leave_type_id] || "leave";
       const range = `${r.start_date} → ${r.end_date}`;
@@ -166,6 +163,22 @@ const NoticeBoard = () => {
   const remove = async (id: string) => {
     if (!confirm("Delete notice?")) return;
     await supabase.from("notices").update({ is_active: false }).eq("id", id);
+    fetchNotices();
+  };
+
+  const toggleSelected = (id: string, checked: boolean) => {
+    setSelectedNotices((prev) => {
+      const next = new Set(prev);
+      if (checked) next.add(id); else next.delete(id);
+      return next;
+    });
+  };
+
+  const removeSelected = async () => {
+    if (selectedNotices.size === 0) return;
+    if (!confirm(`Delete ${selectedNotices.size} selected notice${selectedNotices.size === 1 ? "" : "s"}?`)) return;
+    await supabase.from("notices").update({ is_active: false }).in("id", Array.from(selectedNotices));
+    setSelectedNotices(new Set());
     fetchNotices();
   };
 
@@ -261,6 +274,22 @@ const NoticeBoard = () => {
         </CardContent>
       </Card>
 
+      {canManage && notices.length > 0 && (
+        <div className="flex items-center gap-2">
+          <Button
+            variant="destructive"
+            size="sm"
+            disabled={selectedNotices.size === 0}
+            onClick={removeSelected}
+          >
+            <Trash2 className="h-4 w-4 mr-1" /> Delete Selected{selectedNotices.size > 0 ? ` (${selectedNotices.size})` : ""}
+          </Button>
+          {selectedNotices.size > 0 && (
+            <Button variant="ghost" size="sm" onClick={() => setSelectedNotices(new Set())}>Clear selection</Button>
+          )}
+        </div>
+      )}
+
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
         {notices.length === 0 ? (
           <Card className="md:col-span-2"><CardContent className="py-12 text-center text-muted-foreground"><Megaphone className="h-12 w-12 mx-auto mb-3 opacity-40" />No notices posted yet</CardContent></Card>
@@ -270,7 +299,16 @@ const NoticeBoard = () => {
             <Card key={n.id} className={n.pinned ? "border-primary border-2" : ""}>
               <CardHeader>
                 <div className="flex justify-between items-start gap-2">
-                  <div className="flex-1">
+                  <div className="flex-1 flex items-start gap-2">
+                    {canManage && (
+                      <Checkbox
+                        className="mt-1"
+                        checked={selectedNotices.has(n.id)}
+                        onCheckedChange={(c) => toggleSelected(n.id, !!c)}
+                        aria-label="Select notice"
+                      />
+                    )}
+                    <div>
                     <CardTitle className="text-lg flex items-center gap-2">
                       {n.pinned && <Pin className="h-4 w-4 text-primary fill-primary" />}
                       {n.title}
@@ -280,6 +318,7 @@ const NoticeBoard = () => {
                       <Badge className={pri?.color}>{pri?.label}</Badge>
                       <span className="ml-2 text-xs">{format(new Date(n.published_at), "MMM d, yyyy 'at' HH:mm")}</span>
                     </CardDescription>
+                    </div>
                   </div>
                   {canManage && (
                     <div className="flex gap-1">
