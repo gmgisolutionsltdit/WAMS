@@ -162,7 +162,7 @@ const NoticeBoard = () => {
 
   const remove = async (id: string) => {
     if (!confirm("Delete notice?")) return;
-    await supabase.from("notices").update({ is_active: false }).eq("id", id);
+    await supabase.rpc("soft_delete_notices", { _ids: [id] });
     fetchNotices();
   };
 
@@ -177,7 +177,7 @@ const NoticeBoard = () => {
   const removeSelected = async () => {
     if (selectedNotices.size === 0) return;
     if (!confirm(`Delete ${selectedNotices.size} selected notice${selectedNotices.size === 1 ? "" : "s"}?`)) return;
-    await supabase.from("notices").update({ is_active: false }).in("id", Array.from(selectedNotices));
+    await supabase.rpc("soft_delete_notices", { _ids: Array.from(selectedNotices) });
     setSelectedNotices(new Set());
     fetchNotices();
   };
@@ -274,7 +274,7 @@ const NoticeBoard = () => {
         </CardContent>
       </Card>
 
-      {canManage && notices.length > 0 && (
+      {notices.length > 0 && (
         <div className="flex items-center gap-2">
           <Button
             variant="destructive"
@@ -300,14 +300,12 @@ const NoticeBoard = () => {
               <CardHeader>
                 <div className="flex justify-between items-start gap-2">
                   <div className="flex-1 flex items-start gap-2">
-                    {canManage && (
-                      <Checkbox
-                        className="mt-1"
-                        checked={selectedNotices.has(n.id)}
-                        onCheckedChange={(c) => toggleSelected(n.id, !!c)}
-                        aria-label="Select notice"
-                      />
-                    )}
+                    <Checkbox
+                      className="mt-1"
+                      checked={selectedNotices.has(n.id)}
+                      onCheckedChange={(c) => toggleSelected(n.id, !!c)}
+                      aria-label="Select notice"
+                    />
                     <div>
                     <CardTitle className="text-lg flex items-center gap-2">
                       {n.pinned && <Pin className="h-4 w-4 text-primary fill-primary" />}

@@ -2845,6 +2845,10 @@ export type Database = {
         Args: Record<PropertyKey, never>
         Returns: { user_id: string; full_name: string | null }[]
       }
+      soft_delete_notices: {
+        Args: { _ids: string[] }
+        Returns: undefined
+      }
       manager_candidates: {
         Args: Record<PropertyKey, never>
         Returns: { id: string; full_name: string | null; email: string | null }[]
