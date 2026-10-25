@@ -123,8 +123,10 @@ const Approvals = () => {
 
   const decideManual = async (req: any, status: "approved" | "rejected") => {
     if (!user) return;
-    // The overtime figure is editable right up to approval, so an approver
-    // can sign off on a different OT amount than the employee's auto-calculated one.
+    // The "Approve OT (h)" box shows the employee's auto-calculated figure only
+    // as a greyed placeholder — it's a hint, not a value. An approver must type
+    // into it to grant that OT; leaving it empty and approving means 0h, not a
+    // silent fall-through to whatever the employee's request originally held.
     let overtimeOverride: number | undefined;
     if (status === "approved") {
       const otOverride = manualOT[req.id];
@@ -132,6 +134,8 @@ const Approvals = () => {
         const parsed = parseFloat(otOverride);
         if (isNaN(parsed) || parsed < 0) { toast.error("Invalid overtime hours"); return; }
         overtimeOverride = parsed;
+      } else {
+        overtimeOverride = 0;
       }
     }
     const { data, error } = await supabase

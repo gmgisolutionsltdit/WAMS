@@ -380,11 +380,12 @@ const NoticeBoard = () => {
                     <Badge variant="secondary">{TYPE_LABELS[r._kind]}</Badge>
                     <Badge variant="outline" className="capitalize">{r.status}</Badge>
                     {/* Admin: every row. Manager: rows they approve, never their own (not their own approver).
-                        Anyone else: only their own still-pending entry (RLS lets a requester cancel their own
-                        pending manual/late/OT request — leave has no self-delete policy, only approver/admin). */}
+                        Anyone else: any of their own manual/late/OT entries, pending or decided (RLS lets a
+                        requester delete their own request regardless of status — leave has no self-delete
+                        policy at all, only approver/admin). */}
                     {(canManage
                       || (role === "manager" && canDeleteActivity && r.user_id !== user?.id)
-                      || (r.user_id === user?.id && r.status === "pending" && r._kind !== "leave")) && (
+                      || (r.user_id === user?.id && r._kind !== "leave")) && (
                       <Button size="icon" variant="ghost" className="h-7 w-7" onClick={() => deleteActivity(r)} aria-label="Delete entry">
                         <Trash2 className="h-3.5 w-3.5 text-destructive" />
                       </Button>
