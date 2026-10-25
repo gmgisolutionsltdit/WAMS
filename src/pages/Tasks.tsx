@@ -229,7 +229,7 @@ const Tasks = () => {
             <PopoverTrigger asChild>
               <Button><Plus className="mr-1 h-4 w-4" /> Create</Button>
             </PopoverTrigger>
-            <PopoverContent align="end" className={createStep === "menu" ? "w-56 p-1" : "w-80"}>
+            <PopoverContent align="end" aria-label="Create board" className={createStep === "menu" ? "w-56 p-1" : "w-80"}>
               {createPopoverBody}
             </PopoverContent>
           </Popover>
@@ -281,7 +281,7 @@ const Tasks = () => {
                 <Plus className="h-4 w-4 mr-1" /> Create new board
               </button>
             </PopoverTrigger>
-            <PopoverContent align="start" className={createStep === "menu" ? "w-56 p-1" : "w-80"}>
+            <PopoverContent align="start" aria-label="Create board" className={createStep === "menu" ? "w-56 p-1" : "w-80"}>
               {createPopoverBody}
             </PopoverContent>
           </Popover>
