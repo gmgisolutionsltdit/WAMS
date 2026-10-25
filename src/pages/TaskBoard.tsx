@@ -33,6 +33,7 @@ import { KanbanColumn, KanbanColumnData } from "@/components/kanban/KanbanColumn
 import { KanbanCard, KanbanTask, Profile } from "@/components/kanban/KanbanCard";
 import { KanbanEmptyState } from "@/components/kanban/KanbanEmptyState";
 import { cn } from "@/lib/utils";
+import { recordRecentBoard } from "@/lib/boardPrefs";
 
 const PRIORITIES = ["low", "medium", "high", "urgent"];
 
@@ -119,6 +120,7 @@ const TaskBoard = () => {
         return;
       }
       setProject(pj);
+      recordRecentBoard(projectId);
       setProfiles((pf || []) as Profile[]);
       setMembers((mem || []) as any);
 
