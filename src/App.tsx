@@ -11,7 +11,6 @@ import Attendance from "./pages/Attendance";
 import OTRequests from "./pages/OTRequests";
 import Approvals from "./pages/Approvals";
 import Reports from "./pages/Reports";
-import SettingsPage from "./pages/SettingsPage";
 import EmployeeManagement from "./pages/EmployeeManagement";
 import Holidays from "./pages/Holidays";
 import LeaveManagement from "./pages/LeaveManagement";
@@ -79,7 +78,6 @@ const AppRoutes = () => (
     <Route path="/approvals" element={<ProtectedRoute><RoleGate allow={["admin", "manager"]}><Approvals /></RoleGate></ProtectedRoute>} />
     <Route path="/performance-evaluation" element={<ProtectedRoute><RoleGate allow={["admin", "manager"]}><PerformanceEvaluation /></RoleGate></ProtectedRoute>} />
     <Route path="/reports" element={<ProtectedRoute><Reports /></ProtectedRoute>} />
-    <Route path="/settings" element={<ProtectedRoute><RoleGate allow={["admin"]}><SettingsPage /></RoleGate></ProtectedRoute>} />
     <Route path="/employees" element={<ProtectedRoute><RoleGate allow={["admin"]}><EmployeeManagement /></RoleGate></ProtectedRoute>} />
     <Route path="/employees/:id" element={<ProtectedRoute><EmployeeProfile /></ProtectedRoute>} />
     <Route path="/holidays" element={<ProtectedRoute><RoleGate allow={["admin"]}><Holidays /></RoleGate></ProtectedRoute>} />

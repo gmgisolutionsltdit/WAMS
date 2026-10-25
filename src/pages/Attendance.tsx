@@ -84,6 +84,14 @@ const Attendance = () => {
       (otRows || []).forEach((r: { date: string; requested_hours: number | null }) => {
         otMap[r.date] = (otMap[r.date] || 0) + (Number(r.requested_hours) || 0);
       });
+      // A manual time entry is approved straight through Pending Approvals
+      // (there's no separate OT request for it) — its overtime_hours, once
+      // applied to attendance_logs, is itself the approved figure for that day.
+      ((logsData || []) as AttendanceSession[]).forEach((l) => {
+        if (l.device_source === "manual" && Number(l.overtime_hours) > 0) {
+          otMap[l.date] = (otMap[l.date] || 0) + Number(l.overtime_hours);
+        }
+      });
       setApprovedOTByDate(otMap);
       const leaveMap = new Map<string, string>();
       (leaveRows || []).forEach((r: { start_date: string; end_date: string; leave_types?: { name: string } | null }) => {

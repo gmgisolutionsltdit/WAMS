@@ -10,7 +10,7 @@ import { Badge } from "@/components/ui/badge";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogFooter } from "@/components/ui/dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
-import { Megaphone, Pin, Plus, Archive, CalendarClock } from "lucide-react";
+import { Megaphone, Pin, Plus, Archive, ArchiveRestore, Pencil, CalendarClock, ChevronLeft, ChevronRight } from "lucide-react";
 import { Checkbox } from "@/components/ui/checkbox";
 import { toast } from "sonner";
 import { format } from "date-fns";
@@ -24,12 +24,23 @@ const PRIORITIES = [
   { v: "critical", label: "Critical", color: "bg-destructive text-white" },
 ];
 
+const PAGE_SIZE = 10;
+
+const emptyForm = { title: "", body: "", category: "general", priority: "normal", pinned: false, expires_at: "" };
+
 const NoticeBoard = () => {
   const { user, role } = useAuth();
   const canManage = role === "admin";
   const [notices, setNotices] = useState<any[]>([]);
   const [open, setOpen] = useState(false);
-  const [form, setForm] = useState({ title: "", body: "", category: "general", priority: "normal", pinned: false, expires_at: "" });
+  const [form, setForm] = useState(emptyForm);
+  const [editOpen, setEditOpen] = useState(false);
+  const [editId, setEditId] = useState<string | null>(null);
+  const [editForm, setEditForm] = useState(emptyForm);
+  const [showArchived, setShowArchived] = useState(false);
+  const [archivedNotices, setArchivedNotices] = useState<any[]>([]);
+  const [selectedArchived, setSelectedArchived] = useState<Set<string>>(new Set());
+  const [page, setPage] = useState(1);
 
   const [activity, setActivity] = useState<any[]>([]);
   const [namesByUser, setNamesByUser] = useState<Record<string, string>>({});
@@ -42,6 +53,11 @@ const NoticeBoard = () => {
   const fetchNotices = async () => {
     const { data } = await supabase.from("notices").select("*").eq("is_active", true).order("pinned", { ascending: false }).order("published_at", { ascending: false });
     setNotices(data || []);
+  };
+
+  const fetchArchived = async () => {
+    const { data } = await supabase.from("notices").select("*").eq("is_active", false).order("published_at", { ascending: false });
+    setArchivedNotices(data || []);
   };
 
   /**
@@ -156,13 +172,41 @@ const NoticeBoard = () => {
     if (error) return toast.error(error.message);
     toast.success("Notice published");
     setOpen(false);
-    setForm({ title: "", body: "", category: "general", priority: "normal", pinned: false, expires_at: "" });
+    setForm(emptyForm);
+    fetchNotices();
+  };
+
+  const openEdit = (n: { id: string; title: string; body: string; category: string; priority: string; pinned: boolean; expires_at: string | null }) => {
+    setEditId(n.id);
+    setEditForm({
+      title: n.title,
+      body: n.body,
+      category: n.category,
+      priority: n.priority,
+      pinned: n.pinned,
+      expires_at: n.expires_at ? n.expires_at.slice(0, 16) : "",
+    });
+    setEditOpen(true);
+  };
+
+  const saveEdit = async () => {
+    if (!editId) return;
+    if (!editForm.title || !editForm.body) return toast.error("Title and body required");
+    const payload: Record<string, unknown> = { ...editForm };
+    payload.expires_at = payload.expires_at || null;
+    const { error } = await supabase.from("notices").update(payload).eq("id", editId);
+    if (error) return toast.error(error.message);
+    toast.success("Notice updated");
+    setEditOpen(false);
+    setEditId(null);
     fetchNotices();
   };
 
   const archive = async (id: string) => {
     if (!confirm("Archive notice?")) return;
-    await supabase.rpc("soft_delete_notices", { _ids: [id] });
+    const { error } = await supabase.rpc("soft_delete_notices", { _ids: [id] });
+    if (error) { toast.error(error.message); return; }
+    toast.success("Notice archived");
     fetchNotices();
   };
 
@@ -177,14 +221,49 @@ const NoticeBoard = () => {
   const archiveSelected = async () => {
     if (selectedNotices.size === 0) return;
     if (!confirm(`Archive ${selectedNotices.size} selected notice${selectedNotices.size === 1 ? "" : "s"}?`)) return;
-    await supabase.rpc("soft_delete_notices", { _ids: Array.from(selectedNotices) });
+    const { error } = await supabase.rpc("soft_delete_notices", { _ids: Array.from(selectedNotices) });
+    if (error) { toast.error(error.message); return; }
+    toast.success("Notices archived");
     setSelectedNotices(new Set());
+    fetchNotices();
+  };
+
+  const toggleSelectedArchived = (id: string, checked: boolean) => {
+    setSelectedArchived((prev) => {
+      const next = new Set(prev);
+      if (checked) next.add(id); else next.delete(id);
+      return next;
+    });
+  };
+
+  const unarchive = async (id: string) => {
+    const { error } = await supabase.rpc("restore_notices", { _ids: [id] });
+    if (error) { toast.error(error.message); return; }
+    toast.success("Notice restored");
+    fetchArchived();
+    fetchNotices();
+  };
+
+  const unarchiveSelected = async () => {
+    if (selectedArchived.size === 0) return;
+    const { error } = await supabase.rpc("restore_notices", { _ids: Array.from(selectedArchived) });
+    if (error) { toast.error(error.message); return; }
+    toast.success("Notices restored");
+    setSelectedArchived(new Set());
+    fetchArchived();
     fetchNotices();
   };
 
   const togglePin = async (n: any) => {
     await supabase.from("notices").update({ pinned: !n.pinned }).eq("id", n.id);
     fetchNotices();
+  };
+
+  const toggleArchivedView = () => {
+    const next = !showArchived;
+    setShowArchived(next);
+    setPage(1);
+    if (next) fetchArchived();
   };
 
   return (
@@ -274,65 +353,148 @@ const NoticeBoard = () => {
         </CardContent>
       </Card>
 
-      {notices.length > 0 && (
+      <div className="flex items-center justify-between flex-wrap gap-2">
         <div className="flex items-center gap-2">
-          <Button
-            variant="outline"
-            size="sm"
-            disabled={selectedNotices.size === 0}
-            onClick={archiveSelected}
-          >
-            <Archive className="h-4 w-4 mr-1" /> Archive Selected{selectedNotices.size > 0 ? ` (${selectedNotices.size})` : ""}
-          </Button>
-          {selectedNotices.size > 0 && (
-            <Button variant="ghost" size="sm" onClick={() => setSelectedNotices(new Set())}>Clear selection</Button>
+          {!showArchived ? (
+            <>
+              <Button
+                variant="outline"
+                size="sm"
+                disabled={selectedNotices.size === 0}
+                onClick={archiveSelected}
+              >
+                <Archive className="h-4 w-4 mr-1" /> Archive Selected{selectedNotices.size > 0 ? ` (${selectedNotices.size})` : ""}
+              </Button>
+              {selectedNotices.size > 0 && (
+                <Button variant="ghost" size="sm" onClick={() => setSelectedNotices(new Set())}>Clear selection</Button>
+              )}
+            </>
+          ) : (
+            <>
+              <Button
+                variant="outline"
+                size="sm"
+                disabled={selectedArchived.size === 0}
+                onClick={unarchiveSelected}
+              >
+                <ArchiveRestore className="h-4 w-4 mr-1" /> Unarchive Selected{selectedArchived.size > 0 ? ` (${selectedArchived.size})` : ""}
+              </Button>
+              {selectedArchived.size > 0 && (
+                <Button variant="ghost" size="sm" onClick={() => setSelectedArchived(new Set())}>Clear selection</Button>
+              )}
+            </>
           )}
         </div>
-      )}
-
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-        {notices.length === 0 ? (
-          <Card className="md:col-span-2"><CardContent className="py-12 text-center text-muted-foreground"><Megaphone className="h-12 w-12 mx-auto mb-3 opacity-40" />No notices posted yet</CardContent></Card>
-        ) : notices.map(n => {
-          const pri = PRIORITIES.find(p => p.v === n.priority);
-          return (
-            <Card key={n.id} className={n.pinned ? "border-primary border-2" : ""}>
-              <CardHeader>
-                <div className="flex justify-between items-start gap-2">
-                  <div className="flex-1 flex items-start gap-2">
-                    <Checkbox
-                      className="mt-1"
-                      checked={selectedNotices.has(n.id)}
-                      onCheckedChange={(c) => toggleSelected(n.id, !!c)}
-                      aria-label="Select notice"
-                    />
-                    <div>
-                    <CardTitle className="text-lg flex items-center gap-2">
-                      {n.pinned && <Pin className="h-4 w-4 text-primary fill-primary" />}
-                      {n.title}
-                    </CardTitle>
-                    <CardDescription className="mt-1">
-                      <Badge variant="outline" className="mr-1">{n.category}</Badge>
-                      <Badge className={pri?.color}>{pri?.label}</Badge>
-                      <span className="ml-2 text-xs">{format(new Date(n.published_at), "MMM d, yyyy 'at' HH:mm")}</span>
-                    </CardDescription>
-                    </div>
-                  </div>
-                  <div className="flex gap-1">
-                    {canManage && (
-                      <Button size="icon" variant="ghost" onClick={()=>togglePin(n)}><Pin className={`h-4 w-4 ${n.pinned ? "fill-primary text-primary" : ""}`} /></Button>
-                    )}
-                    <Button size="icon" variant="ghost" onClick={()=>archive(n.id)} aria-label="Archive notice"><Archive className="h-4 w-4 text-muted-foreground" /></Button>
-                  </div>
-                </div>
-              </CardHeader>
-              <CardContent>
-                <p className="text-sm whitespace-pre-wrap">{n.body}</p>
-              </CardContent>
-            </Card>
-          );
-        })}
+        <Button variant="ghost" size="sm" onClick={toggleArchivedView}>
+          {showArchived ? "Back to Active Notices" : "View Archived Notices"}
+        </Button>
       </div>
+
+      {(() => {
+        const list = showArchived ? archivedNotices : notices;
+        const pageCount = Math.max(1, Math.ceil(list.length / PAGE_SIZE));
+        const currentPage = Math.min(page, pageCount);
+        const pageItems = list.slice((currentPage - 1) * PAGE_SIZE, currentPage * PAGE_SIZE);
+        return (
+          <>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              {list.length === 0 ? (
+                <Card className="md:col-span-2">
+                  <CardContent className="py-12 text-center text-muted-foreground">
+                    <Megaphone className="h-12 w-12 mx-auto mb-3 opacity-40" />
+                    {showArchived ? "No archived notices" : "No notices posted yet"}
+                  </CardContent>
+                </Card>
+              ) : pageItems.map(n => {
+                const pri = PRIORITIES.find(p => p.v === n.priority);
+                return (
+                  <Card key={n.id} className={n.pinned ? "border-primary border-2" : ""}>
+                    <CardHeader>
+                      <div className="flex justify-between items-start gap-2">
+                        <div className="flex-1 flex items-start gap-2">
+                          <Checkbox
+                            className="mt-1"
+                            checked={showArchived ? selectedArchived.has(n.id) : selectedNotices.has(n.id)}
+                            onCheckedChange={(c) => showArchived ? toggleSelectedArchived(n.id, !!c) : toggleSelected(n.id, !!c)}
+                            aria-label="Select notice"
+                          />
+                          <div>
+                            <CardTitle className="text-lg flex items-center gap-2">
+                              {n.pinned && <Pin className="h-4 w-4 text-primary fill-primary" />}
+                              {n.title}
+                            </CardTitle>
+                            <CardDescription className="mt-1">
+                              <Badge variant="outline" className="mr-1">{n.category}</Badge>
+                              <Badge className={pri?.color}>{pri?.label}</Badge>
+                              <span className="ml-2 text-xs">{format(new Date(n.published_at), "MMM d, yyyy 'at' HH:mm")}</span>
+                            </CardDescription>
+                          </div>
+                        </div>
+                        <div className="flex gap-1">
+                          {!showArchived && canManage && (
+                            <>
+                              <Button size="icon" variant="ghost" onClick={()=>togglePin(n)}><Pin className={`h-4 w-4 ${n.pinned ? "fill-primary text-primary" : ""}`} /></Button>
+                              <Button size="icon" variant="ghost" onClick={()=>openEdit(n)} aria-label="Edit notice"><Pencil className="h-4 w-4 text-muted-foreground" /></Button>
+                            </>
+                          )}
+                          {showArchived ? (
+                            <Button size="icon" variant="ghost" onClick={()=>unarchive(n.id)} aria-label="Unarchive notice"><ArchiveRestore className="h-4 w-4 text-muted-foreground" /></Button>
+                          ) : (
+                            <Button size="icon" variant="ghost" onClick={()=>archive(n.id)} aria-label="Archive notice"><Archive className="h-4 w-4 text-muted-foreground" /></Button>
+                          )}
+                        </div>
+                      </div>
+                    </CardHeader>
+                    <CardContent>
+                      <p className="text-sm whitespace-pre-wrap">{n.body}</p>
+                    </CardContent>
+                  </Card>
+                );
+              })}
+            </div>
+
+            {list.length > PAGE_SIZE && (
+              <div className="flex items-center justify-center gap-3">
+                <Button variant="outline" size="sm" disabled={currentPage <= 1} onClick={() => setPage(currentPage - 1)}>
+                  <ChevronLeft className="h-4 w-4 mr-1" /> Previous
+                </Button>
+                <span className="text-sm text-muted-foreground">Page {currentPage} of {pageCount}</span>
+                <Button variant="outline" size="sm" disabled={currentPage >= pageCount} onClick={() => setPage(currentPage + 1)}>
+                  Next <ChevronRight className="h-4 w-4 ml-1" />
+                </Button>
+              </div>
+            )}
+          </>
+        );
+      })()}
+
+      {/* Edit Notice Dialog (admin only) */}
+      <Dialog open={editOpen} onOpenChange={setEditOpen}>
+        <DialogContent>
+          <DialogHeader><DialogTitle>Edit Notice</DialogTitle></DialogHeader>
+          <div className="space-y-3">
+            <div><Label>Title</Label><Input value={editForm.title} onChange={(e)=>setEditForm({...editForm, title: e.target.value})} /></div>
+            <div><Label>Body</Label><Textarea rows={5} value={editForm.body} onChange={(e)=>setEditForm({...editForm, body: e.target.value})} /></div>
+            <div className="grid grid-cols-2 gap-3">
+              <div><Label>Category</Label>
+                <Select value={editForm.category} onValueChange={(v)=>setEditForm({...editForm, category: v})}>
+                  <SelectTrigger><SelectValue /></SelectTrigger>
+                  <SelectContent>{CATEGORIES.map(c => <SelectItem key={c} value={c}>{c}</SelectItem>)}</SelectContent>
+                </Select>
+              </div>
+              <div><Label>Priority</Label>
+                <Select value={editForm.priority} onValueChange={(v)=>setEditForm({...editForm, priority: v})}>
+                  <SelectTrigger><SelectValue /></SelectTrigger>
+                  <SelectContent>{PRIORITIES.map(p => <SelectItem key={p.v} value={p.v}>{p.label}</SelectItem>)}</SelectContent>
+                </Select>
+              </div>
+            </div>
+            <div className="flex items-center gap-2"><Switch checked={editForm.pinned} onCheckedChange={(v)=>setEditForm({...editForm, pinned: v})} /><Label>Pin to top</Label></div>
+            <div><Label>Expires (optional)</Label><Input type="datetime-local" value={editForm.expires_at} onChange={(e)=>setEditForm({...editForm, expires_at: e.target.value})} /></div>
+          </div>
+          <DialogFooter><Button onClick={saveEdit}>Save Changes</Button></DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 };

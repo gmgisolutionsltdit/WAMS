@@ -2849,6 +2849,10 @@ export type Database = {
         Args: { _ids: string[] }
         Returns: undefined
       }
+      restore_notices: {
+        Args: { _ids: string[] }
+        Returns: undefined
+      }
       manager_candidates: {
         Args: Record<PropertyKey, never>
         Returns: { id: string; full_name: string | null; email: string | null }[]
