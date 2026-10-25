@@ -166,7 +166,7 @@ const ReportsSummary = () => {
         // Net Hours, which is derived from it) show 0 for a day whose OT was
         // entirely manual.
         (() => {
-          let q = supabase.from("manual_time_requests").select("user_id, date, overtime_hours, updated_at").in("user_id", targetIds).eq("status", "approved");
+          let q = supabase.from("manual_time_requests").select("user_id, date, overtime_hours, created_at").in("user_id", targetIds).eq("status", "approved");
           if (effectiveRange.from) q = q.gte("date", effectiveRange.from);
           if (effectiveRange.to) q = q.lte("date", effectiveRange.to);
           return q;
@@ -320,12 +320,16 @@ const ReportsSummary = () => {
         const key = `${r.user_id}|${r.date}`;
         otPerDay.set(key, (otPerDay.get(key) || 0) + (Number(r.requested_hours) || 0));
       });
-      const manualOtLatest = new Map<string, { hours: number; updatedAt: string }>();
+      // created_at (immutable) rather than updated_at: archiving/unarchiving
+      // a request bumps its updated_at via the table's trigger, so an older
+      // correction that was archived/unarchived after a newer one's approval
+      // could otherwise look "more recently updated" and wrongly win here.
+      const manualOtLatest = new Map<string, { hours: number; createdAt: string }>();
       (manualOtRows || []).forEach((r) => {
         const key = `${r.user_id}|${r.date}`;
         const existing = manualOtLatest.get(key);
-        if (!existing || r.updated_at > existing.updatedAt) {
-          manualOtLatest.set(key, { hours: Number(r.overtime_hours) || 0, updatedAt: r.updated_at });
+        if (!existing || r.created_at > existing.createdAt) {
+          manualOtLatest.set(key, { hours: Number(r.overtime_hours) || 0, createdAt: r.created_at });
         }
       });
       manualOtLatest.forEach(({ hours }, key) => {
@@ -335,6 +339,7 @@ const ReportsSummary = () => {
       const otDaySets = new Map<string, Set<string>>();
       const otDaySetsMonthly = new Map<string, Set<string>>();
       otPerDay.forEach((hours, key) => {
+        if (hours <= 0) return; // a 0h approved entry (e.g. an unfilled override) isn't an OT day
         const [userId, date] = key.split("|");
         const s = byUser.get(userId);
         if (s) {
