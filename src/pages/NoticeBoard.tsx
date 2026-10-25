@@ -49,6 +49,7 @@ const NoticeBoard = () => {
   const [filterUser, setFilterUser] = useState("all");
   const [filterType, setFilterType] = useState("all");
   const [selectedNotices, setSelectedNotices] = useState<Set<string>>(new Set());
+  const [activityPage, setActivityPage] = useState(1);
 
   const fetchNotices = async () => {
     const { data } = await supabase.from("notices").select("*").eq("is_active", true).order("pinned", { ascending: false }).order("published_at", { ascending: false });
@@ -163,6 +164,17 @@ const NoticeBoard = () => {
     if (filterType !== "all" && r._kind !== filterType) return false;
     return true;
   });
+
+  const activityPageCount = Math.max(1, Math.ceil(filteredActivity.length / PAGE_SIZE));
+  const currentActivityPage = Math.min(activityPage, activityPageCount);
+  const pagedActivity = filteredActivity.slice((currentActivityPage - 1) * PAGE_SIZE, currentActivityPage * PAGE_SIZE);
+
+  const clearActivityFilters = () => {
+    setFilterDate("");
+    setFilterUser("all");
+    setFilterType("all");
+    setActivityPage(1);
+  };
 
   const create = async () => {
     if (!form.title || !form.body) return toast.error("Title and body required");
@@ -314,17 +326,17 @@ const NoticeBoard = () => {
             <Input
               type="date"
               value={filterDate}
-              onChange={(e) => setFilterDate(e.target.value)}
+              onChange={(e) => { setFilterDate(e.target.value); setActivityPage(1); }}
               className="w-auto"
             />
-            <Select value={filterUser} onValueChange={setFilterUser}>
+            <Select value={filterUser} onValueChange={(v) => { setFilterUser(v); setActivityPage(1); }}>
               <SelectTrigger className="w-44"><SelectValue placeholder="Employee" /></SelectTrigger>
               <SelectContent>
                 <SelectItem value="all">All Employees</SelectItem>
                 {employeeOptions.map((e) => <SelectItem key={e.id} value={e.id}>{e.name}</SelectItem>)}
               </SelectContent>
             </Select>
-            <Select value={filterType} onValueChange={setFilterType}>
+            <Select value={filterType} onValueChange={(v) => { setFilterType(v); setActivityPage(1); }}>
               <SelectTrigger className="w-40"><SelectValue placeholder="Type" /></SelectTrigger>
               <SelectContent>
                 <SelectItem value="all">All Types</SelectItem>
@@ -332,7 +344,7 @@ const NoticeBoard = () => {
               </SelectContent>
             </Select>
             {(filterDate || filterUser !== "all" || filterType !== "all") && (
-              <Button variant="ghost" size="sm" onClick={() => { setFilterDate(""); setFilterUser("all"); setFilterType("all"); }}>
+              <Button variant="ghost" size="sm" onClick={clearActivityFilters}>
                 Clear filters
               </Button>
             )}
@@ -341,15 +353,30 @@ const NoticeBoard = () => {
             <p className="text-sm text-muted-foreground text-center py-6">
               {activity.length === 0 ? "No recent activity" : "No activity matches these filters"}
             </p>
-          ) : filteredActivity.map((r) => (
-            <div key={`${r._kind}-${r.id}`} className="flex items-center justify-between gap-3 rounded-lg border p-3 text-sm">
-              <span>{activityLine(r)}</span>
-              <div className="flex items-center gap-2 shrink-0">
-                <Badge variant="secondary">{TYPE_LABELS[r._kind]}</Badge>
-                <Badge variant="outline" className="capitalize">{r.status}</Badge>
-              </div>
-            </div>
-          ))}
+          ) : (
+            <>
+              {pagedActivity.map((r) => (
+                <div key={`${r._kind}-${r.id}`} className="flex items-center justify-between gap-3 rounded-lg border p-3 text-sm">
+                  <span>{activityLine(r)}</span>
+                  <div className="flex items-center gap-2 shrink-0">
+                    <Badge variant="secondary">{TYPE_LABELS[r._kind]}</Badge>
+                    <Badge variant="outline" className="capitalize">{r.status}</Badge>
+                  </div>
+                </div>
+              ))}
+              {filteredActivity.length > PAGE_SIZE && (
+                <div className="flex items-center justify-center gap-3 pt-2">
+                  <Button variant="outline" size="sm" disabled={currentActivityPage <= 1} onClick={() => setActivityPage(currentActivityPage - 1)}>
+                    <ChevronLeft className="h-4 w-4 mr-1" /> Previous
+                  </Button>
+                  <span className="text-sm text-muted-foreground">Page {currentActivityPage} of {activityPageCount}</span>
+                  <Button variant="outline" size="sm" disabled={currentActivityPage >= activityPageCount} onClick={() => setActivityPage(currentActivityPage + 1)}>
+                    Next <ChevronRight className="h-4 w-4 ml-1" />
+                  </Button>
+                </div>
+              )}
+            </>
+          )}
         </CardContent>
       </Card>
 
