@@ -93,7 +93,9 @@ const Attendance = () => {
       // repeated test submissions — only the most recently decided one is
       // authoritative; summing them double-counts.
       (manualOtRows || []).forEach((r: { date: string; overtime_hours: number | null; updated_at: string }) => {
-        if (Number(r.overtime_hours) > 0) otMap[r.date] = Number(r.overtime_hours);
+        // Always overwrite, even with 0 — a later correction that zeroes out
+        // OT must replace an earlier positive value, not be skipped by it.
+        otMap[r.date] = Number(r.overtime_hours) || 0;
       });
       setApprovedOTByDate(otMap);
       const leaveMap = new Map<string, string>();
