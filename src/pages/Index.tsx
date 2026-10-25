@@ -23,7 +23,6 @@ import FaceCheckIn from "@/components/FaceCheckIn";
 import { min48hDateISO, isWithin48h, RETRO_LOCK_MESSAGE } from "@/lib/dateRules";
 import { fmtHMS } from "@/lib/time";
 import { AttendancePunchCard } from "@/components/hrms/AttendancePunchCard";
-import { BiometricLogFeed } from "@/components/hrms/BiometricLogFeed";
 import ManualTimeEntryDialog from "@/components/ManualTimeEntryDialog";
 import { DEFAULT_GRACE_MINUTES, DEFAULT_OFFICE_END, DEFAULT_OFFICE_START, evaluateArrival, humanMinutes, officeStart } from "@/lib/officeTime";
 import { computeDailyTotals, unpaidBreakMinutes, weekendDaysFor, type WorkSchedule } from "@/lib/workSchedule";
@@ -402,10 +401,7 @@ const Dashboard = () => {
         <SecurityControlsPanel faceRecognition={faceRequired} onToggleFace={setFaceRequired} />
       </div>
 
-      <div className="grid gap-4 lg:grid-cols-2">
-        <AttendancePunchCard />
-        <BiometricLogFeed />
-      </div>
+      <AttendancePunchCard />
 
 
       {/* Face capture dialog */}
