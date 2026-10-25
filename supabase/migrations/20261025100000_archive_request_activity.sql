@@ -16,13 +16,19 @@ ALTER TABLE public.overtime_requests ADD COLUMN IF NOT EXISTS archived boolean N
 --
 -- RLS can't restrict which columns an UPDATE touches, and the frontend is
 -- not a trust boundary — a user could otherwise call supabase.from(...).update
--- directly and self-approve their own request by sending {status: 'approved'}
+-- directly and self-approve a *decided* request by sending {status: 'approved'}
 -- alongside {archived: true}. The trigger below closes that off: when the
--- actor is the row's own owner and not someone who could approve it (i.e.
--- not an admin/manager acting on themselves either — same "not their own
--- approver" rule used elsewhere in this schema), every column except
--- `archived` (and the auto-maintained `updated_at`) must stay unchanged, or
--- the update is rejected outright.
+-- actor is the row's own owner, not someone who could approve it (i.e. not
+-- an admin/manager acting on themselves either — same "not their own
+-- approver" rule used elsewhere in this schema), and the row is no longer
+-- pending, every column except `archived` (and the auto-maintained
+-- `updated_at`) must stay unchanged, or the update is rejected outright.
+--
+-- A still-pending row is deliberately exempted: the pre-existing
+-- "Users update own pending X" policies already let an owner update their
+-- own pending row more broadly (e.g. LeaveManagement.cancel sets
+-- status: 'cancelled' on a pending request) — that's unchanged, legitimate
+-- behavior this trigger must not break.
 CREATE OR REPLACE FUNCTION public.enforce_owner_archive_only()
 RETURNS trigger
 LANGUAGE plpgsql
@@ -33,7 +39,7 @@ DECLARE
   old_j jsonb := to_jsonb(OLD) - 'archived' - 'updated_at';
   new_j jsonb := to_jsonb(NEW) - 'archived' - 'updated_at';
 BEGIN
-  IF auth.uid() = OLD.user_id AND NOT public.can_approve(auth.uid(), OLD.user_id) THEN
+  IF auth.uid() = OLD.user_id AND NOT public.can_approve(auth.uid(), OLD.user_id) AND OLD.status <> 'pending' THEN
     IF old_j <> new_j THEN
       RAISE EXCEPTION 'Only the archived flag can be changed by the request owner';
     END IF;
