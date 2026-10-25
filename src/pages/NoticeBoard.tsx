@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -53,6 +53,13 @@ const NoticeBoard = () => {
   const [activityPage, setActivityPage] = useState(1);
   const [selectedActivity, setSelectedActivity] = useState<Set<string>>(new Set());
   const [showArchivedActivity, setShowArchivedActivity] = useState(false);
+  // fetchActivity is called from 4 independent realtime subscriptions (one per
+  // request table). Archiving several rows across tables at once fires several
+  // of those almost simultaneously, and their fetches can resolve out of
+  // order — without this guard, an older, slower response could land after a
+  // newer one and clobber it with stale (pre-archive) data, making an entry
+  // that was just archived flicker back into the active list, or vice versa.
+  const activityFetchSeq = useRef(0);
 
   const fetchNotices = async () => {
     const { data } = await supabase.from("notices").select("*").eq("is_active", true).order("pinned", { ascending: false }).order("published_at", { ascending: false });
@@ -72,6 +79,7 @@ const NoticeBoard = () => {
    * manager's own request only surfaces to admin.
    */
   const fetchActivity = async () => {
+    const seq = ++activityFetchSeq.current;
     const [{ data: leaveReqs }, { data: lateReqs }, { data: manualReqs }, { data: otReqs }, { data: leaveTypes }] = await Promise.all([
       supabase.from("leave_requests").select("*").order("updated_at", { ascending: false }).limit(50),
       supabase.from("late_time_requests").select("*").order("updated_at", { ascending: false }).limit(50),
@@ -79,6 +87,11 @@ const NoticeBoard = () => {
       supabase.from("overtime_requests").select("*").order("updated_at", { ascending: false }).limit(50),
       supabase.from("leave_types").select("id, name"),
     ]);
+    // A newer fetchActivity() call has already started (and possibly finished)
+    // since this one began — discard this now-stale response instead of
+    // letting it overwrite more current state.
+    if (seq !== activityFetchSeq.current) return;
+
     const ltNames: Record<string, string> = {};
     (leaveTypes || []).forEach((lt: { id: string; name: string }) => { ltNames[lt.id] = lt.name; });
     setLeaveTypeNames(ltNames);
@@ -104,6 +117,7 @@ const NoticeBoard = () => {
     // query above never resolves their manager's/admin's name for their own
     // requests — this RPC is scoped server-side to just those deciders.
     const { data: deciderNames } = await supabase.rpc("my_request_decider_names");
+    if (seq !== activityFetchSeq.current) return;
     (deciderNames || []).forEach((d) => { map[d.user_id] = d.full_name || "Unknown"; });
     setNamesByUser(map);
   };
@@ -176,6 +190,11 @@ const NoticeBoard = () => {
     if (error) { toast.error(error.message); return; }
     if (!data?.length) { toast.error(`You're not allowed to ${archived ? "archive" : "unarchive"} this entry.`); return; }
     toast.success(`Entry ${archived ? "archived" : "unarchived"}`);
+    // Apply locally right away — the realtime-triggered fetchActivity() below
+    // still runs to reconcile with the server, but the row shouldn't wait on
+    // a network round trip (or risk a slower, stale fetch briefly undoing
+    // this) to move between the active and archived lists.
+    setActivity((prev) => prev.map((row) => (row._kind === r._kind && row.id === r.id ? { ...row, archived } : row)));
     fetchActivity();
   };
 
@@ -201,6 +220,7 @@ const NoticeBoard = () => {
     const failed = results.find((res) => res.error);
     if (failed?.error) { toast.error(failed.error.message); return; }
     toast.success(`Entries ${archived ? "archived" : "unarchived"}`);
+    setActivity((prev) => prev.map((row) => (selectedActivity.has(activityKey(row)) ? { ...row, archived } : row)));
     setSelectedActivity(new Set());
     fetchActivity();
   };
