@@ -509,6 +509,11 @@ const NoticeBoard = () => {
         </CardContent>
       </Card>
 
+      {/* Hidden while browsing Requests Activity's own archived view so the page
+          shows only that archive, not this separate, unrelated Notices archive
+          at the same time. */}
+      {!showArchivedActivity && (
+      <>
       <div className="flex items-center justify-between flex-wrap gap-2">
         <div className="flex items-center gap-2">
           {!showArchived ? (
@@ -623,6 +628,8 @@ const NoticeBoard = () => {
           </>
         );
       })()}
+      </>
+      )}
 
       {/* Edit Notice Dialog (admin only) */}
       <Dialog open={editOpen} onOpenChange={setEditOpen}>
