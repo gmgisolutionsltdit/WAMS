@@ -129,18 +129,16 @@ const NoticeBoard = () => {
   useRealtimeSubscription("overtime_requests", fetchActivity, "notice-board-ot");
 
   /**
-   * Own request (viewer === requester) shows *who decided it* — the
-   * decider's actual name. Viewing someone else's request (a
-   * manager/admin looking at their team) shows whose request it is
-   * instead — the "by ..." decider suffix is dropped since it's not
-   * useful there (you already know who you or your peers are).
+   * Every decided row shows *who decided it* — admin, manager, and the
+   * requester alike (my_request_decider_names() resolves the decider's
+   * name for anyone who can see the row: the requester themselves, or
+   * whoever can approve it).
    */
   const activityLine = (r: any) => {
     const who = namesByUser[r.user_id] || "Someone";
-    const isOwn = !!user && r.user_id === user.id;
     const deciderId = r.approver_id || r.approved_by;
     const deciderName = deciderId ? namesByUser[deciderId] : undefined;
-    const decidedSuffix = isOwn && deciderName ? ` by ${deciderName}` : "";
+    const decidedSuffix = deciderName ? ` by ${deciderName}` : "";
     if (r._kind === "leave") {
       const typeName = leaveTypeNames[r.leave_type_id] || "leave";
       const range = `${r.start_date} → ${r.end_date}`;
