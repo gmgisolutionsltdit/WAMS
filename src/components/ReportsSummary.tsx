@@ -143,7 +143,7 @@ const ReportsSummary = () => {
         return;
       }
 
-      const [{ data: scheduleRows }, { data: attRows }, { data: otRows }, { data: roleRows }, { data: holidayRows }, { data: leaveRows }] = await Promise.all([
+      const [{ data: scheduleRows }, { data: attRows }, { data: otRows }, { data: manualOtRows }, { data: roleRows }, { data: holidayRows }, { data: leaveRows }] = await Promise.all([
         supabase.from("profiles").select("id, full_name, email, standard_daily_hours, unpaid_break_minutes, office_start_time, late_grace_minutes, working_days, company_wing").in("id", targetIds),
         (() => {
           let q = supabase.from("attendance_logs")
@@ -155,6 +155,18 @@ const ReportsSummary = () => {
         })(),
         (() => {
           let q = supabase.from("overtime_requests").select("user_id, date, requested_hours").in("user_id", targetIds).eq("status", "approved");
+          if (effectiveRange.from) q = q.gte("date", effectiveRange.from);
+          if (effectiveRange.to) q = q.lte("date", effectiveRange.to);
+          return q;
+        })(),
+        // A manual time entry is approved straight through Pending Approvals
+        // (there's no separate OT request for it) — its overtime_hours is
+        // part of the day's Approved Overtime too, same as Attendance.tsx's
+        // own "Approved OT" column. Missing this made Approved Overtime (and
+        // Net Hours, which is derived from it) show 0 for a day whose OT was
+        // entirely manual.
+        (() => {
+          let q = supabase.from("manual_time_requests").select("user_id, date, overtime_hours, updated_at").in("user_id", targetIds).eq("status", "approved");
           if (effectiveRange.from) q = q.gte("date", effectiveRange.from);
           if (effectiveRange.to) q = q.lte("date", effectiveRange.to);
           return q;
@@ -213,6 +225,7 @@ const ReportsSummary = () => {
           : Array.from(new Set([
             ...(attRows || []).map((r) => r.date.slice(0, 7)),
             ...(otRows || []).map((r) => r.date.slice(0, 7)),
+            ...(manualOtRows || []).map((r) => r.date.slice(0, 7)),
           ])).sort())
         : [];
       const byUserMonth = new Map<string, MonthlySummary>();
@@ -297,23 +310,46 @@ const ReportsSummary = () => {
         }
       });
 
+      // Combine approved OT per user/date the same way Attendance.tsx does:
+      // an OT request's hours plus the latest approved manual-time
+      // correction's overtime_hours for that date (manual entries are
+      // approved through Pending Approvals directly, with no separate OT
+      // request row of their own).
+      const otPerDay = new Map<string, number>(); // key: `${user_id}|${date}`
+      (otRows || []).forEach((r) => {
+        const key = `${r.user_id}|${r.date}`;
+        otPerDay.set(key, (otPerDay.get(key) || 0) + (Number(r.requested_hours) || 0));
+      });
+      const manualOtLatest = new Map<string, { hours: number; updatedAt: string }>();
+      (manualOtRows || []).forEach((r) => {
+        const key = `${r.user_id}|${r.date}`;
+        const existing = manualOtLatest.get(key);
+        if (!existing || r.updated_at > existing.updatedAt) {
+          manualOtLatest.set(key, { hours: Number(r.overtime_hours) || 0, updatedAt: r.updated_at });
+        }
+      });
+      manualOtLatest.forEach(({ hours }, key) => {
+        otPerDay.set(key, (otPerDay.get(key) || 0) + hours);
+      });
+
       const otDaySets = new Map<string, Set<string>>();
       const otDaySetsMonthly = new Map<string, Set<string>>();
-      (otRows || []).forEach((r) => {
-        const s = byUser.get(r.user_id);
+      otPerDay.forEach((hours, key) => {
+        const [userId, date] = key.split("|");
+        const s = byUser.get(userId);
         if (s) {
-          s.otHoursTotal += Number(r.requested_hours) || 0;
-          const set = otDaySets.get(r.user_id) || new Set<string>();
-          set.add(r.date);
-          otDaySets.set(r.user_id, set);
+          s.otHoursTotal += hours;
+          const set = otDaySets.get(userId) || new Set<string>();
+          set.add(date);
+          otDaySets.set(userId, set);
         }
-        const key = `${r.user_id}|${r.date.slice(0, 7)}`;
-        const sm = byUserMonth.get(key);
+        const mkey = `${userId}|${date.slice(0, 7)}`;
+        const sm = byUserMonth.get(mkey);
         if (sm) {
-          sm.otHoursTotal += Number(r.requested_hours) || 0;
-          const setm = otDaySetsMonthly.get(key) || new Set<string>();
-          setm.add(r.date);
-          otDaySetsMonthly.set(key, setm);
+          sm.otHoursTotal += hours;
+          const setm = otDaySetsMonthly.get(mkey) || new Set<string>();
+          setm.add(date);
+          otDaySetsMonthly.set(mkey, setm);
         }
       });
       otDaySets.forEach((set, id) => {
