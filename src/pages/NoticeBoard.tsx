@@ -10,7 +10,7 @@ import { Badge } from "@/components/ui/badge";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogFooter } from "@/components/ui/dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
-import { Megaphone, Pin, Plus, Archive, ArchiveRestore, Pencil, CalendarClock, ChevronLeft, ChevronRight, Trash2 } from "lucide-react";
+import { Megaphone, Pin, Plus, Archive, ArchiveRestore, Pencil, CalendarClock, ChevronLeft, ChevronRight } from "lucide-react";
 import { Checkbox } from "@/components/ui/checkbox";
 import { toast } from "sonner";
 import { format } from "date-fns";
@@ -51,6 +51,8 @@ const NoticeBoard = () => {
   const [filterType, setFilterType] = useState("all");
   const [selectedNotices, setSelectedNotices] = useState<Set<string>>(new Set());
   const [activityPage, setActivityPage] = useState(1);
+  const [selectedActivity, setSelectedActivity] = useState<Set<string>>(new Set());
+  const [showArchivedActivity, setShowArchivedActivity] = useState(false);
 
   const fetchNotices = async () => {
     const { data } = await supabase.from("notices").select("*").eq("is_active", true).order("pinned", { ascending: false }).order("published_at", { ascending: false });
@@ -158,18 +160,55 @@ const NoticeBoard = () => {
     leave: "leave_requests", late: "late_time_requests", manual: "manual_time_requests", ot: "overtime_requests",
   };
 
-  /**
-   * Deletes exactly this one request row (eq("id", ...)) — it can never
-   * touch any other employee's requests or notices. RLS (can_approve() OR
-   * admin) scopes who the delete is even allowed to go through for.
-   */
-  const deleteActivity = async (r: { id: string; _kind: string }) => {
-    if (!confirm(`Delete this ${TYPE_LABELS[r._kind]} entry? This cannot be undone.`)) return;
-    const { data, error } = await supabase.from(ACTIVITY_TABLE[r._kind]).delete().eq("id", r.id).select("id");
+  /** Who can archive/unarchive this row: admin (any), manager (anyone they
+   * approve, never their own), or the requester archiving their own row —
+   * RLS (can_approve() OR owner, via the owner-archive-only trigger) is what
+   * actually enforces this, this just decides whether to show the control. */
+  const canActOnActivity = (r: { user_id: string }) =>
+    canManage || (role === "manager" && canDeleteActivity && r.user_id !== user?.id) || r.user_id === user?.id;
+
+  const activityKey = (r: { _kind: string; id: string }) => `${r._kind}:${r.id}`;
+
+  /** Archives/unarchives exactly this one request row (eq("id", ...)) — it
+   * can never touch any other employee's requests or notices. */
+  const setActivityArchived = async (r: { id: string; _kind: string }, archived: boolean) => {
+    const { data, error } = await supabase.from(ACTIVITY_TABLE[r._kind]).update({ archived }).eq("id", r.id).select("id");
     if (error) { toast.error(error.message); return; }
-    if (!data?.length) { toast.error("You're not allowed to delete this entry."); return; }
-    toast.success("Entry deleted");
+    if (!data?.length) { toast.error(`You're not allowed to ${archived ? "archive" : "unarchive"} this entry.`); return; }
+    toast.success(`Entry ${archived ? "archived" : "unarchived"}`);
     fetchActivity();
+  };
+
+  const toggleSelectedActivity = (key: string, checked: boolean) => {
+    setSelectedActivity((prev) => {
+      const next = new Set(prev);
+      if (checked) next.add(key); else next.delete(key);
+      return next;
+    });
+  };
+
+  const archiveSelectedActivity = async (archived: boolean) => {
+    if (selectedActivity.size === 0) return;
+    if (!confirm(`${archived ? "Archive" : "Unarchive"} ${selectedActivity.size} selected ${selectedActivity.size === 1 ? "entry" : "entries"}?`)) return;
+    const byKind: Record<string, string[]> = {};
+    selectedActivity.forEach((key) => {
+      const [kind, id] = key.split(":");
+      (byKind[kind] ??= []).push(id);
+    });
+    const results = await Promise.all(
+      Object.entries(byKind).map(([kind, ids]) => supabase.from(ACTIVITY_TABLE[kind]).update({ archived }).in("id", ids))
+    );
+    const failed = results.find((res) => res.error);
+    if (failed?.error) { toast.error(failed.error.message); return; }
+    toast.success(`Entries ${archived ? "archived" : "unarchived"}`);
+    setSelectedActivity(new Set());
+    fetchActivity();
+  };
+
+  const toggleArchivedActivityView = () => {
+    setShowArchivedActivity((v) => !v);
+    setSelectedActivity(new Set());
+    setActivityPage(1);
   };
 
   const employeeOptions = Array.from(new Set(activity.map((r) => r.user_id)))
@@ -177,6 +216,7 @@ const NoticeBoard = () => {
     .sort((a, b) => a.name.localeCompare(b.name));
 
   const filteredActivity = activity.filter((r) => {
+    if (!!r.archived !== showArchivedActivity) return false;
     if (filterDate && activityDate(r) !== filterDate) return false;
     if (filterUser !== "all" && r.user_id !== filterUser) return false;
     if (filterType !== "all" && r._kind !== filterType) return false;
@@ -367,28 +407,68 @@ const NoticeBoard = () => {
               </Button>
             )}
           </div>
+
+          <div className="flex items-center justify-between flex-wrap gap-2">
+            <div className="flex items-center gap-2">
+              {!showArchivedActivity ? (
+                <>
+                  <Button variant="outline" size="sm" disabled={selectedActivity.size === 0} onClick={() => archiveSelectedActivity(true)}>
+                    <Archive className="h-4 w-4 mr-1" /> Archive Selected{selectedActivity.size > 0 ? ` (${selectedActivity.size})` : ""}
+                  </Button>
+                  {selectedActivity.size > 0 && (
+                    <Button variant="ghost" size="sm" onClick={() => setSelectedActivity(new Set())}>Clear selection</Button>
+                  )}
+                </>
+              ) : (
+                <>
+                  <Button variant="outline" size="sm" disabled={selectedActivity.size === 0} onClick={() => archiveSelectedActivity(false)}>
+                    <ArchiveRestore className="h-4 w-4 mr-1" /> Unarchive Selected{selectedActivity.size > 0 ? ` (${selectedActivity.size})` : ""}
+                  </Button>
+                  {selectedActivity.size > 0 && (
+                    <Button variant="ghost" size="sm" onClick={() => setSelectedActivity(new Set())}>Clear selection</Button>
+                  )}
+                </>
+              )}
+            </div>
+            <Button variant="ghost" size="sm" onClick={toggleArchivedActivityView}>
+              {showArchivedActivity ? "Back to Active Activity" : "View Archived Activity"}
+            </Button>
+          </div>
+
           {filteredActivity.length === 0 ? (
             <p className="text-sm text-muted-foreground text-center py-6">
-              {activity.length === 0 ? "No recent activity" : "No activity matches these filters"}
+              {showArchivedActivity ? "No archived activity" : (activity.length === 0 ? "No recent activity" : "No activity matches these filters")}
             </p>
           ) : (
             <>
               {pagedActivity.map((r) => (
                 <div key={`${r._kind}-${r.id}`} className="flex items-center justify-between gap-3 rounded-lg border p-3 text-sm">
-                  <span>{activityLine(r)}</span>
+                  <div className="flex items-center gap-3 min-w-0">
+                    {canActOnActivity(r) && (
+                      <Checkbox
+                        checked={selectedActivity.has(activityKey(r))}
+                        onCheckedChange={(c) => toggleSelectedActivity(activityKey(r), !!c)}
+                        aria-label="Select entry"
+                      />
+                    )}
+                    <span className="truncate">{activityLine(r)}</span>
+                  </div>
                   <div className="flex items-center gap-2 shrink-0">
                     <Badge variant="secondary">{TYPE_LABELS[r._kind]}</Badge>
                     <Badge variant="outline" className="capitalize">{r.status}</Badge>
                     {/* Admin: every row. Manager: rows they approve, never their own (not their own approver).
-                        Anyone else: any of their own manual/late/OT entries, pending or decided (RLS lets a
-                        requester delete their own request regardless of status — leave has no self-delete
-                        policy at all, only approver/admin). */}
-                    {(canManage
-                      || (role === "manager" && canDeleteActivity && r.user_id !== user?.id)
-                      || (r.user_id === user?.id && r._kind !== "leave")) && (
-                      <Button size="icon" variant="ghost" className="h-7 w-7" onClick={() => deleteActivity(r)} aria-label="Delete entry">
-                        <Trash2 className="h-3.5 w-3.5 text-destructive" />
-                      </Button>
+                        Anyone else: any of their own entries, pending or decided, including leave — archiving
+                        isn't destructive the way delete was, so it's not excluded here. */}
+                    {canActOnActivity(r) && (
+                      showArchivedActivity ? (
+                        <Button size="icon" variant="ghost" className="h-7 w-7" onClick={() => setActivityArchived(r, false)} aria-label="Unarchive entry">
+                          <ArchiveRestore className="h-3.5 w-3.5 text-muted-foreground" />
+                        </Button>
+                      ) : (
+                        <Button size="icon" variant="ghost" className="h-7 w-7" onClick={() => setActivityArchived(r, true)} aria-label="Archive entry">
+                          <Archive className="h-3.5 w-3.5 text-muted-foreground" />
+                        </Button>
+                      )
                     )}
                   </div>
                 </div>
