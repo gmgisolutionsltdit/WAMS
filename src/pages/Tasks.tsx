@@ -174,7 +174,8 @@ const Tasks = () => {
         <h2 className="text-2xl font-semibold flex items-center gap-2">
           <FolderKanban className="h-6 w-6" /> Tasks
         </h2>
-        <div className="relative w-full max-w-xs">
+        <div className="flex items-center gap-2 w-full max-w-md">
+        <div className="relative flex-1">
           <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground pointer-events-none" />
           <Input
             ref={searchInputRef}
@@ -216,6 +217,8 @@ const Tasks = () => {
               )}
             </div>
           )}
+        </div>
+          <Button onClick={() => setOpen(true)}><Plus className="mr-1 h-4 w-4" /> Create</Button>
         </div>
       </div>
 
