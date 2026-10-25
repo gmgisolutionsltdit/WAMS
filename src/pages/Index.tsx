@@ -18,8 +18,6 @@ import DailyWorkLogDialog from "@/components/DailyWorkLogDialog";
 import DailyWorkSummary from "@/components/DailyWorkSummary";
 import WorkCalendar from "@/components/WorkCalendar";
 import NoticeBoardWidget from "@/components/NoticeBoardWidget";
-import SecurityControlsPanel from "@/components/SecurityControlsPanel";
-import FaceCheckIn from "@/components/FaceCheckIn";
 import { min48hDateISO, isWithin48h, RETRO_LOCK_MESSAGE } from "@/lib/dateRules";
 import { fmtHMS } from "@/lib/time";
 import { AttendancePunchCard } from "@/components/hrms/AttendancePunchCard";
@@ -54,8 +52,6 @@ const Dashboard = () => {
 
   const [workLogOpen, setWorkLogOpen] = useState(false);
   const [pendingClockOut, setPendingClockOut] = useState<{ clockOutTime: string; logId: string; totalHours: number; overtimeHours: number; breakMins: number } | null>(null);
-  const [faceRequired, setFaceRequired] = useState(false);
-  const [faceDialogOpen, setFaceDialogOpen] = useState(false);
   const [workFromOpen, setWorkFromOpen] = useState(false);
   const [workFrom, setWorkFrom] = useState<string[]>([DEFAULT_WORK_FROM]);
   const [enrolledFace, setEnrolledFace] = useState<number[] | null>(null);
@@ -197,7 +193,6 @@ const Dashboard = () => {
   const confirmWorkFrom = async () => {
     if (!workFrom.length) { toast.error("Select at least one Work From option"); return; }
     setWorkFromOpen(false);
-    if (faceRequired) { setFaceDialogOpen(true); return; }
     await performClockIn(undefined, workFrom);
   };
 
@@ -395,28 +390,9 @@ const Dashboard = () => {
         <div className="pointer-events-none absolute -left-10 -bottom-10 h-48 w-48 rounded-full bg-white/10 blur-3xl" />
       </div>
 
-      {/* Notice Board + Security Controls */}
-      <div className="grid gap-4 lg:grid-cols-3">
-        <div className="lg:col-span-2"><NoticeBoardWidget /></div>
-        <SecurityControlsPanel faceRecognition={faceRequired} onToggleFace={setFaceRequired} />
-      </div>
+      <NoticeBoardWidget />
 
       <AttendancePunchCard />
-
-
-      {/* Face capture dialog */}
-      <Dialog open={faceDialogOpen} onOpenChange={setFaceDialogOpen}>
-        <DialogContent>
-          <DialogHeader><DialogTitle>Face Verification</DialogTitle></DialogHeader>
-          <p className="text-sm text-muted-foreground mb-2">
-            {enrolledFace ? "Look at the camera to verify your identity." : "First-time enrollment: your face descriptor will be stored securely for future check-ins."}
-          </p>
-          <FaceCheckIn
-            enrolledDescriptor={enrolledFace}
-            onVerified={(desc) => { setFaceDialogOpen(false); performClockIn(desc, workFrom); }}
-          />
-        </DialogContent>
-      </Dialog>
 
       {/* Work From selection, shown before clocking in */}
       <Dialog open={workFromOpen} onOpenChange={setWorkFromOpen}>
