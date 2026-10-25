@@ -81,9 +81,9 @@ const Attendance = () => {
         .filter((h: { wing: string | null }) => h.wing === null || h.wing === wing)
         .forEach((h: { holiday_date: string; name: string }) => map.set(h.holiday_date, h.name));
       setHolidays(map);
-      const otMap: Record<string, number> = {};
+      const otRequestMap: Record<string, number> = {};
       (otRows || []).forEach((r: { date: string; requested_hours: number | null }) => {
-        otMap[r.date] = (otMap[r.date] || 0) + (Number(r.requested_hours) || 0);
+        otRequestMap[r.date] = (otRequestMap[r.date] || 0) + (Number(r.requested_hours) || 0);
       });
       // A manual time entry is approved straight through Pending Approvals
       // (there's no separate OT request for it) — its overtime_hours is the
@@ -91,11 +91,18 @@ const Attendance = () => {
       // (not a sum over attendance_logs): if a date has more than one approved
       // manual entry — e.g. a correction superseding an earlier one, or just
       // repeated test submissions — only the most recently decided one is
-      // authoritative; summing them double-counts.
+      // authoritative; summing them double-counts. Kept in its own map (not
+      // merged into otRequestMap) so it can only overwrite other manual
+      // entries for that date, never a separate OT request's own total.
+      const manualOtMap: Record<string, number> = {};
       (manualOtRows || []).forEach((r: { date: string; overtime_hours: number | null; updated_at: string }) => {
         // Always overwrite, even with 0 — a later correction that zeroes out
         // OT must replace an earlier positive value, not be skipped by it.
-        otMap[r.date] = Number(r.overtime_hours) || 0;
+        manualOtMap[r.date] = Number(r.overtime_hours) || 0;
+      });
+      const otMap: Record<string, number> = { ...otRequestMap };
+      Object.entries(manualOtMap).forEach(([date, hours]) => {
+        otMap[date] = (otMap[date] || 0) + hours;
       });
       setApprovedOTByDate(otMap);
       const leaveMap = new Map<string, string>();
