@@ -7,11 +7,9 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import {
-  Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogFooter, DialogDescription,
-} from "@/components/ui/dialog";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { toast } from "sonner";
-import { Plus, FolderKanban, Search, Star, Clock } from "lucide-react";
+import { Plus, FolderKanban, Search, Star, Clock, LayoutGrid } from "lucide-react";
 import { useRealtimeSubscription } from "@/hooks/useRealtimeSubscription";
 import { colorForBoard, getStarredBoardIds, toggleStarredBoard, getRecentBoardIds } from "@/lib/boardPrefs";
 import { cn } from "@/lib/utils";
@@ -52,7 +50,8 @@ const Tasks = () => {
   const { user } = useAuth();
   const navigate = useNavigate();
   const [boards, setBoards] = useState<Board[]>([]);
-  const [open, setOpen] = useState(false);
+  const [createTrigger, setCreateTrigger] = useState<"header" | "tile" | null>(null);
+  const [createStep, setCreateStep] = useState<"menu" | "form">("menu");
   const [form, setForm] = useState({ key: "", name: "", description: "", wing: "GMGI" });
 
   const [starredIds, setStarredIds] = useState<string[]>(() => getStarredBoardIds());
@@ -136,36 +135,44 @@ const Tasks = () => {
     }
 
     toast.success("Board created");
-    setOpen(false);
+    setCreateTrigger(null);
+    setCreateStep("menu");
     setForm({ key: "", name: "", description: "", wing: "GMGI" });
     fetchBoards();
   };
 
-  const createDialog = (
-    <Dialog open={open} onOpenChange={setOpen}>
-      <DialogContent>
-        <DialogHeader>
-          <DialogTitle>Create Task Board</DialogTitle>
-          <DialogDescription>Task boards are work spaces with kanban columns and tasks.</DialogDescription>
-        </DialogHeader>
-        <div className="space-y-3">
-          <div><Label>Board Key (e.g. ENG)</Label><Input value={form.key} onChange={(e) => setForm((f) => ({ ...f, key: e.target.value }))} maxLength={10} /></div>
-          <div><Label>Name</Label><Input value={form.name} onChange={(e) => setForm((f) => ({ ...f, name: e.target.value }))} /></div>
-          <div><Label>Description</Label><Textarea value={form.description} onChange={(e) => setForm((f) => ({ ...f, description: e.target.value }))} /></div>
-          <div>
-            <Label>Wing</Label>
-            <Select value={form.wing} onValueChange={(v) => setForm((f) => ({ ...f, wing: v }))}>
-              <SelectTrigger><SelectValue /></SelectTrigger>
-              <SelectContent>
-                <SelectItem value="GMGI">GMGI</SelectItem>
-                <SelectItem value="MORU">MORU</SelectItem>
-              </SelectContent>
-            </Select>
-          </div>
+  const handleCreatePopoverChange = (trigger: "header" | "tile", isOpen: boolean) => {
+    setCreateTrigger(isOpen ? trigger : null);
+    setCreateStep("menu");
+  };
+
+  const createPopoverBody = (
+    createStep === "menu" ? (
+      <button
+        type="button"
+        onClick={() => setCreateStep("form")}
+        className="w-full flex items-center gap-2 px-3 py-2 text-sm rounded-sm hover:bg-accent text-left"
+      >
+        <LayoutGrid className="h-4 w-4 text-muted-foreground" /> Create board
+      </button>
+    ) : (
+      <div className="space-y-3">
+        <div><Label>Board Key (e.g. ENG)</Label><Input value={form.key} onChange={(e) => setForm((f) => ({ ...f, key: e.target.value }))} maxLength={10} /></div>
+        <div><Label>Name</Label><Input value={form.name} onChange={(e) => setForm((f) => ({ ...f, name: e.target.value }))} /></div>
+        <div><Label>Description</Label><Textarea value={form.description} onChange={(e) => setForm((f) => ({ ...f, description: e.target.value }))} /></div>
+        <div>
+          <Label>Wing</Label>
+          <Select value={form.wing} onValueChange={(v) => setForm((f) => ({ ...f, wing: v }))}>
+            <SelectTrigger><SelectValue /></SelectTrigger>
+            <SelectContent>
+              <SelectItem value="GMGI">GMGI</SelectItem>
+              <SelectItem value="MORU">MORU</SelectItem>
+            </SelectContent>
+          </Select>
         </div>
-        <DialogFooter><Button onClick={create}>Create</Button></DialogFooter>
-      </DialogContent>
-    </Dialog>
+        <Button className="w-full" onClick={create}>Create</Button>
+      </div>
+    )
   );
 
   return (
@@ -218,7 +225,14 @@ const Tasks = () => {
             </div>
           )}
         </div>
-          <Button onClick={() => setOpen(true)}><Plus className="mr-1 h-4 w-4" /> Create</Button>
+          <Popover open={createTrigger === "header"} onOpenChange={(o) => handleCreatePopoverChange("header", o)}>
+            <PopoverTrigger asChild>
+              <Button><Plus className="mr-1 h-4 w-4" /> Create</Button>
+            </PopoverTrigger>
+            <PopoverContent align="end" aria-label="Create board" className={createStep === "menu" ? "w-56 p-1" : "w-80"}>
+              {createPopoverBody}
+            </PopoverContent>
+          </Popover>
         </div>
       </div>
 
@@ -258,17 +272,21 @@ const Tasks = () => {
           {boards.map((b) => (
             <BoardTile key={b.id} board={b} starred={starredIds.includes(b.id)} onToggleStar={toggleStar} onOpen={() => navigate(`/tasks/${b.id}`)} />
           ))}
-          <button
-            type="button"
-            onClick={() => setOpen(true)}
-            className="min-h-[7.5rem] rounded-md border border-dashed flex items-center justify-center text-sm text-muted-foreground hover:bg-accent hover:text-foreground transition-colors"
-          >
-            <Plus className="h-4 w-4 mr-1" /> Create new board
-          </button>
+          <Popover open={createTrigger === "tile"} onOpenChange={(o) => handleCreatePopoverChange("tile", o)}>
+            <PopoverTrigger asChild>
+              <button
+                type="button"
+                className="min-h-[7.5rem] rounded-md border border-dashed flex items-center justify-center text-sm text-muted-foreground hover:bg-accent hover:text-foreground transition-colors"
+              >
+                <Plus className="h-4 w-4 mr-1" /> Create new board
+              </button>
+            </PopoverTrigger>
+            <PopoverContent align="start" aria-label="Create board" className={createStep === "menu" ? "w-56 p-1" : "w-80"}>
+              {createPopoverBody}
+            </PopoverContent>
+          </Popover>
         </div>
       </section>
-
-      {createDialog}
     </div>
   );
 };
