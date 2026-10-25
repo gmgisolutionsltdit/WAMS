@@ -10,7 +10,7 @@ import { Badge } from "@/components/ui/badge";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogFooter } from "@/components/ui/dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
-import { Megaphone, Pin, Plus, Archive, ArchiveRestore, Pencil, CalendarClock, ChevronLeft, ChevronRight } from "lucide-react";
+import { Megaphone, Pin, Plus, Archive, ArchiveRestore, Pencil, CalendarClock, ChevronLeft, ChevronRight, Trash2 } from "lucide-react";
 import { Checkbox } from "@/components/ui/checkbox";
 import { toast } from "sonner";
 import { format } from "date-fns";
@@ -31,6 +31,7 @@ const emptyForm = { title: "", body: "", category: "general", priority: "normal"
 const NoticeBoard = () => {
   const { user, role } = useAuth();
   const canManage = role === "admin";
+  const canDeleteActivity = role === "admin" || role === "manager";
   const [notices, setNotices] = useState<any[]>([]);
   const [open, setOpen] = useState(false);
   const [form, setForm] = useState(emptyForm);
@@ -153,6 +154,23 @@ const NoticeBoard = () => {
   };
 
   const TYPE_LABELS: Record<string, string> = { leave: "Leave", late: "Late Time", manual: "Manual Entry", ot: "Overtime" };
+  const ACTIVITY_TABLE: Record<string, string> = {
+    leave: "leave_requests", late: "late_time_requests", manual: "manual_time_requests", ot: "overtime_requests",
+  };
+
+  /**
+   * Deletes exactly this one request row (eq("id", ...)) — it can never
+   * touch any other employee's requests or notices. RLS (can_approve() OR
+   * admin) scopes who the delete is even allowed to go through for.
+   */
+  const deleteActivity = async (r: { id: string; _kind: string }) => {
+    if (!confirm(`Delete this ${TYPE_LABELS[r._kind]} entry? This cannot be undone.`)) return;
+    const { data, error } = await supabase.from(ACTIVITY_TABLE[r._kind]).delete().eq("id", r.id).select("id");
+    if (error) { toast.error(error.message); return; }
+    if (!data?.length) { toast.error("You're not allowed to delete this entry."); return; }
+    toast.success("Entry deleted");
+    fetchActivity();
+  };
 
   const employeeOptions = Array.from(new Set(activity.map((r) => r.user_id)))
     .map((id) => ({ id, name: namesByUser[id] || "Unknown" }))
@@ -361,6 +379,12 @@ const NoticeBoard = () => {
                   <div className="flex items-center gap-2 shrink-0">
                     <Badge variant="secondary">{TYPE_LABELS[r._kind]}</Badge>
                     <Badge variant="outline" className="capitalize">{r.status}</Badge>
+                    {/* A manager can't approve (so can't delete) their own request via RLS — only admin bypasses that. */}
+                    {canDeleteActivity && (canManage || r.user_id !== user?.id) && (
+                      <Button size="icon" variant="ghost" className="h-7 w-7" onClick={() => deleteActivity(r)} aria-label="Delete entry">
+                        <Trash2 className="h-3.5 w-3.5 text-destructive" />
+                      </Button>
+                    )}
                   </div>
                 </div>
               ))}
