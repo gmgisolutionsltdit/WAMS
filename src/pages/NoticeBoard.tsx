@@ -392,6 +392,10 @@ const NoticeBoard = () => {
         )}
       </div>
 
+      {/* Hidden while browsing the Notices archive below so the page shows
+          only that archive, not this separate, unrelated Requests Activity
+          feed at the same time. */}
+      {!showArchived && (
       <Card>
         <CardHeader>
           <CardTitle className="text-base flex items-center gap-2"><CalendarClock className="h-4 w-4" /> Requests Activity</CardTitle>
@@ -506,6 +510,7 @@ const NoticeBoard = () => {
           )}
         </CardContent>
       </Card>
+      )}
 
       {/* Hidden while browsing Requests Activity's own archived view so the page
           shows only that archive, not this separate, unrelated Notices archive
