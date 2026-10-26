@@ -13,10 +13,11 @@ import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription,
 } from "@/components/ui/dialog";
 import { toast } from "sonner";
-import { ArrowLeft, Plus, MessageSquare, Loader2, AlertCircle, CheckSquare, X } from "lucide-react";
+import { ArrowLeft, Plus, MessageSquare, Loader2, AlertCircle, CheckSquare, X, UserPlus } from "lucide-react";
 import { useRealtimeSubscription } from "@/hooks/useRealtimeSubscription";
 import { EmployeePicker } from "@/components/EmployeePicker";
 import { ProjectMemberSelector } from "@/components/ProjectMemberSelector";
+import { BoardMenu } from "@/components/tasks/BoardMenu";
 import {
   DndContext,
   DragEndEvent,
@@ -67,6 +68,10 @@ const TaskBoard = () => {
 
   const [addColOpen, setAddColOpen] = useState(false);
   const [newColName, setNewColName] = useState("");
+
+  const [membersOpen, setMembersOpen] = useState(false);
+  const [editingTitle, setEditingTitle] = useState(false);
+  const [titleDraft, setTitleDraft] = useState("");
 
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 6 } }),
@@ -428,20 +433,46 @@ const TaskBoard = () => {
   const totalTasks = tasks.length;
   const isOwnerOrAdmin = project.owner_id === user?.id;
 
+  // Trello-style inline-editable board title: click the title to edit it in place.
+  const saveTitle = async () => {
+    setEditingTitle(false);
+    const name = titleDraft.trim();
+    if (!name || name === project.name) return;
+    const { error } = await supabase.from("projects").update({ name }).eq("id", project.id);
+    if (error) { toast.error(error.message); return; }
+    setProject((p) => ({ ...p, name }));
+  };
+
   return (
     <div className="flex flex-col gap-4 h-[calc(100vh-3.5rem-1.5rem)] sm:h-[calc(100vh-3.5rem-2rem)] md:h-[calc(100vh-3.5rem-3rem)]">
       {/* Header */}
       <div className="flex items-center justify-between flex-wrap gap-2 shrink-0">
-        <div className="flex items-center gap-3">
+        <div className="flex items-center gap-3 min-w-0">
           <Button size="icon" variant="ghost" onClick={() => navigate("/tasks")}>
             <ArrowLeft className="h-4 w-4" />
           </Button>
-          <div>
-            <h2 className="text-2xl font-semibold flex items-center gap-2">
-              <Badge variant="outline">{project.key}</Badge>
-              {project.name}
-            </h2>
-            {project.description && (
+          <div className="min-w-0">
+            {editingTitle ? (
+              <Input
+                autoFocus
+                value={titleDraft}
+                onChange={(e) => setTitleDraft(e.target.value)}
+                onBlur={saveTitle}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter") { e.currentTarget.blur(); }
+                  else if (e.key === "Escape") { setEditingTitle(false); }
+                }}
+                className="text-2xl font-semibold h-auto py-0.5 px-1 -mx-1 w-auto min-w-[12rem]"
+              />
+            ) : (
+              <h2
+                className="text-2xl font-semibold truncate cursor-text hover:bg-accent rounded px-1 -mx-1"
+                onClick={() => { setTitleDraft(project.name); setEditingTitle(true); }}
+              >
+                {project.name}
+              </h2>
+            )}
+            {project.description && !editingTitle && (
               <p className="text-sm text-muted-foreground">{project.description}</p>
             )}
           </div>
@@ -450,11 +481,22 @@ const TaskBoard = () => {
           <Button variant="outline" size="sm" onClick={() => setAddColOpen(true)}>
             <Plus className="h-4 w-4 mr-1" /> Column
           </Button>
+          <Button variant="outline" size="sm" onClick={() => setMembersOpen(true)}>
+            <UserPlus className="mr-1 h-4 w-4" /> Members ({members.length})
+          </Button>
           <ProjectMemberSelector
             projectId={projectId!}
             project={project}
             members={members}
             onChanged={fetchAll}
+            open={membersOpen}
+            onOpenChange={setMembersOpen}
+          />
+          <BoardMenu
+            project={project}
+            canEdit={isOwnerOrAdmin}
+            onOpenMembers={() => setMembersOpen(true)}
+            onProjectUpdated={(patch) => setProject((p) => ({ ...p, ...patch }))}
           />
         </div>
       </div>

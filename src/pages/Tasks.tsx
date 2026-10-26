@@ -48,7 +48,7 @@ const Tasks = () => {
   const [recentIds, setRecentIds] = useState<string[]>(() => getRecentBoardIds());
 
   const fetchBoards = useCallback(async () => {
-    const { data } = await supabase.from("projects").select("*").order("created_at", { ascending: false });
+    const { data } = await supabase.from("projects").select("*").eq("archived", false).order("created_at", { ascending: false });
     setBoards((data || []) as Board[]);
   }, []);
 
