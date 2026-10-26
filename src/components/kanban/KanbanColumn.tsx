@@ -104,6 +104,7 @@ export function KanbanColumn({
               variant="ghost"
               className="h-7 w-7"
               onClick={() => onCreateTask(column.id)}
+              onPointerDown={(e) => e.stopPropagation()}
               aria-label="Add task"
             >
               <Plus className="h-3.5 w-3.5" />
@@ -111,7 +112,7 @@ export function KanbanColumn({
             {canDelete && onDeleteColumn && (
               <DropdownMenu>
                 <DropdownMenuTrigger asChild>
-                  <Button size="icon" variant="ghost" className="h-7 w-7">
+                  <Button size="icon" variant="ghost" className="h-7 w-7" onPointerDown={(e) => e.stopPropagation()}>
                     <MoreVertical className="h-3.5 w-3.5" />
                   </Button>
                 </DropdownMenuTrigger>

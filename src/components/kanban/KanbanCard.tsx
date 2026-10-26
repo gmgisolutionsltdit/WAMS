@@ -105,6 +105,7 @@ export function KanbanCard({
             <button
               type="button"
               onClick={(e) => { e.stopPropagation(); onClick(); }}
+              onPointerDown={(e) => e.stopPropagation()}
               className="opacity-0 group-hover:opacity-100 transition-opacity p-0.5 rounded hover:bg-muted text-muted-foreground"
               aria-label="Edit card"
             >
@@ -119,6 +120,7 @@ export function KanbanCard({
           <button
             type="button"
             onClick={(e) => { e.stopPropagation(); onToggleComplete(); }}
+            onPointerDown={(e) => e.stopPropagation()}
             className={cn(
               "shrink-0 mt-0.5 transition-opacity",
               task.completed_at ? "opacity-100" : "opacity-0 group-hover:opacity-100",
