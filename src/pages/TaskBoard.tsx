@@ -245,9 +245,13 @@ const TaskBoard = () => {
     const overId = String(over.id);
 
     if (active.data.current?.type === "column") {
-      if (activeId === overId) return;
+      // closestCorners can resolve `over` to a card nested inside a column
+      // (not the column itself) when dragging across a taller column —
+      // fall back to that card's own column so the drop still lands.
+      const overColumnId = columns.some((c) => c.id === overId) ? overId : findColumnIdForTask(overId);
+      if (!overColumnId || activeId === overColumnId) return;
       const oldIndex = columns.findIndex((c) => c.id === activeId);
-      const newIndex = columns.findIndex((c) => c.id === overId);
+      const newIndex = columns.findIndex((c) => c.id === overColumnId);
       if (oldIndex === -1 || newIndex === -1) return;
       const reordered = arrayMove(columns, oldIndex, newIndex);
       setColumns(reordered);
