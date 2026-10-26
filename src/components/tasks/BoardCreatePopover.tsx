@@ -57,8 +57,14 @@ export const BoardCreatePopover = ({ trigger, align = "end", onCreated }: {
       const baseKey = slugKey(name);
       let data: { id: string } | null = null;
       let error: { code?: string; message: string } | null = null;
-      for (let attempt = 0; attempt < 5; attempt++) {
-        const key = attempt === 0 ? baseKey : `${baseKey}${attempt + 1}`;
+      // Sequential suffixes (BRD2, BRD3, ...) first, since those read best;
+      // after a handful of collisions (e.g. many boards whose titles all
+      // reduce to the same short key) fall back to a random suffix so
+      // creation can't get permanently stuck for a valid title.
+      for (let attempt = 0; attempt < 20; attempt++) {
+        const key = attempt === 0 ? baseKey
+          : attempt < 5 ? `${baseKey}${attempt + 1}`
+          : `${baseKey}${Math.random().toString(36).slice(2, 6).toUpperCase()}`;
         const res = await supabase
           .from("projects")
           .insert({ key, name, owner_id: user!.id, visibility })
