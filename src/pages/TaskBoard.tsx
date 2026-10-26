@@ -429,7 +429,7 @@ const TaskBoard = () => {
   const isOwnerOrAdmin = project.owner_id === user?.id;
 
   return (
-    <div className="flex flex-col gap-4 h-[calc(100vh-3.5rem-3rem)]">
+    <div className="flex flex-col gap-4 h-[calc(100vh-3.5rem-1.5rem)] sm:h-[calc(100vh-3.5rem-2rem)] md:h-[calc(100vh-3.5rem-3rem)]">
       {/* Header */}
       <div className="flex items-center justify-between flex-wrap gap-2 shrink-0">
         <div className="flex items-center gap-3">
