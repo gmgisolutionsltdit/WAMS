@@ -27,6 +27,7 @@ interface Props {
   onDeleteColumn?: (columnId: string) => void;
   onToggleComplete?: (task: KanbanTask) => void;
   canDelete?: boolean;
+  canDrag?: boolean;
   checklistCounts?: Record<string, { done: number; total: number }>;
 }
 
@@ -46,15 +47,19 @@ export function KanbanColumn({
   onDeleteColumn,
   onToggleComplete,
   canDelete,
+  canDrag = true,
   checklistCounts,
 }: Props) {
   // A column is both a sortable item (drag its header to reorder columns)
   // and the droppable zone cards are dropped into — dnd-kit's useSortable
   // covers both with the same id, which is what the task drag handlers
-  // already look up via `columns.some(c => c.id === overId)`.
+  // already look up via `columns.some(c => c.id === overId)`. Dragging
+  // (not dropping) is disabled for read-only viewers (e.g. a non-member
+  // on a Public board) since task_columns RLS would reject their reorder.
   const { attributes, listeners, setNodeRef, transform, transition, isDragging, isOver } = useSortable({
     id: column.id,
     data: { type: "column", column },
+    disabled: !canDrag,
   });
 
   const style = {
@@ -79,9 +84,10 @@ export function KanbanColumn({
       {/* Header with subtle accent — also the column's drag handle */}
       <div
         {...attributes}
-        {...listeners}
+        {...(canDrag ? listeners : {})}
         className={cn(
-          "relative rounded-t-2xl px-3 py-2.5 bg-gradient-to-b cursor-grab active:cursor-grabbing",
+          "relative rounded-t-2xl px-3 py-2.5 bg-gradient-to-b",
+          canDrag && "cursor-grab active:cursor-grabbing",
           accent,
         )}
       >

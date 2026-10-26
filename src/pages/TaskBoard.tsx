@@ -470,6 +470,14 @@ const TaskBoard = () => {
 
   const totalTasks = tasks.length;
   const isOwnerOrAdmin = project.owner_id === user?.id || role === "admin";
+  // A Public-visibility board can be viewed by non-members, but the
+  // "Members view tasks"/"Members manage boards" RLS policies only let
+  // members, admins, or Workspace-visibility viewers mutate it — gate the
+  // column drag and card-complete toggle the same way so read-only
+  // viewers aren't offered actions that will just be rejected.
+  const canEditBoard = isOwnerOrAdmin
+    || members.some((m) => m.user_id === user?.id)
+    || project.visibility === "workspace";
 
   // Trello-style inline-editable board title: click the title to edit it in place.
   const saveTitle = async () => {
@@ -585,8 +593,9 @@ const TaskBoard = () => {
                   onCreateTask={openCreate}
                   onOpenTask={openTask}
                   onDeleteColumn={deleteColumn}
-                  onToggleComplete={toggleComplete}
+                  onToggleComplete={canEditBoard ? toggleComplete : undefined}
                   canDelete={isOwnerOrAdmin}
+                  canDrag={canEditBoard}
                   checklistCounts={checklistCounts}
                 />
               ))}
