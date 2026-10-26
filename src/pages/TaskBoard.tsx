@@ -32,6 +32,7 @@ import { arrayMove } from "@dnd-kit/sortable";
 import { KanbanColumn, KanbanColumnData } from "@/components/kanban/KanbanColumn";
 import { KanbanCard, KanbanTask, Profile } from "@/components/kanban/KanbanCard";
 import { KanbanEmptyState } from "@/components/kanban/KanbanEmptyState";
+import { BoardSearchCreate } from "@/components/tasks/BoardSearchCreate";
 import { cn } from "@/lib/utils";
 import { recordRecentBoard } from "@/lib/boardPrefs";
 
@@ -443,6 +444,12 @@ const TaskBoard = () => {
             onChanged={fetchAll}
           />
         </div>
+      </div>
+
+      {/* Same search-boards / create-board bar as the Tasks home screen, so you
+          can jump to or create another board without leaving this one. */}
+      <div className="flex justify-center">
+        <BoardSearchCreate />
       </div>
 
       {/* Hint banner when board is empty — but always render the columns below */}
