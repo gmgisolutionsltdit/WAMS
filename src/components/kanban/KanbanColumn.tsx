@@ -28,6 +28,12 @@ interface Props {
   onToggleComplete?: (task: KanbanTask) => void;
   canDelete?: boolean;
   canDrag?: boolean;
+  // Board-level edit access (member/admin/workspace visibility). A task's
+  // own assignee can also toggle it complete even without board-level
+  // access — the "Members update tasks" RLS policy allows that too — so
+  // this alone doesn't decide per-card; see canToggleComplete below.
+  canEditBoard?: boolean;
+  currentUserId?: string;
   checklistCounts?: Record<string, { done: number; total: number }>;
 }
 
@@ -48,6 +54,8 @@ export function KanbanColumn({
   onToggleComplete,
   canDelete,
   canDrag = true,
+  canEditBoard,
+  currentUserId,
   checklistCounts,
 }: Props) {
   // A column is both a sortable item (drag its header to reorder columns)
@@ -149,6 +157,7 @@ export function KanbanColumn({
                 assignee={profiles.find((p) => p.id === t.assignee_id) || null}
                 onClick={() => onOpenTask(t)}
                 onToggleComplete={onToggleComplete ? () => onToggleComplete(t) : undefined}
+                canToggleComplete={!!canEditBoard || t.assignee_id === currentUserId}
                 checklistTotal={checklistCounts?.[t.id]?.total || 0}
                 checklistDone={checklistCounts?.[t.id]?.done || 0}
               />

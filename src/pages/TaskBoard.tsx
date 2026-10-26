@@ -593,9 +593,11 @@ const TaskBoard = () => {
                   onCreateTask={openCreate}
                   onOpenTask={openTask}
                   onDeleteColumn={deleteColumn}
-                  onToggleComplete={canEditBoard ? toggleComplete : undefined}
+                  onToggleComplete={toggleComplete}
                   canDelete={isOwnerOrAdmin}
                   canDrag={canEditBoard}
+                  canEditBoard={canEditBoard}
+                  currentUserId={user?.id}
                   checklistCounts={checklistCounts}
                 />
               ))}

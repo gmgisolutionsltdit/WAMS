@@ -37,6 +37,7 @@ interface Props {
   assignee: Profile | null;
   onClick: () => void;
   onToggleComplete?: () => void;
+  canToggleComplete?: boolean;
   isOverlay?: boolean;
   commentCount?: number;
   checklistTotal?: number;
@@ -48,6 +49,7 @@ export function KanbanCard({
   assignee,
   onClick,
   onToggleComplete,
+  canToggleComplete = true,
   isOverlay,
   commentCount = 0,
   checklistTotal = 0,
@@ -116,7 +118,7 @@ export function KanbanCard({
       </div>
 
       <div className="flex items-start gap-1.5 mb-2">
-        {onToggleComplete && !isOverlay && (
+        {onToggleComplete && canToggleComplete && !isOverlay && (
           <button
             type="button"
             onClick={(e) => { e.stopPropagation(); onToggleComplete(); }}
