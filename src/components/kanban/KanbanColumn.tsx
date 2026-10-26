@@ -1,5 +1,5 @@
-import { useDroppable } from "@dnd-kit/core";
-import { SortableContext, verticalListSortingStrategy } from "@dnd-kit/sortable";
+import { useSortable, SortableContext, verticalListSortingStrategy } from "@dnd-kit/sortable";
+import { CSS } from "@dnd-kit/utilities";
 import { Button } from "@/components/ui/button";
 import { Plus, MoreVertical, Trash2 } from "lucide-react";
 import { cn } from "@/lib/utils";
@@ -25,6 +25,7 @@ interface Props {
   onCreateTask: (columnId: string) => void;
   onOpenTask: (task: KanbanTask) => void;
   onDeleteColumn?: (columnId: string) => void;
+  onToggleComplete?: (task: KanbanTask) => void;
   canDelete?: boolean;
   checklistCounts?: Record<string, { done: number; total: number }>;
 }
@@ -43,30 +44,44 @@ export function KanbanColumn({
   onCreateTask,
   onOpenTask,
   onDeleteColumn,
+  onToggleComplete,
   canDelete,
   checklistCounts,
 }: Props) {
-  const { setNodeRef, isOver } = useDroppable({
+  // A column is both a sortable item (drag its header to reorder columns)
+  // and the droppable zone cards are dropped into — dnd-kit's useSortable
+  // covers both with the same id, which is what the task drag handlers
+  // already look up via `columns.some(c => c.id === overId)`.
+  const { attributes, listeners, setNodeRef, transform, transition, isDragging, isOver } = useSortable({
     id: column.id,
     data: { type: "column", column },
   });
+
+  const style = {
+    transform: CSS.Transform.toString(transform),
+    transition,
+  };
 
   const accent = COLUMN_ACCENT[column.status] || "from-primary/30 to-primary/0";
 
   return (
     <div
       ref={setNodeRef}
+      style={style}
       className={cn(
-        "min-w-[300px] w-[300px] h-full flex flex-col rounded-2xl",
+        "min-w-[300px] w-[300px] max-h-full flex flex-col rounded-2xl",
         "bg-muted/30 backdrop-blur-sm border border-border/60",
         "transition-all duration-200",
         isOver && "ring-2 ring-primary/50 bg-primary/5 scale-[1.01]",
+        isDragging && "opacity-40",
       )}
     >
-      {/* Header with subtle accent */}
+      {/* Header with subtle accent — also the column's drag handle */}
       <div
+        {...attributes}
+        {...listeners}
         className={cn(
-          "relative rounded-t-2xl px-3 py-2.5 bg-gradient-to-b",
+          "relative rounded-t-2xl px-3 py-2.5 bg-gradient-to-b cursor-grab active:cursor-grabbing",
           accent,
         )}
       >
@@ -126,6 +141,7 @@ export function KanbanColumn({
                 task={t}
                 assignee={profiles.find((p) => p.id === t.assignee_id) || null}
                 onClick={() => onOpenTask(t)}
+                onToggleComplete={onToggleComplete ? () => onToggleComplete(t) : undefined}
                 checklistTotal={checklistCounts?.[t.id]?.total || 0}
                 checklistDone={checklistCounts?.[t.id]?.done || 0}
               />

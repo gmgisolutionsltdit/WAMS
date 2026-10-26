@@ -1,8 +1,7 @@
 import { useSortable } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
-import { Badge } from "@/components/ui/badge";
-import { Calendar as CalendarIcon, AlertTriangle, MessageSquare, CheckSquare } from "lucide-react";
+import { Calendar as CalendarIcon, AlertTriangle, MessageSquare, CheckSquare, CheckCircle2, Circle, Pencil } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 export type KanbanTask = {
@@ -16,6 +15,7 @@ export type KanbanTask = {
   column_id: string | null;
   status: string;
   position: number;
+  completed_at?: string | null;
 };
 
 export type Profile = {
@@ -36,6 +36,7 @@ interface Props {
   task: KanbanTask;
   assignee: Profile | null;
   onClick: () => void;
+  onToggleComplete?: () => void;
   isOverlay?: boolean;
   commentCount?: number;
   checklistTotal?: number;
@@ -46,6 +47,7 @@ export function KanbanCard({
   task,
   assignee,
   onClick,
+  onToggleComplete,
   isOverlay,
   commentCount = 0,
   checklistTotal = 0,
@@ -89,18 +91,56 @@ export function KanbanCard({
         {task.ticket_key && (
           <span className="text-[10px] font-mono text-muted-foreground tracking-wide">{task.ticket_key}</span>
         )}
-        <span
-          className={cn(
-            "text-[10px] font-medium px-1.5 py-0.5 rounded-full ring-1",
-            priority.bg,
-            priority.ring,
+        <div className="flex items-center gap-1 ml-auto">
+          <span
+            className={cn(
+              "text-[10px] font-medium px-1.5 py-0.5 rounded-full ring-1",
+              priority.bg,
+              priority.ring,
+            )}
+          >
+            {priority.label}
+          </span>
+          {!isOverlay && (
+            <button
+              type="button"
+              onClick={(e) => { e.stopPropagation(); onClick(); }}
+              className="opacity-0 group-hover:opacity-100 transition-opacity p-0.5 rounded hover:bg-muted text-muted-foreground"
+              aria-label="Edit card"
+            >
+              <Pencil className="h-3 w-3" />
+            </button>
           )}
-        >
-          {priority.label}
-        </span>
+        </div>
       </div>
 
-      <h4 className="text-sm font-medium leading-snug mb-2 line-clamp-2">{task.title}</h4>
+      <div className="flex items-start gap-1.5 mb-2">
+        {onToggleComplete && !isOverlay && (
+          <button
+            type="button"
+            onClick={(e) => { e.stopPropagation(); onToggleComplete(); }}
+            className={cn(
+              "shrink-0 mt-0.5 transition-opacity",
+              task.completed_at ? "opacity-100" : "opacity-0 group-hover:opacity-100",
+            )}
+            aria-label={task.completed_at ? "Mark incomplete" : "Mark complete"}
+          >
+            {task.completed_at ? (
+              <CheckCircle2 className="h-4 w-4 text-emerald-500 fill-emerald-500/20" />
+            ) : (
+              <Circle className="h-4 w-4 text-muted-foreground hover:text-foreground" />
+            )}
+          </button>
+        )}
+        <h4
+          className={cn(
+            "text-sm font-medium leading-snug line-clamp-2",
+            task.completed_at && "line-through text-muted-foreground",
+          )}
+        >
+          {task.title}
+        </h4>
+      </div>
 
       {task.description && (
         <p className="text-xs text-muted-foreground line-clamp-2 mb-2">{task.description}</p>
