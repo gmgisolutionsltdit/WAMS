@@ -1893,6 +1893,7 @@ export type Database = {
           name: string
           owner_id: string
           updated_at: string
+          visibility: Database["public"]["Enums"]["board_visibility"]
           wing: Database["public"]["Enums"]["company_wing"] | null
         }
         Insert: {
@@ -1904,6 +1905,7 @@ export type Database = {
           name: string
           owner_id: string
           updated_at?: string
+          visibility?: Database["public"]["Enums"]["board_visibility"]
           wing?: Database["public"]["Enums"]["company_wing"] | null
         }
         Update: {
@@ -1915,6 +1917,7 @@ export type Database = {
           name?: string
           owner_id?: string
           updated_at?: string
+          visibility?: Database["public"]["Enums"]["board_visibility"]
           wing?: Database["public"]["Enums"]["company_wing"] | null
         }
         Relationships: []
@@ -2902,6 +2905,7 @@ export type Database = {
         | "hr"
         | "executive"
         | "supervisor"
+      board_visibility: "private" | "workspace" | "public"
       company_wing: "GMGI" | "MORU"
       employee_status: "Active" | "Inactive" | "Resigned"
       leave_day_type: "full" | "first_half" | "second_half"
@@ -3056,6 +3060,7 @@ export const Constants = {
         "executive",
         "supervisor",
       ],
+      board_visibility: ["private", "workspace", "public"],
       company_wing: ["GMGI", "MORU"],
       employee_status: ["Active", "Inactive", "Resigned"],
       leave_day_type: ["full", "first_half", "second_half"],
