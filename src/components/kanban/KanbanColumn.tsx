@@ -67,7 +67,11 @@ export function KanbanColumn({
   const { attributes, listeners, setNodeRef, transform, transition, isDragging, isOver } = useSortable({
     id: column.id,
     data: { type: "column", column },
-    disabled: !canDrag,
+    // Only disable dragging, not dropping — a boolean `disabled` would
+    // disable both, which would stop a task's own assignee (allowed to
+    // move their task even without board-level edit access) from
+    // dropping it into this column.
+    disabled: { draggable: !canDrag, droppable: false },
   });
 
   const style = {
