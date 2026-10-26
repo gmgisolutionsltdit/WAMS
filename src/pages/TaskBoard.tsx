@@ -165,6 +165,19 @@ const TaskBoard = () => {
     }
   }, [projectId, ensureBoard]);
 
+  // Switching boards (e.g. via the BoardSearchCreate bar) changes projectId
+  // but keeps this same TaskBoard instance mounted — without this, the old
+  // board's columns/tasks stay rendered and interactive while the new
+  // project's data is still loading, so a task created in that window could
+  // get the new project_id but the previous board's stale column/board ids.
+  useEffect(() => {
+    setLoading(true);
+    setProject(null);
+    setBoardId(null);
+    setColumns([]);
+    setTasks([]);
+  }, [projectId]);
+
   useEffect(() => { fetchAll(); }, [fetchAll]);
   useRealtimeSubscription("tasks", fetchAll, `tasks-${projectId}`);
   useRealtimeSubscription("task_columns", fetchAll, `cols-${projectId}`);
