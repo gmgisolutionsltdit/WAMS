@@ -32,6 +32,7 @@ import { arrayMove } from "@dnd-kit/sortable";
 import { KanbanColumn, KanbanColumnData } from "@/components/kanban/KanbanColumn";
 import { KanbanCard, KanbanTask, Profile } from "@/components/kanban/KanbanCard";
 import { KanbanEmptyState } from "@/components/kanban/KanbanEmptyState";
+import { BoardSearchCreate } from "@/components/tasks/BoardSearchCreate";
 import { cn } from "@/lib/utils";
 import { recordRecentBoard } from "@/lib/boardPrefs";
 
@@ -163,6 +164,19 @@ const TaskBoard = () => {
       setLoading(false);
     }
   }, [projectId, ensureBoard]);
+
+  // Switching boards (e.g. via the BoardSearchCreate bar) changes projectId
+  // but keeps this same TaskBoard instance mounted — without this, the old
+  // board's columns/tasks stay rendered and interactive while the new
+  // project's data is still loading, so a task created in that window could
+  // get the new project_id but the previous board's stale column/board ids.
+  useEffect(() => {
+    setLoading(true);
+    setProject(null);
+    setBoardId(null);
+    setColumns([]);
+    setTasks([]);
+  }, [projectId]);
 
   useEffect(() => { fetchAll(); }, [fetchAll]);
   useRealtimeSubscription("tasks", fetchAll, `tasks-${projectId}`);
@@ -443,6 +457,12 @@ const TaskBoard = () => {
             onChanged={fetchAll}
           />
         </div>
+      </div>
+
+      {/* Same search-boards / create-board bar as the Tasks home screen, so you
+          can jump to or create another board without leaving this one. */}
+      <div className="flex justify-center">
+        <BoardSearchCreate />
       </div>
 
       {/* Hint banner when board is empty — but always render the columns below */}
