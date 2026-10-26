@@ -429,9 +429,9 @@ const TaskBoard = () => {
   const isOwnerOrAdmin = project.owner_id === user?.id;
 
   return (
-    <div className="space-y-4">
+    <div className="flex flex-col gap-4 h-[calc(100vh-3.5rem-3rem)]">
       {/* Header */}
-      <div className="flex items-center justify-between flex-wrap gap-2">
+      <div className="flex items-center justify-between flex-wrap gap-2 shrink-0">
         <div className="flex items-center gap-3">
           <Button size="icon" variant="ghost" onClick={() => navigate("/tasks")}>
             <ArrowLeft className="h-4 w-4" />
@@ -461,19 +461,19 @@ const TaskBoard = () => {
 
       {/* Same search-boards / create-board bar as the Tasks home screen, so you
           can jump to or create another board without leaving this one. */}
-      <div className="flex justify-center">
+      <div className="flex justify-center shrink-0">
         <BoardSearchCreate />
       </div>
 
       {/* Hint banner when board is empty — but always render the columns below */}
       {totalTasks === 0 && columns.length > 0 && (
-        <div className="rounded-2xl bg-gradient-to-b from-muted/30 to-transparent border border-border/60">
+        <div className="rounded-2xl bg-gradient-to-b from-muted/30 to-transparent border border-border/60 shrink-0">
           <KanbanEmptyState onCreate={() => openCreate(columns[0].id)} />
         </div>
       )}
 
       {columns.length === 0 ? (
-        <div className="rounded-2xl border border-dashed border-border/60 p-10 text-center text-sm text-muted-foreground">
+        <div className="rounded-2xl border border-dashed border-border/60 p-10 text-center text-sm text-muted-foreground shrink-0">
           No columns yet. Click <span className="font-medium">+ Column</span> above to add one.
         </div>
       ) : (
@@ -484,7 +484,11 @@ const TaskBoard = () => {
           onDragOver={handleDragOver}
           onDragEnd={handleDragEnd}
         >
-          <div className="flex gap-3 overflow-x-auto pb-4 -mx-1 px-1">
+          {/* flex-1 + min-h-0 lets this row fill the rest of the viewport
+              (instead of stopping wherever the cards end), so the
+              horizontal scrollbar sits at the bottom of the page like
+              Trello's board view, not right under a short column. */}
+          <div className="flex-1 min-h-0 flex gap-3 overflow-x-auto pb-4 -mx-1 px-1">
             {columns.map((col) => (
               <KanbanColumn
                 key={col.id}

@@ -57,7 +57,7 @@ export function KanbanColumn({
     <div
       ref={setNodeRef}
       className={cn(
-        "min-w-[300px] w-[300px] flex flex-col rounded-2xl",
+        "min-w-[300px] w-[300px] h-full flex flex-col rounded-2xl",
         "bg-muted/30 backdrop-blur-sm border border-border/60",
         "transition-all duration-200",
         isOver && "ring-2 ring-primary/50 bg-primary/5 scale-[1.01]",
@@ -110,7 +110,7 @@ export function KanbanColumn({
 
       {/* Cards */}
       <SortableContext items={tasks.map((t) => t.id)} strategy={verticalListSortingStrategy}>
-        <div className="flex-1 px-2 pb-2 space-y-2 min-h-[120px] max-h-[calc(100vh-280px)] overflow-y-auto">
+        <div className="flex-1 min-h-[120px] px-2 pb-2 space-y-2 overflow-y-auto">
           {tasks.length === 0 ? (
             <button
               onClick={() => onCreateTask(column.id)}
