@@ -102,3 +102,50 @@ DROP POLICY IF EXISTS "Members view watchers" ON public.task_watchers;
 CREATE POLICY "Members view watchers" ON public.task_watchers FOR SELECT TO authenticated USING (
   EXISTS (SELECT 1 FROM public.tasks t WHERE t.id = task_id AND public.can_view_project(auth.uid(), t.project_id))
 );
+
+-- Checklist items
+DROP POLICY IF EXISTS "Members view checklist items" ON public.task_checklist_items;
+CREATE POLICY "Members view checklist items" ON public.task_checklist_items FOR SELECT TO authenticated USING (
+  EXISTS (SELECT 1 FROM public.tasks t WHERE t.id = task_id AND (public.can_view_project(auth.uid(), t.project_id) OR t.assignee_id = auth.uid()))
+);
+
+DROP POLICY IF EXISTS "Members create checklist items" ON public.task_checklist_items;
+CREATE POLICY "Members create checklist items" ON public.task_checklist_items FOR INSERT TO authenticated WITH CHECK (
+  created_by = auth.uid()
+  AND EXISTS (SELECT 1 FROM public.tasks t WHERE t.id = task_id AND (public.can_edit_project(auth.uid(), t.project_id) OR t.assignee_id = auth.uid()))
+);
+
+DROP POLICY IF EXISTS "Members update checklist items" ON public.task_checklist_items;
+CREATE POLICY "Members update checklist items" ON public.task_checklist_items FOR UPDATE TO authenticated USING (
+  EXISTS (SELECT 1 FROM public.tasks t WHERE t.id = task_id AND (public.can_edit_project(auth.uid(), t.project_id) OR t.assignee_id = auth.uid()))
+) WITH CHECK (
+  EXISTS (SELECT 1 FROM public.tasks t WHERE t.id = task_id AND (public.can_edit_project(auth.uid(), t.project_id) OR t.assignee_id = auth.uid()))
+);
+
+DROP POLICY IF EXISTS "Members delete checklist items" ON public.task_checklist_items;
+CREATE POLICY "Members delete checklist items" ON public.task_checklist_items FOR DELETE TO authenticated USING (
+  EXISTS (SELECT 1 FROM public.tasks t WHERE t.id = task_id AND (public.can_edit_project(auth.uid(), t.project_id) OR t.assignee_id = auth.uid()))
+);
+
+-- Task attachment uploads (storage) — same gap as checklist items: a
+-- workspace-visibility editor who isn't a project member could edit the
+-- task itself but still couldn't attach a file to it.
+DROP POLICY IF EXISTS "Auth upload task files" ON storage.objects;
+CREATE POLICY "Auth upload task files"
+ON storage.objects FOR INSERT TO authenticated
+WITH CHECK (
+  bucket_id = 'task-attachments'
+  AND (auth.uid())::text = (storage.foldername(name))[1]
+  AND (
+    -- personal uploads (e.g. expense receipts) live directly in the user's own folder
+    array_length(storage.foldername(name), 1) = 1
+    OR public.has_role(auth.uid(), 'admin'::public.app_role)
+    -- task uploads must use <uid>/<task_id>/<file> and require board edit access
+    OR EXISTS (
+      SELECT 1 FROM public.tasks t
+      WHERE (storage.foldername(name))[2] ~ '^[0-9a-fA-F-]{36}$'
+        AND t.id = ((storage.foldername(name))[2])::uuid
+        AND (public.can_edit_project(auth.uid(), t.project_id) OR t.assignee_id = auth.uid())
+    )
+  )
+);
