@@ -42,7 +42,7 @@ const PRIORITIES = ["low", "medium", "high", "urgent"];
 const TaskBoard = () => {
   const { id: projectId } = useParams<{ id: string }>();
   const navigate = useNavigate();
-  const { user } = useAuth();
+  const { user, role } = useAuth();
 
   const [project, setProject] = useState<any>(null);
   const [boardId, setBoardId] = useState<string | null>(null);
@@ -122,6 +122,11 @@ const TaskBoard = () => {
       if (pjErr) throw pjErr;
       if (!pj) {
         setLoadError("Board not found or you don't have access.");
+        setLoading(false);
+        return;
+      }
+      if (pj.archived) {
+        setLoadError("This board has been closed.");
         setLoading(false);
         return;
       }
@@ -431,7 +436,7 @@ const TaskBoard = () => {
   }
 
   const totalTasks = tasks.length;
-  const isOwnerOrAdmin = project.owner_id === user?.id;
+  const isOwnerOrAdmin = project.owner_id === user?.id || role === "admin";
 
   // Trello-style inline-editable board title: click the title to edit it in place.
   const saveTitle = async () => {
@@ -466,8 +471,11 @@ const TaskBoard = () => {
               />
             ) : (
               <h2
-                className="text-2xl font-semibold truncate cursor-text hover:bg-accent rounded px-1 -mx-1"
-                onClick={() => { setTitleDraft(project.name); setEditingTitle(true); }}
+                className={cn(
+                  "text-2xl font-semibold truncate rounded px-1 -mx-1",
+                  isOwnerOrAdmin && "cursor-text hover:bg-accent"
+                )}
+                onClick={() => { if (!isOwnerOrAdmin) return; setTitleDraft(project.name); setEditingTitle(true); }}
               >
                 {project.name}
               </h2>
