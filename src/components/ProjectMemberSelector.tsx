@@ -3,7 +3,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import { useVisibleEmployees, VisibleEmployee } from "@/hooks/useVisibleEmployees";
 import {
-  Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogFooter, DialogDescription,
+  Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription,
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -12,7 +12,7 @@ import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import { Search, UserPlus, Loader2, Users } from "lucide-react";
+import { Search, Loader2, Users } from "lucide-react";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 
@@ -23,15 +23,16 @@ interface Props {
   project: { owner_id: string; wing: string | null } | null;
   members: Member[];
   onChanged: () => void;
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
 }
 
 const initials = (name?: string | null, email?: string | null) =>
   (name || email || "?").slice(0, 2).toUpperCase();
 
-export const ProjectMemberSelector = ({ projectId, project, members, onChanged }: Props) => {
+export const ProjectMemberSelector = ({ projectId, project, members, onChanged, open, onOpenChange }: Props) => {
   const { user } = useAuth();
   const { groups, flat, loading, error } = useVisibleEmployees();
-  const [open, setOpen] = useState(false);
   const [search, setSearch] = useState("");
   const [busyId, setBusyId] = useState<string | null>(null);
 
@@ -128,12 +129,7 @@ export const ProjectMemberSelector = ({ projectId, project, members, onChanged }
   };
 
   return (
-    <Dialog open={open} onOpenChange={setOpen}>
-      <DialogTrigger asChild>
-        <Button variant="outline" size="sm">
-          <UserPlus className="mr-1 h-4 w-4" /> Members ({memberProfiles.length})
-        </Button>
-      </DialogTrigger>
+    <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-2xl">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
@@ -255,7 +251,7 @@ export const ProjectMemberSelector = ({ projectId, project, members, onChanged }
           <div className="text-xs text-muted-foreground">
             {memberProfiles.length} member{memberProfiles.length === 1 ? "" : "s"} on this project
           </div>
-          <Button onClick={() => setOpen(false)}>Done</Button>
+          <Button onClick={() => onOpenChange(false)}>Done</Button>
         </DialogFooter>
       </DialogContent>
     </Dialog>
