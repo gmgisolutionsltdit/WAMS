@@ -29,7 +29,7 @@ import {
   closestCorners,
   DragOverEvent,
 } from "@dnd-kit/core";
-import { arrayMove } from "@dnd-kit/sortable";
+import { arrayMove, SortableContext, horizontalListSortingStrategy } from "@dnd-kit/sortable";
 import { KanbanColumn, KanbanColumnData } from "@/components/kanban/KanbanColumn";
 import { KanbanCard, KanbanTask, Profile } from "@/components/kanban/KanbanCard";
 import { KanbanEmptyState } from "@/components/kanban/KanbanEmptyState";
@@ -215,6 +215,7 @@ const TaskBoard = () => {
   const findColumnIdForTask = (taskId: string) => tasks.find((t) => t.id === taskId)?.column_id || null;
 
   const handleDragStart = (e: DragStartEvent) => {
+    if (e.active.data.current?.type === "column") return; // KanbanColumn styles its own drag state
     const t = tasks.find((x) => x.id === e.active.id);
     if (t) setDraggingTask(t);
   };
@@ -222,6 +223,7 @@ const TaskBoard = () => {
   const handleDragOver = (e: DragOverEvent) => {
     const { active, over } = e;
     if (!over) return;
+    if (active.data.current?.type === "column") return; // columns reorder on drop only
     const activeId = String(active.id);
     const overId = String(over.id);
     if (activeId === overId) return;
@@ -241,6 +243,28 @@ const TaskBoard = () => {
     if (!over) return;
     const activeId = String(active.id);
     const overId = String(over.id);
+
+    if (active.data.current?.type === "column") {
+      // closestCorners can resolve `over` to a card nested inside a column
+      // (not the column itself) when dragging across a taller column —
+      // fall back to that card's own column so the drop still lands.
+      const overColumnId = columns.some((c) => c.id === overId) ? overId : findColumnIdForTask(overId);
+      if (!overColumnId || activeId === overColumnId) return;
+      const oldIndex = columns.findIndex((c) => c.id === activeId);
+      const newIndex = columns.findIndex((c) => c.id === overColumnId);
+      if (oldIndex === -1 || newIndex === -1) return;
+      const reordered = arrayMove(columns, oldIndex, newIndex);
+      setColumns(reordered);
+      const results = await Promise.all(
+        reordered.map((c, idx) => supabase.from("task_columns").update({ position: idx }).eq("id", c.id)),
+      );
+      const firstErr = results.find((r) => r.error);
+      if (firstErr?.error) {
+        toast.error(firstErr.error.message);
+        fetchAll();
+      }
+      return;
+    }
 
     const activeTaskRow = tasks.find((t) => t.id === activeId);
     if (!activeTaskRow) return;
@@ -388,6 +412,15 @@ const TaskBoard = () => {
     setComments(data || []);
   };
 
+  // Trello-style "mark complete" toggle on a card — independent of which
+  // column/status the task is in, unlike moving it to a "Done" column.
+  const toggleComplete = async (task: KanbanTask) => {
+    const next = task.completed_at ? null : new Date().toISOString();
+    setTasks((prev) => prev.map((t) => (t.id === task.id ? { ...t, completed_at: next } : t)));
+    const { error } = await supabase.from("tasks").update({ completed_at: next }).eq("id", task.id);
+    if (error) { toast.error(error.message); fetchAll(); }
+  };
+
   /* ---------- Column CRUD ---------- */
   const addColumn = async () => {
     if (!newColName.trim() || !boardId) return;
@@ -437,6 +470,14 @@ const TaskBoard = () => {
 
   const totalTasks = tasks.length;
   const isOwnerOrAdmin = project.owner_id === user?.id || role === "admin";
+  // A Public-visibility board can be viewed by non-members, but the
+  // "Members view tasks"/"Members manage boards" RLS policies only let
+  // members, admins, or Workspace-visibility viewers mutate it — gate the
+  // column drag and card-complete toggle the same way so read-only
+  // viewers aren't offered actions that will just be rejected.
+  const canEditBoard = isOwnerOrAdmin
+    || members.some((m) => m.user_id === user?.id)
+    || project.visibility === "workspace";
 
   // Trello-style inline-editable board title: click the title to edit it in place.
   const saveTitle = async () => {
@@ -450,6 +491,12 @@ const TaskBoard = () => {
 
   return (
     <div className="flex flex-col gap-4 h-[calc(100vh-3.5rem-1.5rem)] sm:h-[calc(100vh-3.5rem-2rem)] md:h-[calc(100vh-3.5rem-3rem)]">
+      {/* Same search-boards / create-board bar as the Tasks home screen, so you
+          can jump to or create another board without leaving this one. */}
+      <div className="flex justify-center shrink-0">
+        <BoardSearchCreate />
+      </div>
+
       {/* Header */}
       <div className="flex items-center justify-between flex-wrap gap-2 shrink-0">
         <div className="flex items-center gap-3 min-w-0">
@@ -509,12 +556,6 @@ const TaskBoard = () => {
         </div>
       </div>
 
-      {/* Same search-boards / create-board bar as the Tasks home screen, so you
-          can jump to or create another board without leaving this one. */}
-      <div className="flex justify-center shrink-0">
-        <BoardSearchCreate />
-      </div>
-
       {/* Hint banner when board is empty — but always render the columns below */}
       {totalTasks === 0 && columns.length > 0 && (
         <div className="rounded-2xl bg-gradient-to-b from-muted/30 to-transparent border border-border/60 shrink-0">
@@ -537,22 +578,31 @@ const TaskBoard = () => {
           {/* flex-1 + min-h-0 lets this row fill the rest of the viewport
               (instead of stopping wherever the cards end), so the
               horizontal scrollbar sits at the bottom of the page like
-              Trello's board view, not right under a short column. */}
-          <div className="flex-1 min-h-0 flex gap-3 overflow-x-auto pb-4 -mx-1 px-1">
-            {columns.map((col) => (
-              <KanbanColumn
-                key={col.id}
-                column={col}
-                tasks={tasksByColumn[col.id] || []}
-                profiles={profiles}
-                onCreateTask={openCreate}
-                onOpenTask={openTask}
-                onDeleteColumn={deleteColumn}
-                canDelete={isOwnerOrAdmin}
-                checklistCounts={checklistCounts}
-              />
-            ))}
-          </div>
+              Trello's board view. items-start keeps each column sized to
+              its own cards (not stretched to the row's full height) —
+              KanbanColumn caps itself at max-h-full and scrolls internally
+              once a column's own cards exceed that. */}
+          <SortableContext items={columns.map((c) => c.id)} strategy={horizontalListSortingStrategy}>
+            <div className="flex-1 min-h-0 flex items-start gap-3 overflow-x-auto pb-4 -mx-1 px-1">
+              {columns.map((col) => (
+                <KanbanColumn
+                  key={col.id}
+                  column={col}
+                  tasks={tasksByColumn[col.id] || []}
+                  profiles={profiles}
+                  onCreateTask={openCreate}
+                  onOpenTask={openTask}
+                  onDeleteColumn={deleteColumn}
+                  onToggleComplete={toggleComplete}
+                  canDelete={isOwnerOrAdmin}
+                  canDrag={canEditBoard}
+                  canEditBoard={canEditBoard}
+                  currentUserId={user?.id}
+                  checklistCounts={checklistCounts}
+                />
+              ))}
+            </div>
+          </SortableContext>
 
           <DragOverlay>
             {draggingTask && (

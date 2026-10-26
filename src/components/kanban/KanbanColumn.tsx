@@ -1,5 +1,5 @@
-import { useDroppable } from "@dnd-kit/core";
-import { SortableContext, verticalListSortingStrategy } from "@dnd-kit/sortable";
+import { useSortable, SortableContext, verticalListSortingStrategy } from "@dnd-kit/sortable";
+import { CSS } from "@dnd-kit/utilities";
 import { Button } from "@/components/ui/button";
 import { Plus, MoreVertical, Trash2 } from "lucide-react";
 import { cn } from "@/lib/utils";
@@ -25,7 +25,15 @@ interface Props {
   onCreateTask: (columnId: string) => void;
   onOpenTask: (task: KanbanTask) => void;
   onDeleteColumn?: (columnId: string) => void;
+  onToggleComplete?: (task: KanbanTask) => void;
   canDelete?: boolean;
+  canDrag?: boolean;
+  // Board-level edit access (member/admin/workspace visibility). A task's
+  // own assignee can also toggle it complete even without board-level
+  // access — the "Members update tasks" RLS policy allows that too — so
+  // this alone doesn't decide per-card; see canToggleComplete below.
+  canEditBoard?: boolean;
+  currentUserId?: string;
   checklistCounts?: Record<string, { done: number; total: number }>;
 }
 
@@ -43,30 +51,55 @@ export function KanbanColumn({
   onCreateTask,
   onOpenTask,
   onDeleteColumn,
+  onToggleComplete,
   canDelete,
+  canDrag = true,
+  canEditBoard,
+  currentUserId,
   checklistCounts,
 }: Props) {
-  const { setNodeRef, isOver } = useDroppable({
+  // A column is both a sortable item (drag its header to reorder columns)
+  // and the droppable zone cards are dropped into — dnd-kit's useSortable
+  // covers both with the same id, which is what the task drag handlers
+  // already look up via `columns.some(c => c.id === overId)`. Dragging
+  // (not dropping) is disabled for read-only viewers (e.g. a non-member
+  // on a Public board) since task_columns RLS would reject their reorder.
+  const { attributes, listeners, setNodeRef, transform, transition, isDragging, isOver } = useSortable({
     id: column.id,
     data: { type: "column", column },
+    // Only disable dragging, not dropping — a boolean `disabled` would
+    // disable both, which would stop a task's own assignee (allowed to
+    // move their task even without board-level edit access) from
+    // dropping it into this column.
+    disabled: { draggable: !canDrag, droppable: false },
   });
+
+  const style = {
+    transform: CSS.Transform.toString(transform),
+    transition,
+  };
 
   const accent = COLUMN_ACCENT[column.status] || "from-primary/30 to-primary/0";
 
   return (
     <div
       ref={setNodeRef}
+      style={style}
       className={cn(
-        "min-w-[300px] w-[300px] h-full flex flex-col rounded-2xl",
+        "min-w-[300px] w-[300px] max-h-full flex flex-col rounded-2xl",
         "bg-muted/30 backdrop-blur-sm border border-border/60",
         "transition-all duration-200",
         isOver && "ring-2 ring-primary/50 bg-primary/5 scale-[1.01]",
+        isDragging && "opacity-40",
       )}
     >
-      {/* Header with subtle accent */}
+      {/* Header with subtle accent — also the column's drag handle */}
       <div
+        {...attributes}
+        {...(canDrag ? listeners : {})}
         className={cn(
           "relative rounded-t-2xl px-3 py-2.5 bg-gradient-to-b",
+          canDrag && "cursor-grab active:cursor-grabbing",
           accent,
         )}
       >
@@ -83,6 +116,7 @@ export function KanbanColumn({
               variant="ghost"
               className="h-7 w-7"
               onClick={() => onCreateTask(column.id)}
+              onPointerDown={(e) => e.stopPropagation()}
               aria-label="Add task"
             >
               <Plus className="h-3.5 w-3.5" />
@@ -90,7 +124,7 @@ export function KanbanColumn({
             {canDelete && onDeleteColumn && (
               <DropdownMenu>
                 <DropdownMenuTrigger asChild>
-                  <Button size="icon" variant="ghost" className="h-7 w-7">
+                  <Button size="icon" variant="ghost" className="h-7 w-7" onPointerDown={(e) => e.stopPropagation()}>
                     <MoreVertical className="h-3.5 w-3.5" />
                   </Button>
                 </DropdownMenuTrigger>
@@ -126,6 +160,8 @@ export function KanbanColumn({
                 task={t}
                 assignee={profiles.find((p) => p.id === t.assignee_id) || null}
                 onClick={() => onOpenTask(t)}
+                onToggleComplete={onToggleComplete ? () => onToggleComplete(t) : undefined}
+                canToggleComplete={!!canEditBoard || t.assignee_id === currentUserId}
                 checklistTotal={checklistCounts?.[t.id]?.total || 0}
                 checklistDone={checklistCounts?.[t.id]?.done || 0}
               />
