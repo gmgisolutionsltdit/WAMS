@@ -114,7 +114,7 @@ export const BoardSearchCreate = ({ className }: { className?: string }) => {
   };
 
   return (
-    <div className={cn("flex items-center gap-2 w-full max-w-md", className)}>
+    <div className={cn("flex items-center gap-2 w-full max-w-xl", className)}>
       <div className="relative flex-1">
         <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground pointer-events-none" />
         <Input
@@ -124,11 +124,8 @@ export const BoardSearchCreate = ({ className }: { className?: string }) => {
           onFocus={() => setSearchFocused(true)}
           onBlur={() => setTimeout(() => setSearchFocused(false), 150)}
           placeholder="Search boards"
-          className="pl-8 pr-8"
+          className="pl-8"
         />
-        {!searchFocused && !query && (
-          <kbd className="absolute right-2.5 top-1/2 -translate-y-1/2 text-[10px] text-muted-foreground border rounded px-1 py-0.5 pointer-events-none">/</kbd>
-        )}
         {searchFocused && (
           <div className="absolute z-20 mt-1 w-full rounded-md border bg-popover shadow-md overflow-hidden">
             <p className="px-3 pt-2 pb-1 text-xs font-semibold text-muted-foreground tracking-wide">
