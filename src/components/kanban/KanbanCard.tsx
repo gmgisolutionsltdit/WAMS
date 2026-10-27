@@ -133,7 +133,7 @@ export function KanbanCard({
             hover-revealed action buttons, matching Trello's card hover. */}
         <h4
           className={cn(
-            "flex-1 min-w-0 text-sm font-medium leading-snug line-clamp-2 text-left transition-all duration-200",
+            "flex-1 min-w-0 text-sm font-medium leading-snug line-clamp-2 text-left break-words transition-all duration-200",
             task.completed_at && "line-through text-muted-foreground",
           )}
         >
@@ -177,7 +177,7 @@ export function KanbanCard({
       </div>
 
       {task.description && (
-        <p className="text-xs text-muted-foreground line-clamp-2 mb-2">{task.description}</p>
+        <p className="text-xs text-muted-foreground line-clamp-2 mb-2 break-words">{task.description}</p>
       )}
 
       <div className="flex items-center justify-between mt-2">
