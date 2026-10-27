@@ -639,7 +639,18 @@ function MyPaymentsTab() {
       // silently saving a settlement the recovery ledger can't account for.
       const monthEndISO = format(new Date(Number(month.slice(0, 4)), Number(month.slice(5, 7)), 0), "yyyy-MM-dd");
       const recoveryNow = Math.max(0, -expensePaid);
-      const recoveryAlready = Math.max(0, -Number(existingSettlement?.expense_amount_paid || 0));
+      // What's actually been applied to the advance ledger for this month so
+      // far — read from expense_recovery_actions itself, not inferred from
+      // the settlement's own previously saved expense_amount_paid. A
+      // settlement recorded before this recovery-ledger existed carries a
+      // negative expense_amount_paid that was never actually applied to any
+      // claim, so trusting it here would make re-saving the same figure a
+      // silent no-op (delta 0) instead of backfilling the recovery once.
+      const { data: priorRecoveryActions } = await supabase
+        .from("expense_recovery_actions")
+        .select("amount")
+        .eq("user_id", selectedUserId).eq("month", `${month}-01`).eq("note", "Recorded via My Payments");
+      const recoveryAlready = (priorRecoveryActions || []).reduce((s, a) => s + Number(a.amount), 0);
       const recoveryDelta = recoveryNow - recoveryAlready;
       let advanceClaims: { id: string; amount: number; recovered_amount: number }[] = [];
       if (recoveryDelta > 0) {
