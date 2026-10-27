@@ -11,7 +11,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/u
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { toast } from "sonner";
 import { format } from "date-fns";
-import { Check, X, Clock, Users, Timer, Pencil, Trash2 } from "lucide-react";
+import { Check, X, Clock, Users, Timer, Pencil, Trash2, ChevronLeft, ChevronRight } from "lucide-react";
 import { useRealtimeSubscription } from "@/hooks/useRealtimeSubscription";
 import { notifyEmployee } from "@/lib/notifications";
 import { applyOTFulfillment } from "@/lib/otFulfillment";
@@ -21,6 +21,7 @@ import AttachmentThumbnails from "@/components/AttachmentThumbnails";
 /** RLS blocks a disallowed update/delete without an error — it just matches 0 rows,
  *  which would otherwise look like silent success. */
 const NOT_ALLOWED = "You're not assigned as this employee's approver, so this action didn't go through.";
+const HISTORY_PAGE_SIZE = 5;
 
 const otStatusStyle = (status: string) => {
   if (status === "approved") return "bg-lime-500 text-white hover:bg-lime-600 border-lime-500";
@@ -43,6 +44,10 @@ const Approvals = () => {
   const [loanHistory, setLoanHistory] = useState<any[]>([]);
   const [expensePending, setExpensePending] = useState<any[]>([]);
   const [expenseHistory, setExpenseHistory] = useState<any[]>([]);
+  const [historyTab, setHistoryTab] = useState("overtime");
+  const [historyPage, setHistoryPage] = useState<Record<string, number>>({
+    overtime: 1, late: 1, leave: 1, loan: 1, expense: 1,
+  });
   const [leaveTypeNames, setLeaveTypeNames] = useState<Record<string, string>>({});
   const [names, setNames] = useState<Record<string, string>>({});
   const [notes, setNotes] = useState<Record<string, string>>({});
@@ -702,13 +707,37 @@ const Approvals = () => {
       </Card>
 
       {/* History — every decided request, grouped into tabs by type */}
+      {(() => {
+        const historyData: Record<string, any[]> = {
+          overtime: history, late: lateHistory, leave: leaveHistory, loan: loanHistory, expense: expenseHistory,
+        };
+        const activeHistory = historyData[historyTab] || [];
+        const historyPageCount = Math.max(1, Math.ceil(activeHistory.length / HISTORY_PAGE_SIZE));
+        const currentHistoryPage = Math.min(historyPage[historyTab] || 1, historyPageCount);
+        const setCurrentHistoryPage = (p: number) => setHistoryPage((prev) => ({ ...prev, [historyTab]: p }));
+        const pageSlice = (rows: any[]) =>
+          rows.slice((currentHistoryPage - 1) * HISTORY_PAGE_SIZE, currentHistoryPage * HISTORY_PAGE_SIZE);
+        return (
       <Card>
         <CardHeader>
-          <CardTitle>History</CardTitle>
+          <div className="flex items-start justify-between gap-3">
+            <CardTitle>History</CardTitle>
+            {activeHistory.length > HISTORY_PAGE_SIZE && (
+              <div className="flex items-center gap-2 shrink-0">
+                <Button variant="outline" size="sm" disabled={currentHistoryPage <= 1} onClick={() => setCurrentHistoryPage(currentHistoryPage - 1)}>
+                  <ChevronLeft className="h-4 w-4 mr-1" /> Previous
+                </Button>
+                <span className="text-sm text-muted-foreground whitespace-nowrap">Page {currentHistoryPage} of {historyPageCount}</span>
+                <Button variant="outline" size="sm" disabled={currentHistoryPage >= historyPageCount} onClick={() => setCurrentHistoryPage(currentHistoryPage + 1)}>
+                  Next <ChevronRight className="h-4 w-4 ml-1" />
+                </Button>
+              </div>
+            )}
+          </div>
           <CardDescription>Track every decided request and how it was resolved.</CardDescription>
         </CardHeader>
         <CardContent>
-          <Tabs defaultValue="overtime">
+          <Tabs value={historyTab} onValueChange={setHistoryTab}>
             <TabsList>
               <TabsTrigger value="overtime">Overtime</TabsTrigger>
               <TabsTrigger value="late">Late Time</TabsTrigger>
@@ -731,7 +760,7 @@ const Approvals = () => {
                 <TableBody>
                   {history.length === 0 ? (
                     <TableRow><TableCell colSpan={5} className="text-center text-muted-foreground">No history yet</TableCell></TableRow>
-                  ) : history.map((req) => (
+                  ) : pageSlice(history).map((req) => (
                     <TableRow key={req.id}>
                       <TableCell>{(req.profiles as any)?.full_name || (req.profiles as any)?.email || "Unknown"}</TableCell>
                       <TableCell>{format(new Date(req.date), "MMM d, yyyy")}</TableCell>
@@ -769,7 +798,7 @@ const Approvals = () => {
                 <TableBody>
                   {lateHistory.length === 0 ? (
                     <TableRow><TableCell colSpan={8} className="text-center text-muted-foreground">No late time request history yet</TableCell></TableRow>
-                  ) : lateHistory.map((req) => (
+                  ) : pageSlice(lateHistory).map((req) => (
                     <TableRow key={req.id}>
                       <TableCell className="font-medium">{names[req.user_id] || "Unknown"}</TableCell>
                       <TableCell>
@@ -814,7 +843,7 @@ const Approvals = () => {
                 <TableBody>
                   {leaveHistory.length === 0 ? (
                     <TableRow><TableCell colSpan={8} className="text-center text-muted-foreground">No leave request history yet</TableCell></TableRow>
-                  ) : leaveHistory.map((req) => (
+                  ) : pageSlice(leaveHistory).map((req) => (
                     <TableRow key={req.id}>
                       <TableCell className="font-medium">{names[req.user_id] || "Unknown"}</TableCell>
                       <TableCell><Badge variant="outline">{leaveTypeNames[req.leave_type_id] || "—"}</Badge></TableCell>
@@ -854,7 +883,7 @@ const Approvals = () => {
                 <TableBody>
                   {loanHistory.length === 0 ? (
                     <TableRow><TableCell colSpan={7} className="text-center text-muted-foreground">No loan history yet</TableCell></TableRow>
-                  ) : loanHistory.map((loan) => (
+                  ) : pageSlice(loanHistory).map((loan) => (
                     <TableRow key={loan.id}>
                       <TableCell className="font-medium">{names[loan.user_id] || "Unknown"}</TableCell>
                       <TableCell className="whitespace-nowrap">{format(new Date(loan.created_at), "MMM d, yyyy")}</TableCell>
@@ -891,7 +920,7 @@ const Approvals = () => {
                 <TableBody>
                   {expenseHistory.length === 0 ? (
                     <TableRow><TableCell colSpan={7} className="text-center text-muted-foreground">No expense history yet</TableCell></TableRow>
-                  ) : expenseHistory.map((claim) => (
+                  ) : pageSlice(expenseHistory).map((claim) => (
                     <TableRow key={claim.id}>
                       <TableCell className="font-medium">{names[claim.user_id] || "Unknown"}</TableCell>
                       <TableCell className="whitespace-nowrap">{format(new Date(claim.claim_date), "MMM d, yyyy")}</TableCell>
@@ -914,6 +943,8 @@ const Approvals = () => {
           </Tabs>
         </CardContent>
       </Card>
+        );
+      })()}
 
       <Dialog open={editOpen} onOpenChange={setEditOpen}>
         <DialogContent>

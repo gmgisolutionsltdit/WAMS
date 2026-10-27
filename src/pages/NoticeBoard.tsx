@@ -398,7 +398,20 @@ const NoticeBoard = () => {
       {!showArchived && (
       <Card>
         <CardHeader>
-          <CardTitle className="text-base flex items-center gap-2"><CalendarClock className="h-4 w-4" /> Requests Activity</CardTitle>
+          <div className="flex items-start justify-between gap-3">
+            <CardTitle className="text-base flex items-center gap-2"><CalendarClock className="h-4 w-4" /> Requests Activity</CardTitle>
+            {filteredActivity.length > PAGE_SIZE && (
+              <div className="flex items-center gap-2 shrink-0">
+                <Button variant="outline" size="sm" disabled={currentActivityPage <= 1} onClick={() => setActivityPage(currentActivityPage - 1)}>
+                  <ChevronLeft className="h-4 w-4 mr-1" /> Previous
+                </Button>
+                <span className="text-sm text-muted-foreground whitespace-nowrap">Page {currentActivityPage} of {activityPageCount}</span>
+                <Button variant="outline" size="sm" disabled={currentActivityPage >= activityPageCount} onClick={() => setActivityPage(currentActivityPage + 1)}>
+                  Next <ChevronRight className="h-4 w-4 ml-1" />
+                </Button>
+              </div>
+            )}
+          </div>
           <CardDescription>Requests and decisions you're involved in or can approve.</CardDescription>
         </CardHeader>
         <CardContent className="space-y-3">
@@ -495,17 +508,6 @@ const NoticeBoard = () => {
                   </div>
                 </div>
               ))}
-              {filteredActivity.length > PAGE_SIZE && (
-                <div className="flex items-center justify-center gap-3 pt-2">
-                  <Button variant="outline" size="sm" disabled={currentActivityPage <= 1} onClick={() => setActivityPage(currentActivityPage - 1)}>
-                    <ChevronLeft className="h-4 w-4 mr-1" /> Previous
-                  </Button>
-                  <span className="text-sm text-muted-foreground">Page {currentActivityPage} of {activityPageCount}</span>
-                  <Button variant="outline" size="sm" disabled={currentActivityPage >= activityPageCount} onClick={() => setActivityPage(currentActivityPage + 1)}>
-                    Next <ChevronRight className="h-4 w-4 ml-1" />
-                  </Button>
-                </div>
-              )}
             </>
           )}
         </CardContent>
