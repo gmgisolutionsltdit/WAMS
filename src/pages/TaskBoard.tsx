@@ -463,9 +463,22 @@ const TaskBoard = () => {
 
   /* ---------- Render ---------- */
   if (loading) {
+    // Keep the same page shell (back button, search bar) in place instead of
+    // blanking the whole panel to a bare spinner — less jarring when
+    // switching into a board from the sidebar.
     return (
-      <div className="flex items-center justify-center py-24 text-muted-foreground">
-        <Loader2 className="h-5 w-5 mr-2 animate-spin" /> Loading project…
+      <div className="flex flex-col gap-4">
+        <div className="flex justify-center shrink-0">
+          <BoardSearchCreate />
+        </div>
+        <div className="flex items-center gap-3 shrink-0">
+          <Button size="icon" variant="ghost" onClick={() => navigate("/tasks")}>
+            <ArrowLeft className="h-4 w-4" />
+          </Button>
+          <div className="flex items-center gap-2 text-muted-foreground text-sm py-6">
+            <Loader2 className="h-4 w-4 animate-spin" /> Loading board…
+          </div>
+        </div>
       </div>
     );
   }
