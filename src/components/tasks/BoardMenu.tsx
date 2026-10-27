@@ -66,9 +66,13 @@ export const BoardMenu = ({ project, canEdit, onOpenMembers, onProjectUpdated, o
 
   const restoreTask = async (taskId: string) => {
     setRestoringId(taskId);
-    const { error } = await supabase.from("tasks").update({ archived: false }).eq("id", taskId);
+    // "Members update tasks" RLS can reject this for a non-editor viewer of
+    // a Public board without raising an error — ask for the row back so a
+    // zero-row (RLS-filtered) update is reported as a failure, not success.
+    const { data, error } = await supabase.from("tasks").update({ archived: false }).eq("id", taskId).select("id");
     setRestoringId(null);
     if (error) { toast.error(error.message); return; }
+    if (!data || data.length === 0) { toast.error("You don't have permission to restore this card."); return; }
     setArchivedTasks((prev) => prev.filter((t) => t.id !== taskId));
     onTaskRestored?.();
     toast.success("Card restored");

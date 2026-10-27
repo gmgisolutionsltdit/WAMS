@@ -143,13 +143,16 @@ const TaskBoard = () => {
       }
       setBoardId(bId);
 
-      const [{ data: cols }, { data: tks }] = await Promise.all([
+      const [{ data: cols }, { data: tks }, { count: totalCount }] = await Promise.all([
         supabase.from("task_columns").select("*").eq("board_id", bId).order("position"),
         supabase.from("tasks").select("*").eq("project_id", projectId).eq("archived", false).order("position"),
+        // Ticket keys must stay unique even once a task is archived (it keeps
+        // its key), so count all tasks here, not just the active ones above.
+        supabase.from("tasks").select("id", { count: "exact", head: true }).eq("project_id", projectId),
       ]);
       setColumns((cols || []) as KanbanColumnData[]);
       setTasks((tks || []) as KanbanTask[]);
-      setTaskCounter((tks || []).length);
+      setTaskCounter(totalCount || 0);
 
       const taskIds = (tks || []).map((t: any) => t.id);
       if (taskIds.length > 0) {
