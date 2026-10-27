@@ -13,7 +13,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, Dialog
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
-import { Plus, Check, X, FileText, AlertTriangle, Loader2, Trash2 } from "lucide-react";
+import { Plus, Check, X, FileText, AlertTriangle, Loader2, Trash2, Download } from "lucide-react";
 import { toast } from "sonner";
 import { format } from "date-fns";
 import { notifyManagersAndAdmins, notifyEmployee } from "@/lib/notifications";
@@ -1143,6 +1143,41 @@ const PAYMENT_STATUS_LABEL: Record<SalaryMonthRow["paymentStatus"], string> = {
   paid: "Paid",
 };
 
+function exportAdminSalaryCSV(rows: SalaryMonthRow[]) {
+  const headers = [
+    "Employee", "Month", "Gross", "Basic (50%)", "House Rent (35%)", "Conveyance (10%)", "Medical (5%)",
+    "+ OT Payment", "- Due Deduction", "Net Adjustment", "- Expense", "Loan", "Final", "Payment Status",
+  ];
+  const dataRows = rows.map((r) => [
+    r.name,
+    fmtMonthLabel(r.month),
+    r.gross,
+    r.basic,
+    r.houseRent,
+    r.conveyance,
+    r.medical,
+    r.otPayment,
+    -r.dueDeduction,
+    r.netAdjustment,
+    -r.recoveryTotal,
+    r.loanPaid,
+    r.final,
+    PAYMENT_STATUS_LABEL[r.paymentStatus],
+  ]);
+  const csvField = (value: unknown) => {
+    const s = String(value);
+    return /[",\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
+  };
+  const csv = [headers, ...dataRows].map((row) => row.map(csvField).join(",")).join("\n");
+
+  const blob = new Blob([csv], { type: "text/csv" });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = `monthly-salary-summary-${format(new Date(), "yyyy-MM-dd")}.csv`;
+  a.click();
+}
+
 function SalaryMonthlyTableView({ rows, showEmployee, loading }: { rows: SalaryMonthRow[]; showEmployee: boolean; loading: boolean }) {
   const colCount = (showEmployee ? 12 : 10) + 2;
   return (
@@ -1296,7 +1331,12 @@ function AdminSalaryMonthlyTable() {
   return (
     <Card>
       <CardHeader>
-        <CardTitle className="text-base">Monthly Salary Summary — All Employees</CardTitle>
+        <div className="flex items-start justify-between gap-3">
+          <CardTitle className="text-base">Monthly Salary Summary — All Employees</CardTitle>
+          <Button variant="outline" size="sm" className="shrink-0" onClick={() => exportAdminSalaryCSV(rows)}>
+            <Download className="h-4 w-4 mr-2" /> Export CSV
+          </Button>
+        </div>
         <CardDescription>Every selected employee's month-wise breakdown — the same figures as the Salary Summary segment above.</CardDescription>
         <div className="flex flex-wrap items-start gap-3 pt-2">
           <div className="space-y-1"><Label className="text-xs">Month From</Label><Input type="month" value={monthFrom} onChange={(e) => setMonthFrom(e.target.value)} /></div>

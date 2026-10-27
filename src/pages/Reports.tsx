@@ -7,7 +7,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Badge } from "@/components/ui/badge";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Download, ChevronDown, ChevronRight, Trash2 } from "lucide-react";
+import { ChevronDown, ChevronRight, Trash2 } from "lucide-react";
 import { format } from "date-fns";
 import { toast } from "sonner";
 import { useAuth } from "@/contexts/AuthContext";
@@ -80,32 +80,6 @@ const Reports = () => {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  const exportCSV = () => {
-    const headers = ["Employee", "Department", "Date", "First In", "Last Out", "Sessions", "Break", "Total Worked", "Overtime"];
-    const rows = days.map((d) => {
-      const p: any = d.profiles;
-      return [
-        p?.full_name || "",
-        p?.department || "",
-        d.date,
-        fmtClock(d.firstIn),
-        d.open ? "In progress" : fmtClock(d.lastOut),
-        d.sessions.length,
-        fmtHMS(d.breakSeconds),
-        fmtHMS(d.workedSeconds),
-        hoursToHMS(d.overtimeHours),
-      ];
-    });
-    const csv = [headers, ...rows].map((r) => r.join(",")).join("\n");
-
-    const blob = new Blob([csv], { type: "text/csv" });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = `overtime-report-${format(new Date(), "yyyy-MM-dd")}.csv`;
-    a.click();
-  };
-
   const clearFilters = () => {
     setDateFrom(""); setDateTo(""); setName(""); setDepartment("all"); setMonthFrom(""); setMonthTo("");
   };
@@ -135,10 +109,7 @@ const Reports = () => {
       <TabsContent value="attendance">
       <Card>
       <CardHeader>
-        <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
-          <CardTitle>Attendance & Overtime Reports</CardTitle>
-          <Button variant="outline" onClick={exportCSV}><Download className="h-4 w-4 mr-2" /> Export CSV</Button>
-        </div>
+        <CardTitle>Attendance & Overtime Reports</CardTitle>
       </CardHeader>
       <CardContent className="space-y-4">
         <div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-7 gap-4 items-end">
