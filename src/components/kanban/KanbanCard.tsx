@@ -140,13 +140,24 @@ export function KanbanCard({
           {task.title}
         </h4>
         {!isOverlay && (
-          <div className="flex items-center gap-0.5 shrink-0 opacity-0 group-hover:opacity-100 translate-x-1 group-hover:translate-x-0 transition-all duration-200">
+          <div
+            className={cn(
+              "flex items-center gap-0.5 shrink-0 transition-all duration-200",
+              // Visible by default (keyboard/touch, which have no hover) —
+              // only a device that actually supports hover hides it until
+              // the card is hovered or a button inside it gets focus.
+              "opacity-100 translate-x-0",
+              "[@media(hover:hover)]:opacity-0 [@media(hover:hover)]:translate-x-1",
+              "group-hover:opacity-100 group-hover:translate-x-0",
+              "group-focus-within:opacity-100 group-focus-within:translate-x-0",
+            )}
+          >
             {task.completed_at && onArchive && canArchive && (
               <button
                 type="button"
                 onClick={(e) => { e.stopPropagation(); onArchive(); }}
                 onPointerDown={(e) => e.stopPropagation()}
-                className="p-0.5 rounded hover:bg-muted text-muted-foreground"
+                className="p-0.5 rounded hover:bg-muted focus-visible:bg-muted text-muted-foreground"
                 aria-label="Archive card"
               >
                 <Archive className="h-3 w-3" />
@@ -156,7 +167,7 @@ export function KanbanCard({
               type="button"
               onClick={(e) => { e.stopPropagation(); onClick(); }}
               onPointerDown={(e) => e.stopPropagation()}
-              className="p-0.5 rounded hover:bg-muted text-muted-foreground"
+              className="p-0.5 rounded hover:bg-muted focus-visible:bg-muted text-muted-foreground"
               aria-label="Edit card"
             >
               <Pencil className="h-3 w-3" />
