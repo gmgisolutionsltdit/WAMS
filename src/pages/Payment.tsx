@@ -1773,6 +1773,16 @@ function ExpenseClaimsTab() {
   };
 
   const deleteClaim = async (id: string) => {
+    // An advance already (partially) recovered via My Payments has
+    // expense_recovery_actions rows tied to it by ON DELETE CASCADE —
+    // deleting the claim would silently wipe that ledger history, and the
+    // settlement that recorded the recovery would be left with nothing to
+    // reconcile against on its next save.
+    const claim = claims.find((c) => c.id === id);
+    if (claim && Number(claim.recovered_amount) > 0) {
+      toast.error("This claim has already been partially or fully recovered via My Payments and can't be deleted.");
+      return;
+    }
     if (!window.confirm("Delete this claim? This cannot be undone.")) return;
     // RLS blocking this doesn't error — it just matches 0 rows, which would
     // otherwise look like silent success while the row stays put.
