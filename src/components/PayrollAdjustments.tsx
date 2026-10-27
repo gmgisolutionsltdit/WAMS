@@ -64,7 +64,7 @@ export const PayrollAdjustments = ({ isAdmin }: { isAdmin: boolean }) => {
         // "Approved Overtime" figure Reports > Performance History shows) -
         // not actual worked overtime from attendance.
         supabase.from("overtime_requests").select("requested_hours")
-          .eq("user_id", targetUserId).eq("status", "approved").gte("date", monthStartISO).lte("date", monthEndISO),
+          .eq("user_id", targetUserId).in("status", ["approved", "modified"]).gte("date", monthStartISO).lte("date", monthEndISO),
       ]);
 
       const sched = (prof as Schedule) || null;

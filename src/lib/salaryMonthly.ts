@@ -67,7 +67,7 @@ export const computeMonthlySalaryRows = async (
     // OT Payment is based on approved overtime requests only (same "Approved
     // Overtime" figure Reports > Performance History shows) - not actual
     // worked overtime from attendance.
-    supabase.from("overtime_requests").select("user_id, date, requested_hours").in("user_id", targetIds).eq("status", "approved").gte("date", rangeStart).lte("date", rangeEnd),
+    supabase.from("overtime_requests").select("user_id, date, requested_hours").in("user_id", targetIds).in("status", ["approved", "modified"]).gte("date", rangeStart).lte("date", rangeEnd),
   ]);
 
   type ProfileRow = Schedule & { id: string; full_name: string | null; email: string | null; base_salary: number | null };

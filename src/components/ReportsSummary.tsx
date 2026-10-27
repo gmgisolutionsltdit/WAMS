@@ -154,7 +154,7 @@ const ReportsSummary = () => {
           return q;
         })(),
         (() => {
-          let q = supabase.from("overtime_requests").select("user_id, date, requested_hours").in("user_id", targetIds).eq("status", "approved");
+          let q = supabase.from("overtime_requests").select("user_id, date, requested_hours").in("user_id", targetIds).in("status", ["approved", "modified"]);
           if (effectiveRange.from) q = q.gte("date", effectiveRange.from);
           if (effectiveRange.to) q = q.lte("date", effectiveRange.to);
           return q;

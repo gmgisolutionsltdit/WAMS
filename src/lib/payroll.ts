@@ -59,7 +59,7 @@ export async function fetchApprovedOTHours(
     .from("overtime_requests")
     .select("requested_hours, status, date")
     .eq("user_id", userId)
-    .eq("status", "approved")
+    .in("status", ["approved", "modified"])
     .gte("date", start)
     .lt("date", end);
   if (error) throw error;
