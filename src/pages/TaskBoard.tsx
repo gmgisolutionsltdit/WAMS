@@ -143,13 +143,16 @@ const TaskBoard = () => {
       }
       setBoardId(bId);
 
-      const [{ data: cols }, { data: tks }] = await Promise.all([
+      const [{ data: cols }, { data: tks }, { count: totalCount }] = await Promise.all([
         supabase.from("task_columns").select("*").eq("board_id", bId).order("position"),
-        supabase.from("tasks").select("*").eq("project_id", projectId).order("position"),
+        supabase.from("tasks").select("*").eq("project_id", projectId).eq("archived", false).order("position"),
+        // Ticket keys must stay unique even once a task is archived (it keeps
+        // its key), so count all tasks here, not just the active ones above.
+        supabase.from("tasks").select("id", { count: "exact", head: true }).eq("project_id", projectId),
       ]);
       setColumns((cols || []) as KanbanColumnData[]);
       setTasks((tks || []) as KanbanTask[]);
-      setTaskCounter((tks || []).length);
+      setTaskCounter(totalCount || 0);
 
       const taskIds = (tks || []).map((t: any) => t.id);
       if (taskIds.length > 0) {
@@ -421,6 +424,18 @@ const TaskBoard = () => {
     if (error) { toast.error(error.message); fetchAll(); }
   };
 
+  // Trello-style "archive" on a completed card — hides it from the board
+  // without deleting it, so comments/checklist/attachments/activity stay
+  // intact. A soft update (not delete) also goes through the same "Members
+  // update tasks" RLS policy as the complete-toggle, so a board member or
+  // the task's own assignee (not just the owner/admin) can archive it too.
+  const archiveTask = async (task: KanbanTask) => {
+    setTasks((prev) => prev.filter((t) => t.id !== task.id));
+    const { error } = await supabase.from("tasks").update({ archived: true }).eq("id", task.id);
+    if (error) { toast.error(error.message); fetchAll(); return; }
+    toast.success("Card archived");
+  };
+
   /* ---------- Column CRUD ---------- */
   const addColumn = async () => {
     if (!newColName.trim() || !boardId) return;
@@ -552,6 +567,7 @@ const TaskBoard = () => {
             canEdit={isOwnerOrAdmin}
             onOpenMembers={() => setMembersOpen(true)}
             onProjectUpdated={(patch) => setProject((p) => ({ ...p, ...patch }))}
+            onTaskRestored={fetchAll}
           />
         </div>
       </div>
@@ -594,6 +610,7 @@ const TaskBoard = () => {
                   onOpenTask={openTask}
                   onDeleteColumn={deleteColumn}
                   onToggleComplete={toggleComplete}
+                  onArchiveTask={archiveTask}
                   canDelete={isOwnerOrAdmin}
                   canDrag={canEditBoard}
                   canEditBoard={canEditBoard}

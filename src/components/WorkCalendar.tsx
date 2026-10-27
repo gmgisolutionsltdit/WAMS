@@ -61,6 +61,7 @@ export default function WorkCalendar() {
           .from("tasks")
           .select("id,title,due_date,start_date,priority,status")
           .eq("assignee_id", user.id)
+          .eq("archived", false)
           .not("due_date", "is", null)
           .gte("due_date", fromISO)
           .lte("due_date", toISO),

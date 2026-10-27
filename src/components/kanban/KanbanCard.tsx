@@ -1,7 +1,7 @@
 import { useSortable } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
-import { Calendar as CalendarIcon, AlertTriangle, MessageSquare, CheckSquare, CheckCircle2, Circle, Pencil } from "lucide-react";
+import { Calendar as CalendarIcon, AlertTriangle, MessageSquare, CheckSquare, CheckCircle2, Circle, Pencil, Archive } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 export type KanbanTask = {
@@ -16,6 +16,7 @@ export type KanbanTask = {
   status: string;
   position: number;
   completed_at?: string | null;
+  archived?: boolean;
 };
 
 export type Profile = {
@@ -38,6 +39,8 @@ interface Props {
   onClick: () => void;
   onToggleComplete?: () => void;
   canToggleComplete?: boolean;
+  onArchive?: () => void;
+  canArchive?: boolean;
   isOverlay?: boolean;
   commentCount?: number;
   checklistTotal?: number;
@@ -50,6 +53,8 @@ export function KanbanCard({
   onClick,
   onToggleComplete,
   canToggleComplete = true,
+  onArchive,
+  canArchive = true,
   isOverlay,
   commentCount = 0,
   checklistTotal = 0,
@@ -81,11 +86,12 @@ export function KanbanCard({
         if (!isDragging) onClick();
       }}
       className={cn(
-        "group cursor-grab active:cursor-grabbing select-none",
+        "group cursor-grab active:cursor-grabbing select-none text-left",
         "bg-card/70 backdrop-blur-md border border-border/60 rounded-xl p-3",
-        "shadow-sm hover:shadow-md hover:border-primary/40",
-        "transition-all duration-200",
-        "hover:-translate-y-0.5",
+        "shadow-sm transition-all duration-200",
+        task.completed_at
+          ? "opacity-60 saturate-50 hover:opacity-90"
+          : "hover:shadow-md hover:border-primary/40 hover:-translate-y-0.5",
         isOverlay && "rotate-2 scale-105 shadow-2xl ring-2 ring-primary/40 cursor-grabbing",
       )}
     >
@@ -93,28 +99,15 @@ export function KanbanCard({
         {task.ticket_key && (
           <span className="text-[10px] font-mono text-muted-foreground tracking-wide">{task.ticket_key}</span>
         )}
-        <div className="flex items-center gap-1 ml-auto">
-          <span
-            className={cn(
-              "text-[10px] font-medium px-1.5 py-0.5 rounded-full ring-1",
-              priority.bg,
-              priority.ring,
-            )}
-          >
-            {priority.label}
-          </span>
-          {!isOverlay && (
-            <button
-              type="button"
-              onClick={(e) => { e.stopPropagation(); onClick(); }}
-              onPointerDown={(e) => e.stopPropagation()}
-              className="opacity-0 group-hover:opacity-100 transition-opacity p-0.5 rounded hover:bg-muted text-muted-foreground"
-              aria-label="Edit card"
-            >
-              <Pencil className="h-3 w-3" />
-            </button>
+        <span
+          className={cn(
+            "ml-auto text-[10px] font-medium px-1.5 py-0.5 rounded-full ring-1",
+            priority.bg,
+            priority.ring,
           )}
-        </div>
+        >
+          {priority.label}
+        </span>
       </div>
 
       <div className="flex items-start gap-1.5 mb-2">
@@ -136,14 +129,51 @@ export function KanbanCard({
             )}
           </button>
         )}
+        {/* Title grows to fill the row and smoothly yields space to the
+            hover-revealed action buttons, matching Trello's card hover. */}
         <h4
           className={cn(
-            "text-sm font-medium leading-snug line-clamp-2",
+            "flex-1 min-w-0 text-sm font-medium leading-snug line-clamp-2 text-left transition-all duration-200",
             task.completed_at && "line-through text-muted-foreground",
           )}
         >
           {task.title}
         </h4>
+        {!isOverlay && (
+          <div
+            className={cn(
+              "flex items-center gap-0.5 shrink-0 transition-all duration-200",
+              // Visible by default (keyboard/touch, which have no hover) —
+              // only a device that actually supports hover hides it until
+              // the card is hovered or a button inside it gets focus.
+              "opacity-100 translate-x-0",
+              "[@media(hover:hover)]:opacity-0 [@media(hover:hover)]:translate-x-1",
+              "group-hover:opacity-100 group-hover:translate-x-0",
+              "group-focus-within:opacity-100 group-focus-within:translate-x-0",
+            )}
+          >
+            {task.completed_at && onArchive && canArchive && (
+              <button
+                type="button"
+                onClick={(e) => { e.stopPropagation(); onArchive(); }}
+                onPointerDown={(e) => e.stopPropagation()}
+                className="p-0.5 rounded hover:bg-muted focus-visible:bg-muted text-muted-foreground"
+                aria-label="Archive card"
+              >
+                <Archive className="h-3 w-3" />
+              </button>
+            )}
+            <button
+              type="button"
+              onClick={(e) => { e.stopPropagation(); onClick(); }}
+              onPointerDown={(e) => e.stopPropagation()}
+              className="p-0.5 rounded hover:bg-muted focus-visible:bg-muted text-muted-foreground"
+              aria-label="Edit card"
+            >
+              <Pencil className="h-3 w-3" />
+            </button>
+          </div>
+        )}
       </div>
 
       {task.description && (

@@ -2329,6 +2329,7 @@ export type Database = {
       tasks: {
         Row: {
           actual_hours: number | null
+          archived: boolean
           assignee_id: string | null
           board_id: string | null
           column_id: string | null
@@ -2353,6 +2354,7 @@ export type Database = {
         }
         Insert: {
           actual_hours?: number | null
+          archived?: boolean
           assignee_id?: string | null
           board_id?: string | null
           column_id?: string | null
@@ -2377,6 +2379,7 @@ export type Database = {
         }
         Update: {
           actual_hours?: number | null
+          archived?: boolean
           assignee_id?: string | null
           board_id?: string | null
           column_id?: string | null

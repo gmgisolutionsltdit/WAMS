@@ -345,6 +345,7 @@ const EmployeeProfile = () => {
       supabase.from("tasks")
         .select("id, title, status, priority, due_date, project_id, projects(name, key)")
         .eq("assignee_id", id)
+        .eq("archived", false)
         .order("updated_at", { ascending: false })
         .limit(50),
     ]);
