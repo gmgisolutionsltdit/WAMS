@@ -585,7 +585,11 @@ function MyPaymentsTab() {
       // so a partial payment last month reduces what's still outstanding now.
       const expenseTotal = (claims || []).filter((c) => c.entry_type !== "advance").reduce((s, c) => s + Number(c.amount), 0);
       const advanceOutstanding = (claims || []).filter((c) => c.entry_type === "advance").reduce((s, c) => s + Math.max(0, Number(c.amount) - Number(c.recovered_amount || 0)), 0);
-      const paidSoFar = (priorSettlements || []).reduce((s, p) => s + Number(p.expense_amount_paid || 0), 0);
+      // Only the positive (genuine expense reimbursement) portion of a prior
+      // settlement counts here — a negative portion (advance recovery) is
+      // now tracked directly on the claim via recovered_amount (applied in
+      // submit() below), so including it here too would subtract it twice.
+      const paidSoFar = (priorSettlements || []).reduce((s, p) => s + Math.max(0, Number(p.expense_amount_paid) || 0), 0);
       const outstanding = expenseTotal - advanceOutstanding - paidSoFar;
       setExpenseOutstanding(outstanding);
       setExpenseAmount(String(outstanding));
@@ -1031,7 +1035,11 @@ function MyPaymentsSummary() {
 
       const expenseTotal = (claims || []).filter((c) => c.entry_type !== "advance").reduce((s, c) => s + Number(c.amount), 0);
       const advanceOutstanding = (claims || []).filter((c) => c.entry_type === "advance").reduce((s, c) => s + Math.max(0, Number(c.amount) - Number(c.recovered_amount || 0)), 0);
-      const paidSoFar = (priorSettlements || []).reduce((s, p) => s + Number(p.expense_amount_paid || 0), 0);
+      // Only the positive (genuine expense reimbursement) portion of a prior
+      // settlement counts here — a negative portion (advance recovery) is
+      // now tracked directly on the claim via recovered_amount, so including
+      // it here too would subtract it twice.
+      const paidSoFar = (priorSettlements || []).reduce((s, p) => s + Math.max(0, Number(p.expense_amount_paid) || 0), 0);
       setExpenseOutstanding(expenseTotal - advanceOutstanding - paidSoFar);
 
       setHistory(historyRows || []);
