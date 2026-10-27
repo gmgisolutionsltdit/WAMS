@@ -19,7 +19,7 @@ import { applyOTFulfillment } from "@/lib/otFulfillment";
 import TimeWithMeridiem from "@/components/TimeWithMeridiem";
 import LateTimeRequestDialog from "@/components/LateTimeRequestDialog";
 import LeaveManagement from "@/pages/LeaveManagement";
-import { min48hDateISO, max2DaysAheadISO, isWithin48h, canBypass48h, RETRO_LOCK_MESSAGE } from "@/lib/dateRules";
+import { min48hDateISO, max2DaysAheadISO, isWithin48h, canBypass48h, RETRO_LOCK_MESSAGE, violatesOTLeadTime, OT_LEAD_TIME_MESSAGE, OT_MIN_LEAD_HOURS } from "@/lib/dateRules";
 import AttachmentsInput from "@/components/AttachmentsInput";
 import AttachmentThumbnails from "@/components/AttachmentThumbnails";
 import { uploadAttachments } from "@/lib/attachments";
@@ -134,6 +134,7 @@ const OTRequests = () => {
       return;
     }
     if (!canBypass48h(role) && !isWithin48h(date)) { toast.error(RETRO_LOCK_MESSAGE); return; }
+    if (!useCurrentTime && violatesOTLeadTime(date, startTime)) { toast.error(OT_LEAD_TIME_MESSAGE); return; }
     setLoading(true);
     try {
       const attachmentUrls = attachments.length ? await uploadAttachments(attachments, user.id) : [];
@@ -305,6 +306,9 @@ const OTRequests = () => {
                     <TimeWithMeridiem label="End Time" value={endTime} onChange={setEndTime} required />
                   </div>
                 )}
+                {!useCurrentTime && violatesOTLeadTime(date, startTime) && (
+                  <p className="text-xs text-destructive">{OT_LEAD_TIME_MESSAGE}</p>
+                )}
                 {!useCurrentTime && startTime && endTime && calculatedHours && (
                   <p className="text-sm text-muted-foreground">
                     {startTime} → {endTime}
@@ -321,7 +325,12 @@ const OTRequests = () => {
                   <Textarea placeholder="Describe the reason for overtime work..." value={reason} onChange={(e) => setReason(e.target.value)} required rows={3} />
                 </div>
                 <AttachmentsInput files={attachments} onChange={setAttachments} />
-                <Button type="submit" disabled={loading || !calculatedHours}>{loading ? "Submitting..." : "Submit Request"}</Button>
+                <Button
+                  type="submit"
+                  disabled={loading || !calculatedHours || (!useCurrentTime && violatesOTLeadTime(date, startTime))}
+                >
+                  {loading ? "Submitting..." : "Submit Request"}
+                </Button>
               </form>
             </CardContent>
           </Card>
