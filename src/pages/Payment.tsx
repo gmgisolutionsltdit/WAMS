@@ -585,7 +585,11 @@ function MyPaymentsTab() {
       // so a partial payment last month reduces what's still outstanding now.
       const expenseTotal = (claims || []).filter((c) => c.entry_type !== "advance").reduce((s, c) => s + Number(c.amount), 0);
       const advanceOutstanding = (claims || []).filter((c) => c.entry_type === "advance").reduce((s, c) => s + Math.max(0, Number(c.amount) - Number(c.recovered_amount || 0)), 0);
-      const paidSoFar = (priorSettlements || []).reduce((s, p) => s + Number(p.expense_amount_paid || 0), 0);
+      // Only the positive (genuine expense reimbursement) portion of a prior
+      // settlement counts here — a negative portion (advance recovery) is
+      // now tracked directly on the claim via recovered_amount (applied in
+      // submit() below), so including it here too would subtract it twice.
+      const paidSoFar = (priorSettlements || []).reduce((s, p) => s + Math.max(0, Number(p.expense_amount_paid) || 0), 0);
       const outstanding = expenseTotal - advanceOutstanding - paidSoFar;
       setExpenseOutstanding(outstanding);
       setExpenseAmount(String(outstanding));
@@ -626,6 +630,35 @@ function MyPaymentsTab() {
       // Expense can be negative (an outstanding advance recovery) — not
       // clamped to 0 like Loan, since that would silently drop it.
       const expensePaid = expensePaidNow ? (Number(expenseAmount) || 0) : 0;
+
+      // A negative Expense amount recovers an outstanding cash advance —
+      // fetch the employee's open advance claims as of the viewed month
+      // (same month-end cutoff the live Expense Balance figure already
+      // uses) up front, so a recovery larger than what's actually open as
+      // of that month is rejected before anything is saved, rather than
+      // silently saving a settlement the recovery ledger can't account for.
+      const monthEndISO = format(new Date(Number(month.slice(0, 4)), Number(month.slice(5, 7)), 0), "yyyy-MM-dd");
+      const recoveryNow = Math.max(0, -expensePaid);
+      const recoveryAlready = Math.max(0, -Number(existingSettlement?.expense_amount_paid || 0));
+      const recoveryDelta = recoveryNow - recoveryAlready;
+      let advanceClaims: { id: string; amount: number; recovered_amount: number }[] = [];
+      if (recoveryDelta > 0) {
+        const { data } = await supabase
+          .from("expense_claims")
+          .select("id, amount, recovered_amount")
+          .eq("user_id", selectedUserId).eq("entry_type", "advance").eq("status", "approved")
+          .lte("claim_date", monthEndISO)
+          .order("claim_date", { ascending: true });
+        advanceClaims = data || [];
+        const openTotal = advanceClaims.reduce((s, c) => s + Math.max(0, Number(c.amount) - (Number(c.recovered_amount) || 0)), 0);
+        if (recoveryDelta > openTotal + 1e-9) {
+          toast.error(`Only ${fmtBDT(openTotal)} in advances is open as of ${format(new Date(`${month}-01`), "MMMM yyyy")} — reduce the Expense amount.`);
+          setSaving(false);
+          setUploading(false);
+          return;
+        }
+      }
+
       const { data: settlement, error } = await supabase.from("payroll_settlements").upsert({
         user_id: selectedUserId,
         month: `${month}-01`,
@@ -666,6 +699,47 @@ function MyPaymentsTab() {
           amount: delta, remaining_after: newRemaining, month: `${month}-01`, created_by: user.id,
           note: "Recorded via My Payments",
         });
+      }
+
+      // Apply a negative Expense amount — recovering an outstanding cash
+      // advance (expense_claims.entry_type = "advance") — against the
+      // employee's open advance claims, oldest first, so the Expense tab's
+      // Advance total (and the Salary Summary's Expense/recovery column)
+      // reflect it instead of showing the claim as still fully outstanding
+      // forever. Only the delta vs what this settlement already recorded is
+      // applied, same re-save guard as the loan ledger above; a *reduced*
+      // recovery on re-save reverses the difference back off the most
+      // recently recovered claims first (not bound by the month-end cutoff
+      // above, since it's reversing a recovery already applied, not adding
+      // a new one).
+      if (recoveryDelta !== 0) {
+        const claimsForDelta = recoveryDelta > 0
+          ? advanceClaims
+          : (await supabase
+              .from("expense_claims")
+              .select("id, amount, recovered_amount")
+              .eq("user_id", selectedUserId).eq("entry_type", "advance").eq("status", "approved")
+              .order("claim_date", { ascending: false })).data || [];
+        let remaining = Math.abs(recoveryDelta);
+        for (const claim of claimsForDelta) {
+          if (remaining <= 0) break;
+          const recovered = Number(claim.recovered_amount) || 0;
+          const applied = recoveryDelta > 0
+            ? Math.min(remaining, Number(claim.amount) - recovered)
+            : -Math.min(remaining, recovered);
+          if (applied === 0) continue;
+          const newRecovered = recovered + applied;
+          await supabase.from("expense_claims").update({
+            recovered_amount: newRecovered,
+            recovery_status: newRecovered <= 0 ? "open" : newRecovered >= Number(claim.amount) ? "fully_recovered" : "partially_recovered",
+          }).eq("id", claim.id);
+          await supabase.from("expense_recovery_actions").insert({
+            expense_claim_id: claim.id, user_id: selectedUserId, action_type: "specific_amount",
+            amount: applied, remaining_after: Number(claim.amount) - newRecovered,
+            month: `${month}-01`, admin_id: user.id, note: "Recorded via My Payments",
+          });
+          remaining -= Math.abs(applied);
+        }
       }
 
       toast.success("Payment recorded");
@@ -961,7 +1035,11 @@ function MyPaymentsSummary() {
 
       const expenseTotal = (claims || []).filter((c) => c.entry_type !== "advance").reduce((s, c) => s + Number(c.amount), 0);
       const advanceOutstanding = (claims || []).filter((c) => c.entry_type === "advance").reduce((s, c) => s + Math.max(0, Number(c.amount) - Number(c.recovered_amount || 0)), 0);
-      const paidSoFar = (priorSettlements || []).reduce((s, p) => s + Number(p.expense_amount_paid || 0), 0);
+      // Only the positive (genuine expense reimbursement) portion of a prior
+      // settlement counts here — a negative portion (advance recovery) is
+      // now tracked directly on the claim via recovered_amount, so including
+      // it here too would subtract it twice.
+      const paidSoFar = (priorSettlements || []).reduce((s, p) => s + Math.max(0, Number(p.expense_amount_paid) || 0), 0);
       setExpenseOutstanding(expenseTotal - advanceOutstanding - paidSoFar);
 
       setHistory(historyRows || []);
@@ -1708,7 +1786,7 @@ function ExpenseClaimsTab() {
     return true;
   });
 
-  const advanceTotal = filteredClaims.filter(c => c.entry_type === "advance" && c.status === "approved").reduce((s, c) => s + Number(c.amount), 0);
+  const advanceTotal = filteredClaims.filter(c => c.entry_type === "advance" && c.status === "approved").reduce((s, c) => s + Math.max(0, Number(c.amount) - Number(c.recovered_amount || 0)), 0);
   const expenseTotal = filteredClaims.filter(c => c.entry_type !== "advance" && c.status === "approved").reduce((s, c) => s + Number(c.amount), 0);
   const netAmount = expenseTotal - advanceTotal;
 
