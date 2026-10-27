@@ -570,15 +570,16 @@ function MyPaymentsTab() {
       setNetHoursPaidNow(settlement ? settlement.net_hours_paid : true);
       setExpensePaidNow(settlement ? settlement.expense_paid : true);
       setLoanPaidNow(settlement ? settlement.loan_paid : true);
-      // Both amount boxes always default to the live due figure, even when
-      // a settlement already exists for this month — never to whatever was
-      // last saved, so a since-changed balance (or an old, since-fixed save)
-      // never gets stuck showing a stale number. Still fully editable from
-      // there, and saving again overwrites the settlement either way.
       const loanDue = Math.min(Number(loanRow?.monthly_deduction || 0), Number(loanRow?.remaining_balance || 0));
-      // Shown negative, same convention as the Loan Due badge and Expense's
-      // own box — a deduction, not an addition.
-      setLoanAmount(String(loanDue > 0 ? -loanDue : 0));
+      // Prefill from what was actually recorded for this month, when a
+      // settlement already exists — not the freshly recomputed live due
+      // figure, which already reflects *this* settlement's own prior
+      // deduction (remaining_balance was reduced when it was first saved)
+      // and so reads smaller now. Reopening an already-settled month and
+      // saving again would otherwise apply the difference as a *second*,
+      // wrong delta against the ledger. Shown negative, same convention as
+      // the Loan Due badge.
+      setLoanAmount(String(settlement ? -Math.abs(Number(settlement.loan_amount_paid) || 0) : (loanDue > 0 ? -loanDue : 0)));
 
       // Expense net balance as of the viewed month (every approved claim
       // dated by then) minus every prior settlement's expense_amount_paid -
@@ -592,7 +593,13 @@ function MyPaymentsTab() {
       const paidSoFar = (priorSettlements || []).reduce((s, p) => s + Math.max(0, Number(p.expense_amount_paid) || 0), 0);
       const outstanding = expenseTotal - advanceOutstanding - paidSoFar;
       setExpenseOutstanding(outstanding);
-      setExpenseAmount(String(outstanding));
+      // Prefill from what was actually recorded for this month, when a
+      // settlement already exists — not the freshly recomputed live
+      // figure, which can now differ from it (e.g. it reads 0 once this
+      // month's own recovery has been applied) and would otherwise make
+      // reopening an already-settled month silently reset, then overwrite,
+      // its own historical record — reversing the recovery — on save.
+      setExpenseAmount(String(settlement ? Number(settlement.expense_amount_paid) || 0 : outstanding));
       setNote(settlement?.note || "");
       setExistingAttachments(settlement?.attachments || []);
       setAttachments([]);
