@@ -920,6 +920,8 @@ function MyPaymentsSummary() {
   const [loan, setLoan] = useState<{ monthly_deduction: number; remaining_balance: number } | null>(null);
   const [expenseOutstanding, setExpenseOutstanding] = useState(0);
   const [settlement, setSettlement] = useState<PayrollSettlementRow | null>(null);
+  const [history, setHistory] = useState<PayrollSettlementRow[]>([]);
+  const [historyPage, setHistoryPage] = useState(1);
   const [employeeName, setEmployeeName] = useState("");
   const [teamPending, setTeamPending] = useState<PayrollSettlementRow[]>([]);
   const [rejectingId, setRejectingId] = useState<string | null>(null);
@@ -933,7 +935,7 @@ function MyPaymentsSummary() {
       // Same month cutoff as the admin's My Payments tab: a claim/loan dated
       // after the viewed month hasn't happened yet as of that month.
       const monthEndISO = format(new Date(Number(month.slice(0, 4)), Number(month.slice(5, 7)), 0), "yyyy-MM-dd");
-      const [rows, { data: loanRow }, { data: settlementRow }, { data: claims }, { data: priorSettlements }, { data: profile }] = await Promise.all([
+      const [rows, { data: loanRow }, { data: settlementRow }, { data: claims }, { data: priorSettlements }, { data: historyRows }, { data: profile }] = await Promise.all([
         computeMonthlySalaryRows([user.id], [month]),
         supabase.from("personal_advances").select("monthly_deduction, remaining_balance")
           .eq("user_id", user.id).eq("status", "approved").gt("remaining_balance", 0)
@@ -942,6 +944,7 @@ function MyPaymentsSummary() {
         supabase.from("payroll_settlements").select("*").eq("user_id", user.id).eq("month", `${month}-01`).maybeSingle(),
         supabase.from("expense_claims").select("amount, entry_type, recovered_amount").eq("user_id", user.id).eq("status", "approved").lte("claim_date", monthEndISO),
         supabase.from("payroll_settlements").select("expense_amount_paid").eq("user_id", user.id),
+        supabase.from("payroll_settlements").select("*").eq("user_id", user.id).order("month", { ascending: false }),
         supabase.from("profiles").select("full_name, email").eq("id", user.id).maybeSingle(),
       ]);
 
@@ -958,6 +961,7 @@ function MyPaymentsSummary() {
       const paidSoFar = (priorSettlements || []).reduce((s, p) => s + Number(p.expense_amount_paid || 0), 0);
       setExpenseOutstanding(expenseTotal - advanceOutstanding - paidSoFar);
 
+      setHistory(historyRows || []);
       setLoading(false);
     })();
   }, [user?.id, month]);
@@ -1052,6 +1056,11 @@ function MyPaymentsSummary() {
       note: settlement?.note,
     });
   };
+
+  const HISTORY_PAGE_SIZE = 10;
+  const historyPageCount = Math.max(1, Math.ceil(history.length / HISTORY_PAGE_SIZE));
+  const currentHistoryPage = Math.min(historyPage, historyPageCount);
+  const pagedHistory = history.slice((currentHistoryPage - 1) * HISTORY_PAGE_SIZE, currentHistoryPage * HISTORY_PAGE_SIZE);
 
   return (
     <Card>
@@ -1198,6 +1207,49 @@ function MyPaymentsSummary() {
                 ))}
               </div>
             )}
+
+            <div>
+              <div className="flex items-start justify-between gap-3 mb-2">
+                <p className="text-sm font-medium">History</p>
+                {history.length > HISTORY_PAGE_SIZE && (
+                  <div className="flex items-center gap-2 shrink-0">
+                    <Button variant="outline" size="sm" disabled={currentHistoryPage <= 1} onClick={() => setHistoryPage(currentHistoryPage - 1)}>
+                      <ChevronLeft className="h-4 w-4 mr-1" /> Previous
+                    </Button>
+                    <span className="text-sm text-muted-foreground whitespace-nowrap">Page {currentHistoryPage} of {historyPageCount}</span>
+                    <Button variant="outline" size="sm" disabled={currentHistoryPage >= historyPageCount} onClick={() => setHistoryPage(currentHistoryPage + 1)}>
+                      Next <ChevronRight className="h-4 w-4 ml-1" />
+                    </Button>
+                  </div>
+                )}
+              </div>
+              <div className="overflow-x-auto">
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>Month</TableHead>
+                      <TableHead>Net Salary</TableHead>
+                      <TableHead className="text-right">Expense Paid</TableHead>
+                      <TableHead className="text-right">Loan Paid</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {pagedHistory.length === 0 ? (
+                      <TableRow><TableCell colSpan={4} className="text-center text-muted-foreground py-6">No payments recorded yet</TableCell></TableRow>
+                    ) : pagedHistory.map((h) => (
+                      <TableRow key={h.id}>
+                        <TableCell className="whitespace-nowrap">{format(new Date(h.month), "MMM yyyy")}</TableCell>
+                        <TableCell>
+                          <Badge variant="outline">{h.net_hours_paid ? `Paid ${fmtBDT(h.net_hours_amount)}` : "Carried forward"}</Badge>
+                        </TableCell>
+                        <TableCell className="text-right">{fmtBDT(h.expense_amount_paid)}</TableCell>
+                        <TableCell className="text-right">{fmtBDT(h.loan_amount_paid)}</TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              </div>
+            </div>
 
           </>
         )}
