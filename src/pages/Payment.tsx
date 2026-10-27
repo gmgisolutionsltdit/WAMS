@@ -1164,7 +1164,11 @@ function exportAdminSalaryCSV(rows: SalaryMonthRow[]) {
     r.final,
     PAYMENT_STATUS_LABEL[r.paymentStatus],
   ]);
-  const csv = [headers, ...dataRows].map((row) => row.join(",")).join("\n");
+  const csvField = (value: unknown) => {
+    const s = String(value);
+    return /[",\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
+  };
+  const csv = [headers, ...dataRows].map((row) => row.map(csvField).join(",")).join("\n");
 
   const blob = new Blob([csv], { type: "text/csv" });
   const url = URL.createObjectURL(blob);
