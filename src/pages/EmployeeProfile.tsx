@@ -26,7 +26,7 @@ import {
 import {
   ArrowLeft, Mail, Phone, Calendar, IdCard, Briefcase, UserCheck,
   Users, MapPin, Building2, TrendingUp, DollarSign, FolderKanban, UserCog,
-  ClipboardList, Pencil, KeyRound, Trash2, Copy, Camera, Clock3, ShieldAlert,
+  ClipboardList, Pencil, KeyRound, Trash2, Copy, Camera, Clock3, ShieldAlert, Loader2,
 } from "lucide-react";
 import { format } from "date-fns";
 import { toast } from "sonner";
@@ -590,7 +590,19 @@ const EmployeeProfile = () => {
   );
 
   if (loading) {
-    return <Card><CardContent className="p-8 text-center text-muted-foreground">Loading profile…</CardContent></Card>;
+    // Keep the back button in place instead of blanking the whole panel to
+    // a lone centered message — less jarring when switching into a profile
+    // from the sidebar.
+    return (
+      <div className="space-y-4">
+        <Button variant="outline" size="sm" onClick={goBack}><ArrowLeft className="h-4 w-4 mr-1" /> Back</Button>
+        <Card>
+          <CardContent className="p-8 flex items-center justify-center gap-2 text-muted-foreground">
+            <Loader2 className="h-4 w-4 animate-spin" /> Loading profile…
+          </CardContent>
+        </Card>
+      </div>
+    );
   }
   if (error || !profile) {
     return (
