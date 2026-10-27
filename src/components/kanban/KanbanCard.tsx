@@ -16,6 +16,7 @@ export type KanbanTask = {
   status: string;
   position: number;
   completed_at?: string | null;
+  archived?: boolean;
 };
 
 export type Profile = {

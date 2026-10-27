@@ -145,7 +145,7 @@ const TaskBoard = () => {
 
       const [{ data: cols }, { data: tks }] = await Promise.all([
         supabase.from("task_columns").select("*").eq("board_id", bId).order("position"),
-        supabase.from("tasks").select("*").eq("project_id", projectId).order("position"),
+        supabase.from("tasks").select("*").eq("project_id", projectId).eq("archived", false).order("position"),
       ]);
       setColumns((cols || []) as KanbanColumnData[]);
       setTasks((tks || []) as KanbanTask[]);
@@ -421,10 +421,14 @@ const TaskBoard = () => {
     if (error) { toast.error(error.message); fetchAll(); }
   };
 
-  // Trello-style "archive" on a completed card — removes it from the board.
+  // Trello-style "archive" on a completed card — hides it from the board
+  // without deleting it, so comments/checklist/attachments/activity stay
+  // intact. A soft update (not delete) also goes through the same "Members
+  // update tasks" RLS policy as the complete-toggle, so a board member or
+  // the task's own assignee (not just the owner/admin) can archive it too.
   const archiveTask = async (task: KanbanTask) => {
     setTasks((prev) => prev.filter((t) => t.id !== task.id));
-    const { error } = await supabase.from("tasks").delete().eq("id", task.id);
+    const { error } = await supabase.from("tasks").update({ archived: true }).eq("id", task.id);
     if (error) { toast.error(error.message); fetchAll(); return; }
     toast.success("Card archived");
   };
