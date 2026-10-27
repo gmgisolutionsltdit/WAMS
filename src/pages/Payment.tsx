@@ -943,7 +943,10 @@ function MyPaymentsSummary() {
           .order("created_at", { ascending: true }).limit(1).maybeSingle(),
         supabase.from("payroll_settlements").select("*").eq("user_id", user.id).eq("month", `${month}-01`).maybeSingle(),
         supabase.from("expense_claims").select("amount, entry_type, recovered_amount").eq("user_id", user.id).eq("status", "approved").lte("claim_date", monthEndISO),
-        supabase.from("payroll_settlements").select("expense_amount_paid").eq("user_id", user.id),
+        // Excludes the viewed month's own settlement — that's the one being
+        // shown right now, not a prior payment to subtract out (matches the
+        // admin's My Payments tab).
+        supabase.from("payroll_settlements").select("expense_amount_paid").eq("user_id", user.id).neq("month", `${month}-01`),
         supabase.from("payroll_settlements").select("*").eq("user_id", user.id).order("month", { ascending: false }),
         supabase.from("profiles").select("full_name, email").eq("id", user.id).maybeSingle(),
       ]);
