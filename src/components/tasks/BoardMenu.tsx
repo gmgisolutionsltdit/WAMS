@@ -7,10 +7,12 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { toast } from "sonner";
 import {
-  MoreHorizontal, X, UserPlus, Info, Lock, Star, Archive,
+  MoreHorizontal, X, UserPlus, Info, Lock, Star, Archive, ArchiveRestore, Loader2,
 } from "lucide-react";
 import { isBoardStarred, toggleStarredBoard } from "@/lib/boardPrefs";
 import { cn } from "@/lib/utils";
+
+type ArchivedTask = { id: string; ticket_key: string | null; title: string };
 
 type Visibility = "private" | "workspace" | "public";
 
@@ -29,20 +31,48 @@ type Project = { id: string; description: string | null; visibility: Visibility 
 // items (Power-Ups, Custom Fields, Stickers, templates) and ones with no
 // WAMS equivalent (per-card archive, board-level Watch, Copy board,
 // email-to-board, abuse reports) are left out rather than shown unwired.
-export const BoardMenu = ({ project, canEdit, onOpenMembers, onProjectUpdated }: {
+export const BoardMenu = ({ project, canEdit, onOpenMembers, onProjectUpdated, onTaskRestored }: {
   project: Project;
   canEdit: boolean;
   onOpenMembers: () => void;
   onProjectUpdated: (patch: Partial<Project>) => void;
+  // Called after an archived card is restored, so the board can refetch it.
+  onTaskRestored?: () => void;
 }) => {
   const navigate = useNavigate();
   const [open, setOpen] = useState(false);
-  const [panel, setPanel] = useState<"menu" | "about" | "visibility">("menu");
+  const [panel, setPanel] = useState<"menu" | "about" | "visibility" | "archived">("menu");
   const [description, setDescription] = useState(project.description || "");
   const [starred, setStarred] = useState(() => isBoardStarred(project.id));
   const [saving, setSaving] = useState(false);
+  const [archivedTasks, setArchivedTasks] = useState<ArchivedTask[]>([]);
+  const [archivedLoading, setArchivedLoading] = useState(false);
+  const [restoringId, setRestoringId] = useState<string | null>(null);
 
   const close = () => { setOpen(false); setPanel("menu"); };
+
+  const openArchived = async () => {
+    setPanel("archived");
+    setArchivedLoading(true);
+    const { data } = await supabase
+      .from("tasks")
+      .select("id, ticket_key, title")
+      .eq("project_id", project.id)
+      .eq("archived", true)
+      .order("updated_at", { ascending: false });
+    setArchivedTasks((data || []) as ArchivedTask[]);
+    setArchivedLoading(false);
+  };
+
+  const restoreTask = async (taskId: string) => {
+    setRestoringId(taskId);
+    const { error } = await supabase.from("tasks").update({ archived: false }).eq("id", taskId);
+    setRestoringId(null);
+    if (error) { toast.error(error.message); return; }
+    setArchivedTasks((prev) => prev.filter((t) => t.id !== taskId));
+    onTaskRestored?.();
+    toast.success("Card restored");
+  };
 
   const saveDescription = async () => {
     setSaving(true);
@@ -125,6 +155,13 @@ export const BoardMenu = ({ project, canEdit, onOpenMembers, onProjectUpdated }:
               <Star className={cn("h-4 w-4", starred ? "fill-foreground text-foreground" : "text-muted-foreground")} />
               {starred ? "Starred" : "Star"}
             </button>
+            <button
+              type="button"
+              onClick={openArchived}
+              className="w-full flex items-center gap-2 px-3 py-2 text-sm hover:bg-accent text-left"
+            >
+              <ArchiveRestore className="h-4 w-4 text-muted-foreground" /> Archived cards
+            </button>
             {canEdit && (
               <>
                 <div className="my-1 border-t" />
@@ -154,6 +191,39 @@ export const BoardMenu = ({ project, canEdit, onOpenMembers, onProjectUpdated }:
               <Button size="sm" onClick={saveDescription} disabled={!canEdit || saving}>Save</Button>
               <Button size="sm" variant="ghost" onClick={() => { setDescription(project.description || ""); setPanel("menu"); }}>Cancel</Button>
             </div>
+          </div>
+        )}
+
+        {panel === "archived" && (
+          <div className="p-2">
+            {archivedLoading ? (
+              <div className="flex items-center justify-center py-6 text-sm text-muted-foreground">
+                <Loader2 className="h-4 w-4 mr-2 animate-spin" /> Loading…
+              </div>
+            ) : archivedTasks.length === 0 ? (
+              <p className="px-1 py-4 text-sm text-muted-foreground text-center">No archived cards</p>
+            ) : (
+              <div className="max-h-64 overflow-y-auto space-y-1">
+                {archivedTasks.map((t) => (
+                  <div key={t.id} className="flex items-center gap-2 px-1 py-1.5 rounded hover:bg-accent">
+                    <span className="flex-1 min-w-0 text-sm truncate">
+                      {t.ticket_key && <span className="text-xs font-mono text-muted-foreground mr-1.5">{t.ticket_key}</span>}
+                      {t.title}
+                    </span>
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      className="h-7 shrink-0"
+                      disabled={restoringId === t.id}
+                      onClick={() => restoreTask(t.id)}
+                    >
+                      Restore
+                    </Button>
+                  </div>
+                ))}
+              </div>
+            )}
+            <Button size="sm" variant="ghost" className="mt-1" onClick={() => setPanel("menu")}>Back</Button>
           </div>
         )}
 

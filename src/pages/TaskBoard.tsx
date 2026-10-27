@@ -564,6 +564,7 @@ const TaskBoard = () => {
             canEdit={isOwnerOrAdmin}
             onOpenMembers={() => setMembersOpen(true)}
             onProjectUpdated={(patch) => setProject((p) => ({ ...p, ...patch }))}
+            onTaskRestored={fetchAll}
           />
         </div>
       </div>
