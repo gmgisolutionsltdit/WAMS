@@ -1,5 +1,5 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { BrowserRouter, Route, Routes, Navigate, useParams } from "react-router-dom";
+import { BrowserRouter, Route, Routes, Navigate, Outlet, useParams } from "react-router-dom";
 import { Toaster as Sonner } from "@/components/ui/sonner";
 import { Toaster } from "@/components/ui/toaster";
 import { TooltipProvider } from "@/components/ui/tooltip";
@@ -33,7 +33,12 @@ import PerformanceEvaluation from "./pages/PerformanceEvaluation";
 
 const queryClient = new QueryClient();
 
-const ProtectedRoute = ({ children }: { children: ReactNode }) => {
+// A single layout route (rendered once via <Outlet/>) instead of each
+// protected <Route> wrapping its own <AppLayout> — otherwise AppLayout (and
+// the sidebar/header inside it) unmounts and remounts on every navigation
+// between tabs, instead of staying mounted while only the page content
+// underneath it changes.
+const ProtectedLayout = () => {
   const { user, loading } = useAuth();
   if (loading) {
     return (
@@ -43,7 +48,11 @@ const ProtectedRoute = ({ children }: { children: ReactNode }) => {
     );
   }
   if (!user) return <Navigate to="/login" replace />;
-  return <AppLayout>{children}</AppLayout>;
+  return (
+    <AppLayout>
+      <Outlet />
+    </AppLayout>
+  );
 };
 
 const PublicOnlyRoute = ({ children }: { children: ReactNode }) => {
@@ -72,28 +81,31 @@ const AppRoutes = () => (
     <Route path="/forgot-password" element={<PublicOnlyRoute><ForgotPassword /></PublicOnlyRoute>} />
     <Route path="/reset-password" element={<ResetPassword />} />
 
-    <Route path="/" element={<ProtectedRoute><Index /></ProtectedRoute>} />
-    <Route path="/attendance" element={<ProtectedRoute><Attendance /></ProtectedRoute>} />
-    <Route path="/ot-requests" element={<ProtectedRoute><OTRequests /></ProtectedRoute>} />
-    <Route path="/approvals" element={<ProtectedRoute><RoleGate allow={["admin", "manager"]}><Approvals /></RoleGate></ProtectedRoute>} />
-    <Route path="/performance-evaluation" element={<ProtectedRoute><RoleGate allow={["admin", "manager"]}><PerformanceEvaluation /></RoleGate></ProtectedRoute>} />
-    <Route path="/reports" element={<ProtectedRoute><Reports /></ProtectedRoute>} />
-    <Route path="/employees" element={<ProtectedRoute><RoleGate allow={["admin"]}><EmployeeManagement /></RoleGate></ProtectedRoute>} />
-    <Route path="/employees/:id" element={<ProtectedRoute><EmployeeProfile /></ProtectedRoute>} />
-    <Route path="/holidays" element={<ProtectedRoute><RoleGate allow={["admin"]}><Holidays /></RoleGate></ProtectedRoute>} />
-    <Route path="/leave" element={<ProtectedRoute><LeaveManagement /></ProtectedRoute>} />
-    <Route path="/tasks" element={<ProtectedRoute><Tasks /></ProtectedRoute>} />
-    <Route path="/tasks/:id" element={<ProtectedRoute><ErrorBoundary fallbackTitle="Couldn't open this board"><TaskBoard /></ErrorBoundary></ProtectedRoute>} />
+    <Route element={<ProtectedLayout />}>
+      <Route path="/" element={<Index />} />
+      <Route path="/attendance" element={<Attendance />} />
+      <Route path="/ot-requests" element={<OTRequests />} />
+      <Route path="/approvals" element={<RoleGate allow={["admin", "manager"]}><Approvals /></RoleGate>} />
+      <Route path="/performance-evaluation" element={<RoleGate allow={["admin", "manager"]}><PerformanceEvaluation /></RoleGate>} />
+      <Route path="/reports" element={<Reports />} />
+      <Route path="/employees" element={<RoleGate allow={["admin"]}><EmployeeManagement /></RoleGate>} />
+      <Route path="/employees/:id" element={<EmployeeProfile />} />
+      <Route path="/holidays" element={<RoleGate allow={["admin"]}><Holidays /></RoleGate>} />
+      <Route path="/leave" element={<LeaveManagement />} />
+      <Route path="/tasks" element={<Tasks />} />
+      <Route path="/tasks/:id" element={<ErrorBoundary fallbackTitle="Couldn't open this board"><TaskBoard /></ErrorBoundary>} />
+      <Route path="/salary-increments" element={<RoleGate allow={["admin"]}><SalaryIncrements /></RoleGate>} />
+      <Route path="/loans" element={<RoleGate allow={["admin"]}><Loans /></RoleGate>} />
+      <Route path="/payment" element={<Payment />} />
+      <Route path="/notices" element={<NoticeBoard />} />
+      <Route path="/sop" element={<SOP />} />
+      <Route path="/team-member-details" element={<TeamMemberDetails />} />
+    </Route>
+
     <Route path="/projects" element={<Navigate to="/tasks" replace />} />
     <Route path="/projects/:id" element={<ProjectRedirect />} />
     <Route path="/payroll" element={<Navigate to="/payment" replace />} />
-    <Route path="/salary-increments" element={<ProtectedRoute><RoleGate allow={["admin"]}><SalaryIncrements /></RoleGate></ProtectedRoute>} />
-    <Route path="/loans" element={<ProtectedRoute><RoleGate allow={["admin"]}><Loans /></RoleGate></ProtectedRoute>} />
     <Route path="/expenses" element={<Navigate to="/payment" replace />} />
-    <Route path="/payment" element={<ProtectedRoute><Payment /></ProtectedRoute>} />
-    <Route path="/notices" element={<ProtectedRoute><NoticeBoard /></ProtectedRoute>} />
-    <Route path="/sop" element={<ProtectedRoute><SOP /></ProtectedRoute>} />
-    <Route path="/team-member-details" element={<ProtectedRoute><TeamMemberDetails /></ProtectedRoute>} />
 
     <Route path="*" element={<NotFound />} />
   </Routes>
