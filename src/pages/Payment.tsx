@@ -524,8 +524,9 @@ function MyPaymentsTab() {
 
   const deletePaymentHistory = async (row: PayrollSettlementRow) => {
     if (!window.confirm("Delete this payment record? This cannot be undone.")) return;
-    const { error } = await supabase.from("payroll_settlements").delete().eq("id", row.id);
+    const { data, error } = await supabase.from("payroll_settlements").delete().eq("id", row.id).select("id");
     if (error) { toast.error(error.message); return; }
+    if (!data?.length) { toast.error("You're not allowed to delete this payment record."); return; }
     toast.success("Payment record deleted");
     fetchPaymentHistory();
   };
