@@ -13,7 +13,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, Dialog
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
-import { Plus, Check, X, FileText, AlertTriangle, Loader2, Trash2, Download } from "lucide-react";
+import { Plus, Check, X, FileText, AlertTriangle, Loader2, Trash2, Download, ChevronLeft, ChevronRight } from "lucide-react";
 import { toast } from "sonner";
 import { format } from "date-fns";
 import { notifyManagersAndAdmins, notifyEmployee } from "@/lib/notifications";
@@ -508,6 +508,28 @@ function MyPaymentsTab() {
   const [attachments, setAttachments] = useState<File[]>([]);
   const [existingAttachments, setExistingAttachments] = useState<string[]>([]);
   const [uploading, setUploading] = useState(false);
+  const [paymentHistory, setPaymentHistory] = useState<PayrollSettlementRow[]>([]);
+  const [historyPage, setHistoryPage] = useState(1);
+
+  const fetchPaymentHistory = useCallback(async () => {
+    const { data } = await supabase
+      .from("payroll_settlements")
+      .select("*, profiles!payroll_settlements_user_id_fkey(full_name, email)")
+      .order("month", { ascending: false })
+      .order("created_at", { ascending: false });
+    setPaymentHistory(data || []);
+  }, []);
+
+  useEffect(() => { fetchPaymentHistory(); }, [fetchPaymentHistory]);
+
+  const deletePaymentHistory = async (row: PayrollSettlementRow) => {
+    if (!window.confirm("Delete this payment record? This cannot be undone.")) return;
+    const { error } = await supabase.from("payroll_settlements").delete().eq("id", row.id);
+    if (error) { toast.error(error.message); return; }
+    toast.success("Payment record deleted");
+    fetchPaymentHistory();
+  };
+
   useEffect(() => {
     (async () => {
       const { data } = await supabase.from("profiles").select("id, full_name, email").order("full_name");
@@ -646,6 +668,7 @@ function MyPaymentsTab() {
       }
 
       toast.success("Payment recorded");
+      fetchPaymentHistory();
       const monthLabel = format(new Date(`${month}-01`), "MMMM yyyy");
       const recordedEmployeeName = employees.find((e) => e.id === selectedUserId)?.full_name
         || employees.find((e) => e.id === selectedUserId)?.email || "An employee";
@@ -698,6 +721,19 @@ function MyPaymentsTab() {
       note,
     });
   };
+
+  // Net Payment for a recorded settlement: same "only counts while adjusted"
+  // rule as the live card above, minus the live gross-salary fallback (not
+  // stored on the settlement row itself) for an unchecked Net Salary.
+  const netPaymentForHistoryRow = (h: PayrollSettlementRow) =>
+    (h.net_hours_paid ? Number(h.net_hours_amount) || 0 : 0)
+    + (h.expense_paid ? Number(h.expense_amount_paid) || 0 : 0)
+    - (h.loan_paid ? Number(h.loan_amount_paid) || 0 : 0);
+
+  const HISTORY_PAGE_SIZE = 10;
+  const historyPageCount = Math.max(1, Math.ceil(paymentHistory.length / HISTORY_PAGE_SIZE));
+  const currentHistoryPage = Math.min(historyPage, historyPageCount);
+  const pagedHistory = paymentHistory.slice((currentHistoryPage - 1) * HISTORY_PAGE_SIZE, currentHistoryPage * HISTORY_PAGE_SIZE);
 
   return (
     <div className="space-y-4">
@@ -803,6 +839,63 @@ function MyPaymentsTab() {
             </div>
           </div>
         )}
+      </CardContent>
+    </Card>
+
+    <Card>
+      <CardHeader>
+        <div className="flex items-start justify-between gap-3">
+          <CardTitle className="text-base">Payment History</CardTitle>
+          {paymentHistory.length > HISTORY_PAGE_SIZE && (
+            <div className="flex items-center gap-2 shrink-0">
+              <Button variant="outline" size="sm" disabled={currentHistoryPage <= 1} onClick={() => setHistoryPage(currentHistoryPage - 1)}>
+                <ChevronLeft className="h-4 w-4 mr-1" /> Previous
+              </Button>
+              <span className="text-sm text-muted-foreground whitespace-nowrap">Page {currentHistoryPage} of {historyPageCount}</span>
+              <Button variant="outline" size="sm" disabled={currentHistoryPage >= historyPageCount} onClick={() => setHistoryPage(currentHistoryPage + 1)}>
+                Next <ChevronRight className="h-4 w-4 ml-1" />
+              </Button>
+            </div>
+          )}
+        </div>
+      </CardHeader>
+      <CardContent>
+        <div className="overflow-x-auto">
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead>Employee</TableHead>
+                <TableHead>Month</TableHead>
+                <TableHead>Net Salary</TableHead>
+                <TableHead className="text-right">Expense Balance</TableHead>
+                <TableHead className="text-right">Loan Due</TableHead>
+                <TableHead className="text-right">Net Payment</TableHead>
+                <TableHead>Actions</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {pagedHistory.length === 0 ? (
+                <TableRow><TableCell colSpan={7} className="text-center text-muted-foreground py-6">No payments recorded yet</TableCell></TableRow>
+              ) : pagedHistory.map((h) => (
+                <TableRow key={h.id}>
+                  <TableCell>{h.profiles?.full_name || h.profiles?.email || "—"}</TableCell>
+                  <TableCell className="whitespace-nowrap">{format(new Date(h.month), "MMM yyyy")}</TableCell>
+                  <TableCell>
+                    <Badge variant="outline">{h.net_hours_paid ? `Paid ${fmtBDT(h.net_hours_amount)}` : "Carried forward"}</Badge>
+                  </TableCell>
+                  <TableCell className="text-right">{h.expense_paid ? fmtBDT(h.expense_amount_paid) : "—"}</TableCell>
+                  <TableCell className="text-right">{h.loan_paid ? fmtBDT(-Number(h.loan_amount_paid)) : "—"}</TableCell>
+                  <TableCell className="text-right font-semibold">{fmtBDT(netPaymentForHistoryRow(h))}</TableCell>
+                  <TableCell>
+                    <Button size="sm" variant="ghost" className="text-destructive hover:text-destructive" onClick={() => deletePaymentHistory(h)}>
+                      <Trash2 className="h-4 w-4 mr-1" /> Delete
+                    </Button>
+                  </TableCell>
+                </TableRow>
+              ))}
+            </TableBody>
+          </Table>
+        </div>
       </CardContent>
     </Card>
     </div>
