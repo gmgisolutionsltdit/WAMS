@@ -1062,6 +1062,20 @@ function MyPaymentsSummary() {
   const currentHistoryPage = Math.min(historyPage, historyPageCount);
   const pagedHistory = history.slice((currentHistoryPage - 1) * HISTORY_PAGE_SIZE, currentHistoryPage * HISTORY_PAGE_SIZE);
 
+  // Shown here for convenience, but the delete only ever actually succeeds
+  // for an admin — payroll_settlements' DELETE policy is admin-only, so a
+  // non-admin's click is rejected by RLS (0 rows matched) and reported as
+  // "not allowed", same pattern as the admin's own History table.
+  const deleteHistoryRow = async (row: PayrollSettlementRow) => {
+    if (!window.confirm("Delete this payment record? This cannot be undone.")) return;
+    const { data, error } = await supabase.from("payroll_settlements").delete().eq("id", row.id).select("id");
+    if (error) { toast.error(error.message); return; }
+    if (!data?.length) { toast.error("You're not allowed to delete this payment record."); return; }
+    toast.success("Payment record deleted");
+    setHistory((h) => h.filter((r) => r.id !== row.id));
+    if (settlement?.id === row.id) setSettlement(null);
+  };
+
   return (
     <Card>
       <CardHeader>
@@ -1231,11 +1245,12 @@ function MyPaymentsSummary() {
                       <TableHead>Net Salary</TableHead>
                       <TableHead className="text-right">Expense Paid</TableHead>
                       <TableHead className="text-right">Loan Paid</TableHead>
+                      <TableHead>Actions</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
                     {pagedHistory.length === 0 ? (
-                      <TableRow><TableCell colSpan={4} className="text-center text-muted-foreground py-6">No payments recorded yet</TableCell></TableRow>
+                      <TableRow><TableCell colSpan={5} className="text-center text-muted-foreground py-6">No payments recorded yet</TableCell></TableRow>
                     ) : pagedHistory.map((h) => (
                       <TableRow key={h.id}>
                         <TableCell className="whitespace-nowrap">{format(new Date(h.month), "MMM yyyy")}</TableCell>
@@ -1244,6 +1259,11 @@ function MyPaymentsSummary() {
                         </TableCell>
                         <TableCell className="text-right">{fmtBDT(h.expense_amount_paid)}</TableCell>
                         <TableCell className="text-right">{fmtBDT(h.loan_amount_paid)}</TableCell>
+                        <TableCell>
+                          <Button size="sm" variant="ghost" className="text-destructive hover:text-destructive" onClick={() => deleteHistoryRow(h)}>
+                            <Trash2 className="h-4 w-4 mr-1" /> Delete
+                          </Button>
+                        </TableCell>
                       </TableRow>
                     ))}
                   </TableBody>
