@@ -24,6 +24,10 @@ import AttachmentsInput from "@/components/AttachmentsInput";
 import AttachmentThumbnails from "@/components/AttachmentThumbnails";
 import { uploadAttachments } from "@/lib/attachments";
 
+/** RLS blocks a disallowed update without an error — it just matches 0 rows,
+ *  which would otherwise look like silent success. */
+const NOT_ALLOWED = "You're not assigned as this employee's approver, so this action didn't go through.";
+
 /** Color helper for request status badges */
 const otStatusStyle = (status: string) => {
   if (status === "approved") return "bg-lime-500 text-white hover:bg-lime-600 border-lime-500";
@@ -172,11 +176,13 @@ const OTRequests = () => {
       finalHours = await applyOTFulfillment(req.user_id, req.date, req.requested_hours);
     }
 
-    const { error } = await supabase
+    const { data, error } = await supabase
       .from("overtime_requests")
       .update({ status, approved_by: user.id, requested_hours: finalHours })
-      .eq("id", req.id);
+      .eq("id", req.id)
+      .select("id");
     if (error) toast.error(error.message);
+    else if (!data?.length) toast.error(NOT_ALLOWED);
     else {
       const detail = status === "approved" && finalHours < req.requested_hours
         ? ` (adjusted from ${req.requested_hours}h to ${finalHours}h after standard hours fulfillment)`
@@ -201,7 +207,7 @@ const OTRequests = () => {
     // Intelligent OT fulfillment: check worked hours vs standard
     const adjustedHours = await applyOTFulfillment(editReq.user_id, editReq.date, newHours);
 
-    const { error } = await supabase
+    const { data, error } = await supabase
       .from("overtime_requests")
       .update({
         requested_hours: adjustedHours,
@@ -211,8 +217,10 @@ const OTRequests = () => {
         modified_by: user.id,
         modified_at: new Date().toISOString(),
       })
-      .eq("id", editReq.id);
+      .eq("id", editReq.id)
+      .select("id");
     if (error) toast.error(error.message);
+    else if (!data?.length) toast.error(NOT_ALLOWED);
     else {
       const msg = adjustedHours < newHours
         ? `Modified to ${newHours}h, adjusted to ${adjustedHours}h after fulfillment rule`
