@@ -626,6 +626,35 @@ function MyPaymentsTab() {
       // Expense can be negative (an outstanding advance recovery) — not
       // clamped to 0 like Loan, since that would silently drop it.
       const expensePaid = expensePaidNow ? (Number(expenseAmount) || 0) : 0;
+
+      // A negative Expense amount recovers an outstanding cash advance —
+      // fetch the employee's open advance claims as of the viewed month
+      // (same month-end cutoff the live Expense Balance figure already
+      // uses) up front, so a recovery larger than what's actually open as
+      // of that month is rejected before anything is saved, rather than
+      // silently saving a settlement the recovery ledger can't account for.
+      const monthEndISO = format(new Date(Number(month.slice(0, 4)), Number(month.slice(5, 7)), 0), "yyyy-MM-dd");
+      const recoveryNow = Math.max(0, -expensePaid);
+      const recoveryAlready = Math.max(0, -Number(existingSettlement?.expense_amount_paid || 0));
+      const recoveryDelta = recoveryNow - recoveryAlready;
+      let advanceClaims: { id: string; amount: number; recovered_amount: number }[] = [];
+      if (recoveryDelta > 0) {
+        const { data } = await supabase
+          .from("expense_claims")
+          .select("id, amount, recovered_amount")
+          .eq("user_id", selectedUserId).eq("entry_type", "advance").eq("status", "approved")
+          .lte("claim_date", monthEndISO)
+          .order("claim_date", { ascending: true });
+        advanceClaims = data || [];
+        const openTotal = advanceClaims.reduce((s, c) => s + Math.max(0, Number(c.amount) - (Number(c.recovered_amount) || 0)), 0);
+        if (recoveryDelta > openTotal + 1e-9) {
+          toast.error(`Only ${fmtBDT(openTotal)} in advances is open as of ${format(new Date(`${month}-01`), "MMMM yyyy")} — reduce the Expense amount.`);
+          setSaving(false);
+          setUploading(false);
+          return;
+        }
+      }
+
       const { data: settlement, error } = await supabase.from("payroll_settlements").upsert({
         user_id: selectedUserId,
         month: `${month}-01`,
@@ -676,18 +705,19 @@ function MyPaymentsTab() {
       // forever. Only the delta vs what this settlement already recorded is
       // applied, same re-save guard as the loan ledger above; a *reduced*
       // recovery on re-save reverses the difference back off the most
-      // recently recovered claims first.
-      const recoveryNow = Math.max(0, -expensePaid);
-      const recoveryAlready = Math.max(0, -Number(existingSettlement?.expense_amount_paid || 0));
-      const recoveryDelta = recoveryNow - recoveryAlready;
+      // recently recovered claims first (not bound by the month-end cutoff
+      // above, since it's reversing a recovery already applied, not adding
+      // a new one).
       if (recoveryDelta !== 0) {
-        const { data: advanceClaims } = await supabase
-          .from("expense_claims")
-          .select("id, amount, recovered_amount")
-          .eq("user_id", selectedUserId).eq("entry_type", "advance").eq("status", "approved")
-          .order("claim_date", { ascending: recoveryDelta > 0 });
+        const claimsForDelta = recoveryDelta > 0
+          ? advanceClaims
+          : (await supabase
+              .from("expense_claims")
+              .select("id, amount, recovered_amount")
+              .eq("user_id", selectedUserId).eq("entry_type", "advance").eq("status", "approved")
+              .order("claim_date", { ascending: false })).data || [];
         let remaining = Math.abs(recoveryDelta);
-        for (const claim of advanceClaims || []) {
+        for (const claim of claimsForDelta) {
           if (remaining <= 0) break;
           const recovered = Number(claim.recovered_amount) || 0;
           const applied = recoveryDelta > 0
