@@ -668,6 +668,46 @@ function MyPaymentsTab() {
         });
       }
 
+      // Apply a negative Expense amount — recovering an outstanding cash
+      // advance (expense_claims.entry_type = "advance") — against the
+      // employee's open advance claims, oldest first, so the Expense tab's
+      // Advance total (and the Salary Summary's Expense/recovery column)
+      // reflect it instead of showing the claim as still fully outstanding
+      // forever. Only the delta vs what this settlement already recorded is
+      // applied, same re-save guard as the loan ledger above; a *reduced*
+      // recovery on re-save reverses the difference back off the most
+      // recently recovered claims first.
+      const recoveryNow = Math.max(0, -expensePaid);
+      const recoveryAlready = Math.max(0, -Number(existingSettlement?.expense_amount_paid || 0));
+      const recoveryDelta = recoveryNow - recoveryAlready;
+      if (recoveryDelta !== 0) {
+        const { data: advanceClaims } = await supabase
+          .from("expense_claims")
+          .select("id, amount, recovered_amount")
+          .eq("user_id", selectedUserId).eq("entry_type", "advance").eq("status", "approved")
+          .order("claim_date", { ascending: recoveryDelta > 0 });
+        let remaining = Math.abs(recoveryDelta);
+        for (const claim of advanceClaims || []) {
+          if (remaining <= 0) break;
+          const recovered = Number(claim.recovered_amount) || 0;
+          const applied = recoveryDelta > 0
+            ? Math.min(remaining, Number(claim.amount) - recovered)
+            : -Math.min(remaining, recovered);
+          if (applied === 0) continue;
+          const newRecovered = recovered + applied;
+          await supabase.from("expense_claims").update({
+            recovered_amount: newRecovered,
+            recovery_status: newRecovered <= 0 ? "open" : newRecovered >= Number(claim.amount) ? "fully_recovered" : "partially_recovered",
+          }).eq("id", claim.id);
+          await supabase.from("expense_recovery_actions").insert({
+            expense_claim_id: claim.id, user_id: selectedUserId, action_type: "specific_amount",
+            amount: applied, remaining_after: Number(claim.amount) - newRecovered,
+            month: `${month}-01`, admin_id: user.id, note: "Recorded via My Payments",
+          });
+          remaining -= Math.abs(applied);
+        }
+      }
+
       toast.success("Payment recorded");
       fetchPaymentHistory();
       const monthLabel = format(new Date(`${month}-01`), "MMMM yyyy");
@@ -1708,7 +1748,7 @@ function ExpenseClaimsTab() {
     return true;
   });
 
-  const advanceTotal = filteredClaims.filter(c => c.entry_type === "advance" && c.status === "approved").reduce((s, c) => s + Number(c.amount), 0);
+  const advanceTotal = filteredClaims.filter(c => c.entry_type === "advance" && c.status === "approved").reduce((s, c) => s + Math.max(0, Number(c.amount) - Number(c.recovered_amount || 0)), 0);
   const expenseTotal = filteredClaims.filter(c => c.entry_type !== "advance" && c.status === "approved").reduce((s, c) => s + Number(c.amount), 0);
   const netAmount = expenseTotal - advanceTotal;
 
