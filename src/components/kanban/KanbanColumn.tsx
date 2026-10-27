@@ -26,6 +26,7 @@ interface Props {
   onOpenTask: (task: KanbanTask) => void;
   onDeleteColumn?: (columnId: string) => void;
   onToggleComplete?: (task: KanbanTask) => void;
+  onArchiveTask?: (task: KanbanTask) => void;
   canDelete?: boolean;
   canDrag?: boolean;
   // Board-level edit access (member/admin/workspace visibility). A task's
@@ -52,6 +53,7 @@ export function KanbanColumn({
   onOpenTask,
   onDeleteColumn,
   onToggleComplete,
+  onArchiveTask,
   canDelete,
   canDrag = true,
   canEditBoard,
@@ -162,6 +164,8 @@ export function KanbanColumn({
                 onClick={() => onOpenTask(t)}
                 onToggleComplete={onToggleComplete ? () => onToggleComplete(t) : undefined}
                 canToggleComplete={!!canEditBoard || t.assignee_id === currentUserId}
+                onArchive={onArchiveTask ? () => onArchiveTask(t) : undefined}
+                canArchive={!!canEditBoard || t.assignee_id === currentUserId}
                 checklistTotal={checklistCounts?.[t.id]?.total || 0}
                 checklistDone={checklistCounts?.[t.id]?.done || 0}
               />

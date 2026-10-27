@@ -421,6 +421,14 @@ const TaskBoard = () => {
     if (error) { toast.error(error.message); fetchAll(); }
   };
 
+  // Trello-style "archive" on a completed card — removes it from the board.
+  const archiveTask = async (task: KanbanTask) => {
+    setTasks((prev) => prev.filter((t) => t.id !== task.id));
+    const { error } = await supabase.from("tasks").delete().eq("id", task.id);
+    if (error) { toast.error(error.message); fetchAll(); return; }
+    toast.success("Card archived");
+  };
+
   /* ---------- Column CRUD ---------- */
   const addColumn = async () => {
     if (!newColName.trim() || !boardId) return;
@@ -594,6 +602,7 @@ const TaskBoard = () => {
                   onOpenTask={openTask}
                   onDeleteColumn={deleteColumn}
                   onToggleComplete={toggleComplete}
+                  onArchiveTask={archiveTask}
                   canDelete={isOwnerOrAdmin}
                   canDrag={canEditBoard}
                   canEditBoard={canEditBoard}
