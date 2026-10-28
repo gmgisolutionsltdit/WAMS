@@ -504,6 +504,12 @@ function MyPaymentsTab() {
   const [loanPaidNow, setLoanPaidNow] = useState(true);
   const [expenseAmount, setExpenseAmount] = useState("0");
   const [loanAmount, setLoanAmount] = useState("0");
+  // Whether the admin has actually typed into each box this time the form
+  // was loaded — the box itself always starts at 0, but saving without
+  // touching it must not overwrite (and reverse the ledger effect of) a
+  // previously recorded amount just because a note or attachment changed.
+  const [expenseAmountTouched, setExpenseAmountTouched] = useState(false);
+  const [loanAmountTouched, setLoanAmountTouched] = useState(false);
   const [note, setNote] = useState("");
   const [attachments, setAttachments] = useState<File[]>([]);
   const [existingAttachments, setExistingAttachments] = useState<string[]>([]);
@@ -554,6 +560,7 @@ function MyPaymentsTab() {
       // an existing settlement), so reopening a month never risks silently
       // re-submitting a stale or mismatched number.
       setLoanAmount("0");
+      setLoanAmountTouched(false);
 
       // Expense net balance as of the viewed month (every approved claim
       // dated by then) minus every prior settlement's expense_amount_paid -
@@ -572,6 +579,7 @@ function MyPaymentsTab() {
       // figure or an existing settlement), so reopening a month never risks
       // silently re-submitting a stale or mismatched number.
       setExpenseAmount("0");
+      setExpenseAmountTouched(false);
       setNote(settlement?.note || "");
       setExistingAttachments(settlement?.attachments || []);
       setAttachments([]);
@@ -605,10 +613,19 @@ function MyPaymentsTab() {
       // ledger delta below and every other reader of loan_amount_paid
       // (receipts, history, the employee's own summary) expect a plain
       // amount paid, same as before this box started showing it negative.
-      const loanPaid = loanPaidNow ? Math.abs(Number(loanAmount) || 0) : 0;
+      // The box always starts at 0 (never prefilled), so an untouched box
+      // falls back to what was already recorded for this settlement —
+      // otherwise saving for an unrelated reason (a note, an attachment)
+      // without re-entering the amount would silently zero it out and
+      // reverse the loan/advance ledger effect it already applied.
+      const loanPaid = loanPaidNow
+        ? (loanAmountTouched ? Math.abs(Number(loanAmount) || 0) : Math.abs(Number(existingSettlement?.loan_amount_paid) || 0))
+        : 0;
       // Expense can be negative (an outstanding advance recovery) — not
       // clamped to 0 like Loan, since that would silently drop it.
-      const expensePaid = expensePaidNow ? (Number(expenseAmount) || 0) : 0;
+      const expensePaid = expensePaidNow
+        ? (expenseAmountTouched ? (Number(expenseAmount) || 0) : (Number(existingSettlement?.expense_amount_paid) || 0))
+        : 0;
 
       // A negative Expense amount recovers an outstanding cash advance —
       // fetch the employee's open advance claims as of the viewed month
@@ -847,7 +864,7 @@ function MyPaymentsTab() {
                   <Checkbox checked={expensePaidNow} onCheckedChange={(v) => setExpensePaidNow(!!v)} />
                   Adjust Now (unchecked = carry to next month)
                 </label>
-                <Input type="number" value={expenseAmount} onChange={(e) => setExpenseAmount(e.target.value)} disabled={!expensePaidNow || expenseOutstanding === 0} />
+                <Input type="number" value={expenseAmount} onChange={(e) => { setExpenseAmount(e.target.value); setExpenseAmountTouched(true); }} disabled={!expensePaidNow || expenseOutstanding === 0} />
               </div>
               <div className="rounded-md border p-3 space-y-2">
                 <div className="text-sm font-medium">Loan Due</div>
@@ -858,7 +875,7 @@ function MyPaymentsTab() {
                   <Checkbox checked={loanPaidNow} onCheckedChange={(v) => setLoanPaidNow(!!v)} disabled={!loan} />
                   Adjust Now (unchecked = carry to next month)
                 </label>
-                <Input type="number" value={loanAmount} onChange={(e) => setLoanAmount(e.target.value)} disabled={!loan || !loanPaidNow || loanDue <= 0} />
+                <Input type="number" value={loanAmount} onChange={(e) => { setLoanAmount(e.target.value); setLoanAmountTouched(true); }} disabled={!loan || !loanPaidNow || loanDue <= 0} />
                 {loan && <p className="text-xs text-muted-foreground">{fmtBDT(loan.remaining_balance)} remaining balance</p>}
               </div>
               <div className="rounded-md border p-3 space-y-2">
