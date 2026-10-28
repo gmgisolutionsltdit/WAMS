@@ -238,7 +238,7 @@ const EmployeeProfile = () => {
   const [wings, setWings] = useState<WingRow[]>([]);
   const [wingDesignations, setWingDesignations] = useState<{ id: string; wing_id: string; title: string }[]>([]);
   const [overviewForm, setOverviewForm] = useState({
-    full_name: "", phone: "", department: "", designation: "",
+    full_name: "", email: "", phone: "", department: "", designation: "",
     photo_url: "", wing_id: "", company_wing: "GMGI",
     role: "employee" as string, reporting_manager_ids: [] as string[],
     service_status: "Permanent", employee_status: "Active",
@@ -320,7 +320,7 @@ const EmployeeProfile = () => {
     setGrossSalaryInput(String(p.base_salary ?? 0));
     setRole((r?.role as string) || "employee");
     setOverviewForm({
-      full_name: p.full_name || "", phone: p.phone || "",
+      full_name: p.full_name || "", email: p.email || "", phone: p.phone || "",
       department: p.department || "", designation: p.designation || "",
       photo_url: p.photo_url || "", wing_id: p.wing_id || "", company_wing: p.company_wing || "GMGI",
       role: (r?.role as string) || "employee",
@@ -428,6 +428,7 @@ const EmployeeProfile = () => {
 
   const saveOverview = async (): Promise<boolean> => {
     if (!id || !overviewForm.full_name.trim()) { toast.error("Name is required"); return false; }
+    if (isAdmin && !overviewForm.email.trim()) { toast.error("Email is required"); return false; }
     if (overviewForm.employee_status === "Resigned" && profile?.employee_status !== "Resigned") {
       if (await checkOutstandingAdvance()) {
         toast.error("Cannot mark as Resigned: this employee has an outstanding Personal or Expense Advance. Settle it under Payment first.");
@@ -436,6 +437,16 @@ const EmployeeProfile = () => {
     }
     setSavingOverview(true);
     try {
+      const newEmail = overviewForm.email.trim().toLowerCase();
+      if (isAdmin && newEmail && newEmail !== (profile?.email || "").toLowerCase()) {
+        const { data, error: emailErr } = await invokeAdminUserManagement({
+          body: { action: "update_email", user_id: id, email: newEmail },
+        });
+        if (emailErr || (data as { error?: string } | null)?.error) {
+          toast.error(await edgeErrorMessage(emailErr, data, "Email update failed"), { duration: 8000 });
+          return false;
+        }
+      }
       const selectedWing = wings.find((w) => w.id === overviewForm.wing_id);
       const profilePayload: any = {
         full_name: overviewForm.full_name,
@@ -741,7 +752,17 @@ const EmployeeProfile = () => {
                     <Label className="text-xs">Full Name *</Label>
                     <Input className="mt-1" value={overviewForm.full_name} onChange={(e) => setOverviewForm((f) => ({ ...f, full_name: e.target.value }))} />
                   </div>
-                  <div><Label className="text-xs">Email</Label><Input type="email" value={profile.email || ""} disabled className="mt-1" /></div>
+                  <div>
+                    <Label className="text-xs">Email</Label>
+                    <Input
+                      type="email"
+                      className="mt-1"
+                      value={overviewForm.email}
+                      disabled={!isAdmin}
+                      onChange={(e) => setOverviewForm((f) => ({ ...f, email: e.target.value }))}
+                    />
+                    {!isAdmin && <p className="text-xs text-muted-foreground mt-1">Only an admin can change the login email.</p>}
+                  </div>
                   <div>
                     <Label className="text-xs">Phone</Label>
                     <Input className="mt-1" value={overviewForm.phone} onChange={(e) => setOverviewForm((f) => ({ ...f, phone: e.target.value }))} />
