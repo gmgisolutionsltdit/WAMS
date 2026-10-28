@@ -200,7 +200,7 @@ const Payment = () => {
   const renderRow = (loan: any, showEmployee: boolean) => (
     <TableRow key={loan.id}>
       {showEmployee && <TableCell>{loan.profiles?.full_name || loan.profiles?.email || "—"}</TableCell>}
-      <TableCell>{format(new Date(`${loan.request_date || loan.created_at}`), "MMM d, yyyy")}</TableCell>
+      <TableCell>{format(loan.request_date ? new Date(`${loan.request_date}T00:00:00`) : new Date(loan.created_at), "MMM d, yyyy")}</TableCell>
       <TableCell className="font-semibold">{Number(loan.amount).toLocaleString()}</TableCell>
       <TableCell className="text-xs text-muted-foreground max-w-[200px] truncate">{loan.reason || "—"}</TableCell>
       <TableCell>
