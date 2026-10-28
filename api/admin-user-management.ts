@@ -170,8 +170,8 @@ export default { async fetch(req: Request): Promise<Response> {
       return json({ error: "Admin role required" }, 403);
     }
 
-    // Only admins create accounts or set roles.
-    if ((action === "create_user" || action === "bulk_create") && !callerIsAdmin) {
+    // Only admins create accounts, set roles, or change login email.
+    if ((action === "create_user" || action === "bulk_create" || action === "update_email") && !callerIsAdmin) {
       return json({ error: "Admin role required" }, 403);
     }
 
@@ -216,6 +216,34 @@ export default { async fetch(req: Request): Promise<Response> {
       });
       if (error) return json({ error: error.message }, 400);
       return json({ success: true, tempPassword: newPassword });
+    }
+
+    if (action === "update_email") {
+      const targetUserId = body.user_id as string;
+      const email = (body.email as string || "").trim().toLowerCase();
+      if (!email || !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) {
+        return json({ error: "A valid email address is required" }, 400);
+      }
+      const { data: dupe } = await admin
+        .from("profiles")
+        .select("id")
+        .ilike("email", email)
+        .neq("id", targetUserId)
+        .maybeSingle();
+      if (dupe) return json({ error: `An account with the email ${email} already exists` }, 400);
+
+      const { error: authErr } = await admin.auth.admin.updateUserById(targetUserId, {
+        email, email_confirm: true,
+      });
+      if (authErr) {
+        const msg = /already been registered|already exists|duplicate/i.test(authErr.message)
+          ? `An account with the email ${email} already exists`
+          : authErr.message;
+        return json({ error: msg }, 400);
+      }
+      const { error: profErr } = await admin.from("profiles").update({ email }).eq("id", targetUserId);
+      if (profErr) return json({ error: `Login email updated but profile update failed: ${profErr.message}` }, 400);
+      return json({ success: true, email });
     }
 
     if (action === "send_reset_link") {
