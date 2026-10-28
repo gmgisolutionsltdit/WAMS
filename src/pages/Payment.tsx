@@ -539,18 +539,20 @@ function MyPaymentsTab() {
       // yet as of that month, so it's excluded — a month before either
       // existed naturally comes out to 0.00, and once it exists the balance
       // (paid or not) carries into every later month the same as before.
+      const monthStartISO = `${month}-01`;
       const monthEndISO = format(new Date(Number(month.slice(0, 4)), Number(month.slice(5, 7)), 0), "yyyy-MM-dd");
-      const [rows, { data: loanRow }, { data: settlement }, { data: claims }, { data: priorSettlements }] = await Promise.all([
+      const [rows, { data: loanRow }, { data: settlement }, { data: claims }] = await Promise.all([
         computeMonthlySalaryRows([selectedUserId], [month]),
         supabase.from("personal_advances").select("id, monthly_deduction, remaining_balance, created_at")
           .eq("user_id", selectedUserId).eq("status", "approved").gt("remaining_balance", 0)
           .lte("created_at", `${monthEndISO}T23:59:59`)
           .order("created_at", { ascending: true }).limit(1).maybeSingle(),
         supabase.from("payroll_settlements").select("*").eq("user_id", selectedUserId).eq("month", `${month}-01`).maybeSingle(),
-        supabase.from("expense_claims").select("amount, entry_type, recovered_amount").eq("user_id", selectedUserId).eq("status", "approved").lte("claim_date", monthEndISO),
-        // Excludes the viewed month's own settlement — that's the one being
-        // decided right now, not a prior payment to subtract out.
-        supabase.from("payroll_settlements").select("expense_amount_paid").eq("user_id", selectedUserId).neq("month", `${month}-01`),
+        // Scoped to claims dated within this month only — same range the
+        // Expense tab's own Month filter uses for its Net Amount card, so
+        // Expense Balance here always matches it for the same employee and
+        // month.
+        supabase.from("expense_claims").select("amount, entry_type, recovered_amount").eq("user_id", selectedUserId).eq("status", "approved").gte("claim_date", monthStartISO).lte("claim_date", monthEndISO),
       ]);
 
       const row = rows[0];
@@ -570,17 +572,12 @@ function MyPaymentsTab() {
       setLoanAmount("0");
       setLoanAmountTouched(false);
 
-      // Expense net balance as of the viewed month (every approved claim
-      // dated by then) minus every prior settlement's expense_amount_paid -
-      // so a partial payment last month reduces what's still outstanding now.
+      // Same formula as the Expense tab's Net Amount card: this month's
+      // approved reimbursement claims minus this month's approved advance
+      // claims still open (net of whatever's already been recovered).
       const expenseTotal = (claims || []).filter((c) => c.entry_type !== "advance").reduce((s, c) => s + Number(c.amount), 0);
       const advanceOutstanding = (claims || []).filter((c) => c.entry_type === "advance").reduce((s, c) => s + Math.max(0, Number(c.amount) - Number(c.recovered_amount || 0)), 0);
-      // Only the positive (genuine expense reimbursement) portion of a prior
-      // settlement counts here — a negative portion (advance recovery) is
-      // now tracked directly on the claim via recovered_amount (applied in
-      // submit() below), so including it here too would subtract it twice.
-      const paidSoFar = (priorSettlements || []).reduce((s, p) => s + Math.max(0, Number(p.expense_amount_paid) || 0), 0);
-      const outstanding = expenseTotal - advanceOutstanding - paidSoFar;
+      const outstanding = expenseTotal - advanceOutstanding;
       setExpenseOutstanding(outstanding);
       // Always starts at 0 — the admin enters the amount to pay explicitly,
       // rather than it being prefilled (from either the live outstanding
@@ -950,19 +947,19 @@ function MyPaymentsSummary() {
     (async () => {
       // Same month cutoff as the admin's My Payments tab: a claim/loan dated
       // after the viewed month hasn't happened yet as of that month.
+      const monthStartISO = `${month}-01`;
       const monthEndISO = format(new Date(Number(month.slice(0, 4)), Number(month.slice(5, 7)), 0), "yyyy-MM-dd");
-      const [rows, { data: loanRow }, { data: settlementRow }, { data: claims }, { data: priorSettlements }, { data: profile }] = await Promise.all([
+      const [rows, { data: loanRow }, { data: settlementRow }, { data: claims }, { data: profile }] = await Promise.all([
         computeMonthlySalaryRows([user.id], [month]),
         supabase.from("personal_advances").select("monthly_deduction, remaining_balance")
           .eq("user_id", user.id).eq("status", "approved").gt("remaining_balance", 0)
           .lte("created_at", `${monthEndISO}T23:59:59`)
           .order("created_at", { ascending: true }).limit(1).maybeSingle(),
         supabase.from("payroll_settlements").select("*").eq("user_id", user.id).eq("month", `${month}-01`).maybeSingle(),
-        supabase.from("expense_claims").select("amount, entry_type, recovered_amount").eq("user_id", user.id).eq("status", "approved").lte("claim_date", monthEndISO),
-        // Excludes the viewed month's own settlement — that's the one being
-        // shown right now, not a prior payment to subtract out (matches the
-        // admin's My Payments tab).
-        supabase.from("payroll_settlements").select("expense_amount_paid").eq("user_id", user.id).neq("month", `${month}-01`),
+        // Scoped to claims dated within this month only — matches the
+        // admin's My Payments tab, and the Expense tab's own Month filter
+        // for its Net Amount card.
+        supabase.from("expense_claims").select("amount, entry_type, recovered_amount").eq("user_id", user.id).eq("status", "approved").gte("claim_date", monthStartISO).lte("claim_date", monthEndISO),
         supabase.from("profiles").select("full_name, email").eq("id", user.id).maybeSingle(),
       ]);
 
@@ -974,14 +971,12 @@ function MyPaymentsSummary() {
       setSettlement(settlementRow || null);
       setEmployeeName(profile?.full_name || profile?.email || "");
 
+      // Same formula as the Expense tab's Net Amount card: this month's
+      // approved reimbursement claims minus this month's approved advance
+      // claims still open (net of whatever's already been recovered).
       const expenseTotal = (claims || []).filter((c) => c.entry_type !== "advance").reduce((s, c) => s + Number(c.amount), 0);
       const advanceOutstanding = (claims || []).filter((c) => c.entry_type === "advance").reduce((s, c) => s + Math.max(0, Number(c.amount) - Number(c.recovered_amount || 0)), 0);
-      // Only the positive (genuine expense reimbursement) portion of a prior
-      // settlement counts here — a negative portion (advance recovery) is
-      // now tracked directly on the claim via recovered_amount, so including
-      // it here too would subtract it twice.
-      const paidSoFar = (priorSettlements || []).reduce((s, p) => s + Math.max(0, Number(p.expense_amount_paid) || 0), 0);
-      setExpenseOutstanding(expenseTotal - advanceOutstanding - paidSoFar);
+      setExpenseOutstanding(expenseTotal - advanceOutstanding);
 
       setLoading(false);
     })();
