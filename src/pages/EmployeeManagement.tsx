@@ -16,8 +16,9 @@ import {
 } from "@/components/ui/dialog";
 import { toast } from "sonner";
 import {
-  Plus, Users, Search, Upload, Download, Camera, Copy, ArrowRight,
+  Plus, Users, Search, Upload, Download, Camera, ArrowRight,
 } from "lucide-react";
+import { PasswordInput } from "@/components/PasswordInput";
 import { useRealtimeSubscription } from "@/hooks/useRealtimeSubscription";
 import { useNavigate } from "react-router-dom";
 import { DEFAULT_GRACE_MINUTES, DEFAULT_OFFICE_END, DEFAULT_OFFICE_START } from "@/lib/officeTime";
@@ -77,7 +78,6 @@ const EmployeeManagement = () => {
   const [filterWing, setFilterWing] = useState("all");
   const [filterStatus, setFilterStatus] = useState("all");
   const [saving, setSaving] = useState(false);
-  const [tempCredentials, setTempCredentials] = useState<{ email: string; password: string } | null>(null);
   const [bulkOpen, setBulkOpen] = useState(false);
   const [bulkResults, setBulkResults] = useState<any[] | null>(null);
   const [uploadingPhoto, setUploadingPhoto] = useState(false);
@@ -94,7 +94,7 @@ const EmployeeManagement = () => {
   const [memberProjects, setMemberProjects] = useState<Record<string, string[]>>({});
 
   const initialForm = {
-    full_name: "", email: "", department: "", designation: "", phone: "",
+    full_name: "", email: "", password: "", department: "", designation: "", phone: "",
     role: "employee" as string, reporting_manager_ids: [] as string[],
     company_wing: "GMGI", wing_id: "" as string,
     service_status: "Permanent", employee_status: "Active",
@@ -278,6 +278,7 @@ const EmployeeManagement = () => {
 
   const handleSave = async () => {
     if (!form.full_name || !form.email) { toast.error("Name and email are required"); return; }
+    if (!form.password || form.password.length < 8) { toast.error("Password is required (min 8 characters)"); return; }
     setSaving(true);
     try {
       const selectedWing = wings.find((w) => w.id === form.wing_id);
@@ -315,6 +316,7 @@ const EmployeeManagement = () => {
           action: "create_user",
           payload: {
             email: form.email,
+            password: form.password,
             full_name: form.full_name,
             department: form.department,
             designation: form.designation,
@@ -342,7 +344,6 @@ const EmployeeManagement = () => {
       await supabase.from("profiles").update(postCreate).eq("id", created.userId);
       await syncProjectMembers(created.userId);
 
-      setTempCredentials({ email: created.email, password: created.tempPassword });
       toast.success("Employee created");
       setDialogOpen(false);
       resetForm();
@@ -494,7 +495,7 @@ const EmployeeManagement = () => {
             <DialogHeader>
               <DialogTitle>Add New Employee</DialogTitle>
               <DialogDescription>
-                Account is created with a temporary password shown after save. Share it securely; the user can change it after first login.
+                Set the account's password below. Share it securely with the user.
               </DialogDescription>
             </DialogHeader>
 
@@ -525,6 +526,7 @@ const EmployeeManagement = () => {
             <div className="grid grid-cols-2 gap-3">
               <div><Label>Full Name *</Label><Input value={form.full_name} onChange={(e) => setForm((f) => ({ ...f, full_name: e.target.value }))} /></div>
               <div><Label>Email *</Label><Input type="email" value={form.email} onChange={(e) => setForm((f) => ({ ...f, email: e.target.value }))} /></div>
+              <div><Label>Password *</Label><PasswordInput value={form.password} onChange={(e) => setForm((f) => ({ ...f, password: e.target.value }))} minLength={8} /></div>
               <div><Label>Phone</Label><Input value={form.phone} onChange={(e) => setForm((f) => ({ ...f, phone: e.target.value }))} /></div>
               <div><Label>Department</Label><Input value={form.department} onChange={(e) => setForm((f) => ({ ...f, department: e.target.value }))} /></div>
               <div><Label>Designation</Label><Input value={form.designation} onChange={(e) => setForm((f) => ({ ...f, designation: e.target.value }))} /></div>
@@ -740,7 +742,7 @@ const EmployeeManagement = () => {
       <CardContent className="space-y-4">
         <p className="text-xs text-muted-foreground">
           {isAdmin
-            ? "Admin can create accounts directly with a temporary password, reset passwords, and bulk-upload via CSV."
+            ? "Admin can create accounts directly with a password, reset passwords, and bulk-upload via CSV."
             : "You are viewing your direct reports. Contact an Admin to add or modify employee accounts."}
         </p>
         <div className="flex flex-col sm:flex-row gap-3">
@@ -861,43 +863,6 @@ const EmployeeManagement = () => {
           </TableBody>
         </Table>
       </CardContent>
-
-      {/* Temp credentials dialog */}
-      <Dialog open={!!tempCredentials} onOpenChange={(o) => !o && setTempCredentials(null)}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>Temporary Password</DialogTitle>
-            <DialogDescription>
-              Share these credentials securely with the user. They can change the password after first sign-in.
-            </DialogDescription>
-          </DialogHeader>
-          {tempCredentials && (
-            <div className="space-y-3">
-              <div>
-                <Label>Email</Label>
-                <div className="flex items-center gap-2">
-                  <Input readOnly value={tempCredentials.email} />
-                  <Button size="icon" variant="outline" onClick={() => { navigator.clipboard.writeText(tempCredentials.email); toast.success("Copied"); }}>
-                    <Copy className="h-4 w-4" />
-                  </Button>
-                </div>
-              </div>
-              <div>
-                <Label>Temporary Password</Label>
-                <div className="flex items-center gap-2">
-                  <Input readOnly value={tempCredentials.password} className="font-mono" />
-                  <Button size="icon" variant="outline" onClick={() => { navigator.clipboard.writeText(tempCredentials.password); toast.success("Copied"); }}>
-                    <Copy className="h-4 w-4" />
-                  </Button>
-                </div>
-              </div>
-            </div>
-          )}
-          <DialogFooter>
-            <Button onClick={() => setTempCredentials(null)}>Done</Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
 
       {/* Bulk results dialog */}
       <Dialog open={bulkOpen} onOpenChange={setBulkOpen}>

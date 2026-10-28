@@ -17,8 +17,9 @@ import {
   Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
 } from "@/components/ui/table";
 import {
-  Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter,
+  Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter, DialogTrigger,
 } from "@/components/ui/dialog";
+import { PasswordInput } from "@/components/PasswordInput";
 import {
   AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription,
   AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger,
@@ -26,7 +27,7 @@ import {
 import {
   ArrowLeft, Mail, Phone, Calendar, IdCard, Briefcase, UserCheck,
   Users, MapPin, Building2, TrendingUp, DollarSign, FolderKanban, UserCog,
-  ClipboardList, Pencil, KeyRound, Trash2, Copy, Camera, Clock3, ShieldAlert, Loader2,
+  ClipboardList, Pencil, KeyRound, Trash2, Camera, Clock3, ShieldAlert, Loader2,
 } from "lucide-react";
 import { format } from "date-fns";
 import { toast } from "sonner";
@@ -207,7 +208,9 @@ const EmployeeProfile = () => {
   const [profile, setProfile] = useState<Profile | null>(null);
   const [role, setRole] = useState<string>("employee");
   const [deleting, setDeleting] = useState(false);
-  const [tempCredentials, setTempCredentials] = useState<{ email: string; password: string } | null>(null);
+  const [changePasswordOpen, setChangePasswordOpen] = useState(false);
+  const [newPassword, setNewPassword] = useState("");
+  const [changingPassword, setChangingPassword] = useState(false);
   const [manager, setManager] = useState<{ id: string; name: string } | null>(null);
   const [increments, setIncrements] = useState<Increment[]>([]);
   const [reports, setReports] = useState<DirectReport[]>([]);
@@ -544,17 +547,27 @@ const EmployeeProfile = () => {
     return true;
   };
 
-  const handleResetPassword = async () => {
+  const handleChangePassword = async () => {
     if (!id || !profile) return;
-    const { data, error } = await invokeAdminUserManagement({
-      body: { action: "reset_password", user_id: id },
-    });
-    if (error || (data as any)?.error) {
-      toast.error(await edgeErrorMessage(error, data, "Reset failed"), { duration: 8000 });
+    if (!newPassword || newPassword.length < 8) {
+      toast.error("Password must be at least 8 characters");
       return;
     }
-    setTempCredentials({ email: profile.email || "", password: (data as any).tempPassword });
-    toast.success("Password reset");
+    setChangingPassword(true);
+    try {
+      const { data, error } = await invokeAdminUserManagement({
+        body: { action: "reset_password", user_id: id, new_password: newPassword },
+      });
+      if (error || (data as any)?.error) {
+        toast.error(await edgeErrorMessage(error, data, "Password change failed"), { duration: 8000 });
+        return;
+      }
+      toast.success("Password changed");
+      setChangePasswordOpen(false);
+      setNewPassword("");
+    } finally {
+      setChangingPassword(false);
+    }
   };
 
   const handleDelete = async () => {
@@ -955,31 +968,36 @@ const EmployeeProfile = () => {
                 <div className="flex items-start justify-between gap-2 flex-wrap">
                   <div>
                     <CardTitle className="text-base flex items-center gap-2"><ShieldAlert className="h-4 w-4" /> Account Actions</CardTitle>
-                    <CardDescription>Reset password or permanently remove this account.</CardDescription>
+                    <CardDescription>Change password or permanently remove this account.</CardDescription>
                   </div>
                 </div>
               </CardHeader>
               <CardContent className="flex flex-wrap items-center gap-2">
-                <AlertDialog>
-                  <AlertDialogTrigger asChild>
+                <Dialog open={changePasswordOpen} onOpenChange={(o) => { setChangePasswordOpen(o); if (!o) setNewPassword(""); }}>
+                  <DialogTrigger asChild>
                     <Button size="sm" variant="outline" >
-                      <KeyRound className="h-4 w-4 mr-1" /> Reset Password
+                      <KeyRound className="h-4 w-4 mr-1" /> Change Password
                     </Button>
-                  </AlertDialogTrigger>
-                  <AlertDialogContent>
-                    <AlertDialogHeader>
-                      <AlertDialogTitle>Reset password?</AlertDialogTitle>
-                      <AlertDialogDescription>
-                        A new temporary password will be generated for <strong>{profile.email}</strong>.
-                        You'll see it once and need to share it securely.
-                      </AlertDialogDescription>
-                    </AlertDialogHeader>
-                    <AlertDialogFooter>
-                      <AlertDialogCancel>Cancel</AlertDialogCancel>
-                      <AlertDialogAction onClick={handleResetPassword}>Reset</AlertDialogAction>
-                    </AlertDialogFooter>
-                  </AlertDialogContent>
-                </AlertDialog>
+                  </DialogTrigger>
+                  <DialogContent>
+                    <DialogHeader>
+                      <DialogTitle>Change password</DialogTitle>
+                      <DialogDescription>
+                        Set a new password for <strong>{profile.email}</strong>.
+                      </DialogDescription>
+                    </DialogHeader>
+                    <div>
+                      <Label>New Password</Label>
+                      <PasswordInput value={newPassword} onChange={(e) => setNewPassword(e.target.value)} minLength={8} />
+                    </div>
+                    <DialogFooter>
+                      <Button variant="outline" onClick={() => setChangePasswordOpen(false)}>Cancel</Button>
+                      <Button onClick={handleChangePassword} disabled={changingPassword}>
+                        {changingPassword ? "Saving…" : "Save"}
+                      </Button>
+                    </DialogFooter>
+                  </DialogContent>
+                </Dialog>
                 <AlertDialog>
                   <AlertDialogTrigger asChild>
                     <Button size="sm" variant="outline" >
@@ -1448,42 +1466,6 @@ const EmployeeProfile = () => {
         </DialogContent>
       </Dialog>
 
-      {/* Temp credentials dialog */}
-      <Dialog open={!!tempCredentials} onOpenChange={(o) => !o && setTempCredentials(null)}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>Temporary Password</DialogTitle>
-            <DialogDescription>
-              Share these credentials securely with the user. They can change the password after first sign-in.
-            </DialogDescription>
-          </DialogHeader>
-          {tempCredentials && (
-            <div className="space-y-3">
-              <div>
-                <Label>Email</Label>
-                <div className="flex items-center gap-2">
-                  <Input readOnly value={tempCredentials.email} />
-                  <Button size="icon" variant="outline" onClick={() => { navigator.clipboard.writeText(tempCredentials.email); toast.success("Copied"); }}>
-                    <Copy className="h-4 w-4" />
-                  </Button>
-                </div>
-              </div>
-              <div>
-                <Label>Temporary Password</Label>
-                <div className="flex items-center gap-2">
-                  <Input readOnly value={tempCredentials.password} className="font-mono" />
-                  <Button size="icon" variant="outline" onClick={() => { navigator.clipboard.writeText(tempCredentials.password); toast.success("Copied"); }}>
-                    <Copy className="h-4 w-4" />
-                  </Button>
-                </div>
-              </div>
-            </div>
-          )}
-          <DialogFooter>
-            <Button onClick={() => setTempCredentials(null)}>Done</Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
     </div>
   );
 };

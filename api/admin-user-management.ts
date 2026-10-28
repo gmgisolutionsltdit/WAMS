@@ -206,7 +206,11 @@ export default { async fetch(req: Request): Promise<Response> {
 
     if (action === "reset_password") {
       const targetUserId = body.user_id as string;
-      const newPassword = (body.new_password as string) || genPassword();
+      const requestedPassword = body.new_password as string | undefined;
+      if (requestedPassword !== undefined && requestedPassword.length < 8) {
+        return json({ error: "Password must be at least 8 characters" }, 400);
+      }
+      const newPassword = requestedPassword || genPassword();
       const { error } = await admin.auth.admin.updateUserById(targetUserId, {
         password: newPassword,
       });
