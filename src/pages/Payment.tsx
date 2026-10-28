@@ -200,7 +200,7 @@ const Payment = () => {
   const renderRow = (loan: any, showEmployee: boolean) => (
     <TableRow key={loan.id}>
       {showEmployee && <TableCell>{loan.profiles?.full_name || loan.profiles?.email || "—"}</TableCell>}
-      <TableCell>{format(new Date(`${loan.request_date || loan.created_at}`), "MMM d, yyyy")}</TableCell>
+      <TableCell>{format(loan.request_date ? new Date(`${loan.request_date}T00:00:00`) : new Date(loan.created_at), "MMM d, yyyy")}</TableCell>
       <TableCell className="font-semibold">{Number(loan.amount).toLocaleString()}</TableCell>
       <TableCell className="text-xs text-muted-foreground max-w-[200px] truncate">{loan.reason || "—"}</TableCell>
       <TableCell>
@@ -385,11 +385,19 @@ function AdminLoanPanel({ loans, renderRow }: { loans: any[]; renderRow: (loan: 
     return { totalLoanBalance, totalCurrentBalance };
   }, [loans, selectedIds]);
 
+  // Filter against the same date the Date column actually shows
+  // (request_date when set, falling back to created_at) — filtering against
+  // created_at alone let a loan requested for an earlier month but recorded
+  // later show up outside the month the admin actually filtered for.
   const filteredLoans = useMemo(() => loans
     .filter((l) => {
       if (!selectedIds.includes(l.user_id)) return false;
-      if (effectiveRange.from && l.created_at < `${effectiveRange.from}T00:00:00`) return false;
-      if (effectiveRange.to && l.created_at > `${effectiveRange.to}T23:59:59`) return false;
+      // Compared as plain yyyy-MM-dd — request_date has no time component,
+      // so comparing it against a time-suffixed boundary would wrongly
+      // exclude a loan dated exactly on the range's start.
+      const loanDate = String(l.request_date || l.created_at).slice(0, 10);
+      if (effectiveRange.from && loanDate < effectiveRange.from) return false;
+      if (effectiveRange.to && loanDate > effectiveRange.to) return false;
       return true;
     })
     .sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime()),
