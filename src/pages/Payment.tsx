@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -13,7 +13,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, Dialog
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
-import { Plus, Check, X, FileText, AlertTriangle, Loader2, Trash2, Download, ChevronLeft, ChevronRight } from "lucide-react";
+import { Plus, Check, X, FileText, AlertTriangle, Loader2, Trash2, Download } from "lucide-react";
 import { toast } from "sonner";
 import { format } from "date-fns";
 import { notifyManagersAndAdmins, notifyEmployee } from "@/lib/notifications";
@@ -504,32 +504,16 @@ function MyPaymentsTab() {
   const [loanPaidNow, setLoanPaidNow] = useState(true);
   const [expenseAmount, setExpenseAmount] = useState("0");
   const [loanAmount, setLoanAmount] = useState("0");
+  // Whether the admin has actually typed into each box this time the form
+  // was loaded — the box itself always starts at 0, but saving without
+  // touching it must not overwrite (and reverse the ledger effect of) a
+  // previously recorded amount just because a note or attachment changed.
+  const [expenseAmountTouched, setExpenseAmountTouched] = useState(false);
+  const [loanAmountTouched, setLoanAmountTouched] = useState(false);
   const [note, setNote] = useState("");
   const [attachments, setAttachments] = useState<File[]>([]);
   const [existingAttachments, setExistingAttachments] = useState<string[]>([]);
   const [uploading, setUploading] = useState(false);
-  const [paymentHistory, setPaymentHistory] = useState<PayrollSettlementRow[]>([]);
-  const [historyPage, setHistoryPage] = useState(1);
-
-  const fetchPaymentHistory = useCallback(async () => {
-    const { data } = await supabase
-      .from("payroll_settlements")
-      .select("*, profiles!payroll_settlements_user_id_fkey(full_name, email)")
-      .order("month", { ascending: false })
-      .order("created_at", { ascending: false });
-    setPaymentHistory(data || []);
-  }, []);
-
-  useEffect(() => { fetchPaymentHistory(); }, [fetchPaymentHistory]);
-
-  const deletePaymentHistory = async (row: PayrollSettlementRow) => {
-    if (!window.confirm("Delete this payment record? This cannot be undone.")) return;
-    const { data, error } = await supabase.from("payroll_settlements").delete().eq("id", row.id).select("id");
-    if (error) { toast.error(error.message); return; }
-    if (!data?.length) { toast.error("You're not allowed to delete this payment record."); return; }
-    toast.success("Payment record deleted");
-    fetchPaymentHistory();
-  };
 
   useEffect(() => {
     (async () => {
@@ -571,15 +555,12 @@ function MyPaymentsTab() {
       setExpensePaidNow(settlement ? settlement.expense_paid : true);
       setLoanPaidNow(settlement ? settlement.loan_paid : true);
       const loanDue = Math.min(Number(loanRow?.monthly_deduction || 0), Number(loanRow?.remaining_balance || 0));
-      // Prefill from what was actually recorded for this month, when a
-      // settlement already exists — not the freshly recomputed live due
-      // figure, which already reflects *this* settlement's own prior
-      // deduction (remaining_balance was reduced when it was first saved)
-      // and so reads smaller now. Reopening an already-settled month and
-      // saving again would otherwise apply the difference as a *second*,
-      // wrong delta against the ledger. Shown negative, same convention as
-      // the Loan Due badge.
-      setLoanAmount(String(settlement ? -Math.abs(Number(settlement.loan_amount_paid) || 0) : (loanDue > 0 ? -loanDue : 0)));
+      // Always starts at 0 — the admin enters the amount to pay explicitly,
+      // rather than it being prefilled (from either the live due figure or
+      // an existing settlement), so reopening a month never risks silently
+      // re-submitting a stale or mismatched number.
+      setLoanAmount("0");
+      setLoanAmountTouched(false);
 
       // Expense net balance as of the viewed month (every approved claim
       // dated by then) minus every prior settlement's expense_amount_paid -
@@ -593,13 +574,12 @@ function MyPaymentsTab() {
       const paidSoFar = (priorSettlements || []).reduce((s, p) => s + Math.max(0, Number(p.expense_amount_paid) || 0), 0);
       const outstanding = expenseTotal - advanceOutstanding - paidSoFar;
       setExpenseOutstanding(outstanding);
-      // Prefill from what was actually recorded for this month, when a
-      // settlement already exists — not the freshly recomputed live
-      // figure, which can now differ from it (e.g. it reads 0 once this
-      // month's own recovery has been applied) and would otherwise make
-      // reopening an already-settled month silently reset, then overwrite,
-      // its own historical record — reversing the recovery — on save.
-      setExpenseAmount(String(settlement ? Number(settlement.expense_amount_paid) || 0 : outstanding));
+      // Always starts at 0 — the admin enters the amount to pay explicitly,
+      // rather than it being prefilled (from either the live outstanding
+      // figure or an existing settlement), so reopening a month never risks
+      // silently re-submitting a stale or mismatched number.
+      setExpenseAmount("0");
+      setExpenseAmountTouched(false);
       setNote(settlement?.note || "");
       setExistingAttachments(settlement?.attachments || []);
       setAttachments([]);
@@ -633,10 +613,19 @@ function MyPaymentsTab() {
       // ledger delta below and every other reader of loan_amount_paid
       // (receipts, history, the employee's own summary) expect a plain
       // amount paid, same as before this box started showing it negative.
-      const loanPaid = loanPaidNow ? Math.abs(Number(loanAmount) || 0) : 0;
+      // The box always starts at 0 (never prefilled), so an untouched box
+      // falls back to what was already recorded for this settlement —
+      // otherwise saving for an unrelated reason (a note, an attachment)
+      // without re-entering the amount would silently zero it out and
+      // reverse the loan/advance ledger effect it already applied.
+      const loanPaid = loanPaidNow
+        ? (loanAmountTouched ? Math.abs(Number(loanAmount) || 0) : Math.abs(Number(existingSettlement?.loan_amount_paid) || 0))
+        : 0;
       // Expense can be negative (an outstanding advance recovery) — not
       // clamped to 0 like Loan, since that would silently drop it.
-      const expensePaid = expensePaidNow ? (Number(expenseAmount) || 0) : 0;
+      const expensePaid = expensePaidNow
+        ? (expenseAmountTouched ? (Number(expenseAmount) || 0) : (Number(existingSettlement?.expense_amount_paid) || 0))
+        : 0;
 
       // A negative Expense amount recovers an outstanding cash advance —
       // fetch the employee's open advance claims as of the viewed month
@@ -761,7 +750,6 @@ function MyPaymentsTab() {
       }
 
       toast.success("Payment recorded");
-      fetchPaymentHistory();
       const monthLabel = format(new Date(`${month}-01`), "MMMM yyyy");
       const recordedEmployeeName = employees.find((e) => e.id === selectedUserId)?.full_name
         || employees.find((e) => e.id === selectedUserId)?.email || "An employee";
@@ -814,19 +802,6 @@ function MyPaymentsTab() {
       note,
     });
   };
-
-  // Net Payment for a recorded settlement: same "only counts while adjusted"
-  // rule as the live card above, minus the live gross-salary fallback (not
-  // stored on the settlement row itself) for an unchecked Net Salary.
-  const netPaymentForHistoryRow = (h: PayrollSettlementRow) =>
-    (h.net_hours_paid ? Number(h.net_hours_amount) || 0 : 0)
-    + (h.expense_paid ? Number(h.expense_amount_paid) || 0 : 0)
-    - (h.loan_paid ? Number(h.loan_amount_paid) || 0 : 0);
-
-  const HISTORY_PAGE_SIZE = 10;
-  const historyPageCount = Math.max(1, Math.ceil(paymentHistory.length / HISTORY_PAGE_SIZE));
-  const currentHistoryPage = Math.min(historyPage, historyPageCount);
-  const pagedHistory = paymentHistory.slice((currentHistoryPage - 1) * HISTORY_PAGE_SIZE, currentHistoryPage * HISTORY_PAGE_SIZE);
 
   return (
     <div className="space-y-4">
@@ -889,7 +864,7 @@ function MyPaymentsTab() {
                   <Checkbox checked={expensePaidNow} onCheckedChange={(v) => setExpensePaidNow(!!v)} />
                   Adjust Now (unchecked = carry to next month)
                 </label>
-                <Input type="number" value={expenseAmount} onChange={(e) => setExpenseAmount(e.target.value)} disabled={!expensePaidNow || expenseOutstanding === 0} />
+                <Input type="number" value={expenseAmount} onChange={(e) => { setExpenseAmount(e.target.value); setExpenseAmountTouched(true); }} disabled={!expensePaidNow || expenseOutstanding === 0} />
               </div>
               <div className="rounded-md border p-3 space-y-2">
                 <div className="text-sm font-medium">Loan Due</div>
@@ -900,7 +875,7 @@ function MyPaymentsTab() {
                   <Checkbox checked={loanPaidNow} onCheckedChange={(v) => setLoanPaidNow(!!v)} disabled={!loan} />
                   Adjust Now (unchecked = carry to next month)
                 </label>
-                <Input type="number" value={loanAmount} onChange={(e) => setLoanAmount(e.target.value)} disabled={!loan || !loanPaidNow || loanDue <= 0} />
+                <Input type="number" value={loanAmount} onChange={(e) => { setLoanAmount(e.target.value); setLoanAmountTouched(true); }} disabled={!loan || !loanPaidNow || loanDue <= 0} />
                 {loan && <p className="text-xs text-muted-foreground">{fmtBDT(loan.remaining_balance)} remaining balance</p>}
               </div>
               <div className="rounded-md border p-3 space-y-2">
@@ -934,63 +909,6 @@ function MyPaymentsTab() {
         )}
       </CardContent>
     </Card>
-
-    <Card>
-      <CardHeader>
-        <div className="flex items-start justify-between gap-3">
-          <CardTitle className="text-base">Payment History</CardTitle>
-          {paymentHistory.length > HISTORY_PAGE_SIZE && (
-            <div className="flex items-center gap-2 shrink-0">
-              <Button variant="outline" size="sm" disabled={currentHistoryPage <= 1} onClick={() => setHistoryPage(currentHistoryPage - 1)}>
-                <ChevronLeft className="h-4 w-4 mr-1" /> Previous
-              </Button>
-              <span className="text-sm text-muted-foreground whitespace-nowrap">Page {currentHistoryPage} of {historyPageCount}</span>
-              <Button variant="outline" size="sm" disabled={currentHistoryPage >= historyPageCount} onClick={() => setHistoryPage(currentHistoryPage + 1)}>
-                Next <ChevronRight className="h-4 w-4 ml-1" />
-              </Button>
-            </div>
-          )}
-        </div>
-      </CardHeader>
-      <CardContent>
-        <div className="overflow-x-auto">
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>Employee</TableHead>
-                <TableHead>Month</TableHead>
-                <TableHead>Net Salary</TableHead>
-                <TableHead className="text-right">Expense Balance</TableHead>
-                <TableHead className="text-right">Loan Due</TableHead>
-                <TableHead className="text-right">Net Payment</TableHead>
-                <TableHead>Actions</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {pagedHistory.length === 0 ? (
-                <TableRow><TableCell colSpan={7} className="text-center text-muted-foreground py-6">No payments recorded yet</TableCell></TableRow>
-              ) : pagedHistory.map((h) => (
-                <TableRow key={h.id}>
-                  <TableCell>{h.profiles?.full_name || h.profiles?.email || "—"}</TableCell>
-                  <TableCell className="whitespace-nowrap">{format(new Date(h.month), "MMM yyyy")}</TableCell>
-                  <TableCell>
-                    <Badge variant="outline">{h.net_hours_paid ? `Paid ${fmtBDT(h.net_hours_amount)}` : "Carried forward"}</Badge>
-                  </TableCell>
-                  <TableCell className="text-right">{h.expense_paid ? fmtBDT(h.expense_amount_paid) : "—"}</TableCell>
-                  <TableCell className="text-right">{h.loan_paid ? fmtBDT(-Number(h.loan_amount_paid)) : "—"}</TableCell>
-                  <TableCell className="text-right font-semibold">{fmtBDT(netPaymentForHistoryRow(h))}</TableCell>
-                  <TableCell>
-                    <Button size="sm" variant="ghost" className="text-destructive hover:text-destructive" onClick={() => deletePaymentHistory(h)}>
-                      <Trash2 className="h-4 w-4 mr-1" /> Delete
-                    </Button>
-                  </TableCell>
-                </TableRow>
-              ))}
-            </TableBody>
-          </Table>
-        </div>
-      </CardContent>
-    </Card>
     </div>
   );
 }
@@ -1012,8 +930,6 @@ function MyPaymentsSummary() {
   const [loan, setLoan] = useState<{ monthly_deduction: number; remaining_balance: number } | null>(null);
   const [expenseOutstanding, setExpenseOutstanding] = useState(0);
   const [settlement, setSettlement] = useState<PayrollSettlementRow | null>(null);
-  const [history, setHistory] = useState<PayrollSettlementRow[]>([]);
-  const [historyPage, setHistoryPage] = useState(1);
   const [employeeName, setEmployeeName] = useState("");
   const [teamPending, setTeamPending] = useState<PayrollSettlementRow[]>([]);
   const [rejectingId, setRejectingId] = useState<string | null>(null);
@@ -1027,7 +943,7 @@ function MyPaymentsSummary() {
       // Same month cutoff as the admin's My Payments tab: a claim/loan dated
       // after the viewed month hasn't happened yet as of that month.
       const monthEndISO = format(new Date(Number(month.slice(0, 4)), Number(month.slice(5, 7)), 0), "yyyy-MM-dd");
-      const [rows, { data: loanRow }, { data: settlementRow }, { data: claims }, { data: priorSettlements }, { data: historyRows }, { data: profile }] = await Promise.all([
+      const [rows, { data: loanRow }, { data: settlementRow }, { data: claims }, { data: priorSettlements }, { data: profile }] = await Promise.all([
         computeMonthlySalaryRows([user.id], [month]),
         supabase.from("personal_advances").select("monthly_deduction, remaining_balance")
           .eq("user_id", user.id).eq("status", "approved").gt("remaining_balance", 0)
@@ -1039,7 +955,6 @@ function MyPaymentsSummary() {
         // shown right now, not a prior payment to subtract out (matches the
         // admin's My Payments tab).
         supabase.from("payroll_settlements").select("expense_amount_paid").eq("user_id", user.id).neq("month", `${month}-01`),
-        supabase.from("payroll_settlements").select("*").eq("user_id", user.id).order("month", { ascending: false }),
         supabase.from("profiles").select("full_name, email").eq("id", user.id).maybeSingle(),
       ]);
 
@@ -1060,7 +975,6 @@ function MyPaymentsSummary() {
       const paidSoFar = (priorSettlements || []).reduce((s, p) => s + Math.max(0, Number(p.expense_amount_paid) || 0), 0);
       setExpenseOutstanding(expenseTotal - advanceOutstanding - paidSoFar);
 
-      setHistory(historyRows || []);
       setLoading(false);
     })();
   }, [user?.id, month]);
@@ -1154,25 +1068,6 @@ function MyPaymentsSummary() {
       netPayment,
       note: settlement?.note,
     });
-  };
-
-  const HISTORY_PAGE_SIZE = 10;
-  const historyPageCount = Math.max(1, Math.ceil(history.length / HISTORY_PAGE_SIZE));
-  const currentHistoryPage = Math.min(historyPage, historyPageCount);
-  const pagedHistory = history.slice((currentHistoryPage - 1) * HISTORY_PAGE_SIZE, currentHistoryPage * HISTORY_PAGE_SIZE);
-
-  // Shown here for convenience, but the delete only ever actually succeeds
-  // for an admin — payroll_settlements' DELETE policy is admin-only, so a
-  // non-admin's click is rejected by RLS (0 rows matched) and reported as
-  // "not allowed", same pattern as the admin's own History table.
-  const deleteHistoryRow = async (row: PayrollSettlementRow) => {
-    if (!window.confirm("Delete this payment record? This cannot be undone.")) return;
-    const { data, error } = await supabase.from("payroll_settlements").delete().eq("id", row.id).select("id");
-    if (error) { toast.error(error.message); return; }
-    if (!data?.length) { toast.error("You're not allowed to delete this payment record."); return; }
-    toast.success("Payment record deleted");
-    setHistory((h) => h.filter((r) => r.id !== row.id));
-    if (settlement?.id === row.id) setSettlement(null);
   };
 
   return (
@@ -1320,55 +1215,6 @@ function MyPaymentsSummary() {
                 ))}
               </div>
             )}
-
-            <div>
-              <div className="flex items-start justify-between gap-3 mb-2">
-                <p className="text-sm font-medium">History</p>
-                {history.length > HISTORY_PAGE_SIZE && (
-                  <div className="flex items-center gap-2 shrink-0">
-                    <Button variant="outline" size="sm" disabled={currentHistoryPage <= 1} onClick={() => setHistoryPage(currentHistoryPage - 1)}>
-                      <ChevronLeft className="h-4 w-4 mr-1" /> Previous
-                    </Button>
-                    <span className="text-sm text-muted-foreground whitespace-nowrap">Page {currentHistoryPage} of {historyPageCount}</span>
-                    <Button variant="outline" size="sm" disabled={currentHistoryPage >= historyPageCount} onClick={() => setHistoryPage(currentHistoryPage + 1)}>
-                      Next <ChevronRight className="h-4 w-4 ml-1" />
-                    </Button>
-                  </div>
-                )}
-              </div>
-              <div className="overflow-x-auto">
-                <Table>
-                  <TableHeader>
-                    <TableRow>
-                      <TableHead>Month</TableHead>
-                      <TableHead>Net Salary</TableHead>
-                      <TableHead className="text-right">Expense Paid</TableHead>
-                      <TableHead className="text-right">Loan Paid</TableHead>
-                      <TableHead>Actions</TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {pagedHistory.length === 0 ? (
-                      <TableRow><TableCell colSpan={5} className="text-center text-muted-foreground py-6">No payments recorded yet</TableCell></TableRow>
-                    ) : pagedHistory.map((h) => (
-                      <TableRow key={h.id}>
-                        <TableCell className="whitespace-nowrap">{format(new Date(h.month), "MMM yyyy")}</TableCell>
-                        <TableCell>
-                          <Badge variant="outline">{h.net_hours_paid ? `Paid ${fmtBDT(h.net_hours_amount)}` : "Carried forward"}</Badge>
-                        </TableCell>
-                        <TableCell className="text-right">{fmtBDT(h.expense_amount_paid)}</TableCell>
-                        <TableCell className="text-right">{fmtBDT(h.loan_amount_paid)}</TableCell>
-                        <TableCell>
-                          <Button size="sm" variant="ghost" className="text-destructive hover:text-destructive" onClick={() => deleteHistoryRow(h)}>
-                            <Trash2 className="h-4 w-4 mr-1" /> Delete
-                          </Button>
-                        </TableCell>
-                      </TableRow>
-                    ))}
-                  </TableBody>
-                </Table>
-              </div>
-            </div>
 
           </>
         )}
