@@ -25,7 +25,7 @@ interface Props {
   column: KanbanColumnData;
   tasks: KanbanTask[];
   profiles: Profile[];
-  onQuickCreateTask: (columnId: string, title: string) => void;
+  onQuickCreateTask: (columnId: string, title: string) => Promise<boolean>;
   onOpenTask: (task: KanbanTask) => void;
   onDeleteColumn?: (columnId: string) => void;
   onRenameColumn?: (columnId: string, name: string) => void;
@@ -107,15 +107,21 @@ export function KanbanColumn({
   // doesn't need re-opening it each time.
   const [addingCard, setAddingCard] = useState(false);
   const [newCardTitle, setNewCardTitle] = useState("");
+  const [submittingCard, setSubmittingCard] = useState(false);
   const newCardRef = useRef<HTMLTextAreaElement>(null);
 
   const openAddCard = () => { setAddingCard(true); setNewCardTitle(""); };
   const closeAddCard = () => { setAddingCard(false); setNewCardTitle(""); };
-  const submitNewCard = () => {
+  const submitNewCard = async () => {
     const trimmed = newCardTitle.trim();
-    if (!trimmed) { closeAddCard(); return; }
-    onQuickCreateTask(column.id, trimmed);
-    setNewCardTitle("");
+    if (!trimmed || submittingCard) { if (!trimmed) closeAddCard(); return; }
+    setSubmittingCard(true);
+    const ok = await onQuickCreateTask(column.id, trimmed);
+    setSubmittingCard(false);
+    // Only clear the draft on success — on failure (e.g. a transient error)
+    // keep what was typed so it isn't silently lost, same as the old
+    // Create Task dialog did.
+    if (ok) setNewCardTitle("");
     newCardRef.current?.focus();
   };
 
@@ -218,6 +224,7 @@ export function KanbanColumn({
             <Textarea
               ref={newCardRef}
               autoFocus
+              disabled={submittingCard}
               value={newCardTitle}
               onChange={(e) => setNewCardTitle(e.target.value)}
               onKeyDown={(e) => {
@@ -228,7 +235,7 @@ export function KanbanColumn({
               className="min-h-[60px] text-sm resize-none bg-card"
             />
             <div className="flex items-center gap-1.5 mt-2">
-              <Button size="sm" onClick={submitNewCard}>Add card</Button>
+              <Button size="sm" onClick={submitNewCard} disabled={submittingCard}>Add card</Button>
               <Button size="icon" variant="ghost" className="h-8 w-8" onClick={closeAddCard} aria-label="Cancel">
                 <X className="h-4 w-4" />
               </Button>

@@ -350,10 +350,12 @@ const TaskBoard = () => {
 
   // Trello-style inline "+ Add a card" — just a title, created directly
   // without the full Create Task dialog; the rest (description, assignee,
-  // due date, priority) gets filled in later by opening the card.
-  const quickCreateTask = async (columnId: string, title: string) => {
+  // due date, priority) gets filled in later by opening the card. Returns
+  // whether it succeeded so the inline form can keep/restore the draft on
+  // failure instead of silently dropping what was typed.
+  const quickCreateTask = async (columnId: string, title: string): Promise<boolean> => {
     const trimmed = title.trim();
-    if (!trimmed || !boardId) return;
+    if (!trimmed || !boardId) return false;
     const col = columns.find((c) => c.id === columnId);
     const ticketKey = `${project?.key}-${taskCounter + 1}`;
     const { error } = await supabase.from("tasks").insert({
@@ -367,7 +369,13 @@ const TaskBoard = () => {
       reporter_id: user!.id,
       position: Math.max(-1, ...(tasksByColumn[columnId] || []).map((t) => t.position)) + 1,
     });
-    if (error) { toast.error(error.message); return; }
+    if (error) { toast.error(error.message); return false; }
+    // Advance locally rather than wait for the realtime refetch — the
+    // inline form stays open for back-to-back submits, and two quick
+    // creates before that refetch lands would otherwise reuse the same
+    // ticket_key.
+    setTaskCounter((c) => c + 1);
+    return true;
   };
 
   const openTaskIdRef = useRef<string | null>(null);
