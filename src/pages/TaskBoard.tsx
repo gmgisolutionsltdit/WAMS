@@ -354,17 +354,21 @@ const TaskBoard = () => {
   // whether it succeeded so the inline form can keep/restore the draft on
   // failure instead of silently dropping what was typed.
   //
-  // `atIndex` places the new card at that position within the column
-  // (0 = top; omitted/column length = append at the bottom), matching the
-  // hover "+" gaps shown above each card. Existing cards at or after that
-  // index get shifted up by one first, the same contiguous 0..n-1 position
-  // scheme drag-and-drop reordering already keeps.
+  // `atIndex` is the UI-visible slot within this column's cards (0 = top;
+  // omitted/past the end = append at the bottom), matching the hover "+"
+  // gaps shown above each card. It's resolved to the *actual* stored
+  // position of the card currently at that slot rather than used as a raw
+  // position value — drag-and-drop only renumbers the destination column
+  // on a move, so a column a card was dragged out of can have gaps, and
+  // treating the slot index as a position would shift the wrong cards.
   const quickCreateTask = async (columnId: string, title: string, atIndex?: number): Promise<boolean> => {
     const trimmed = title.trim();
     if (!trimmed || !boardId) return false;
     const col = columns.find((c) => c.id === columnId);
     const colTasks = tasksByColumn[columnId] || [];
-    const insertPos = atIndex ?? colTasks.length;
+    const insertPos = atIndex === undefined || atIndex >= colTasks.length
+      ? Math.max(-1, ...colTasks.map((t) => t.position)) + 1
+      : colTasks[atIndex].position;
     const toShift = colTasks.filter((t) => t.position >= insertPos);
     if (toShift.length) {
       const shiftResults = await Promise.all(
