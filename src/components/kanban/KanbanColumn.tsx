@@ -1,6 +1,8 @@
+import { useState } from "react";
 import { useSortable, SortableContext, verticalListSortingStrategy } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import { Plus, MoreVertical, Trash2 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { KanbanCard, KanbanTask, Profile } from "./KanbanCard";
@@ -25,6 +27,7 @@ interface Props {
   onCreateTask: (columnId: string) => void;
   onOpenTask: (task: KanbanTask) => void;
   onDeleteColumn?: (columnId: string) => void;
+  onRenameColumn?: (columnId: string, name: string) => void;
   onToggleComplete?: (task: KanbanTask) => void;
   onArchiveTask?: (task: KanbanTask) => void;
   canDelete?: boolean;
@@ -36,17 +39,6 @@ interface Props {
   canEditBoard?: boolean;
   currentUserId?: string;
   checklistCounts?: Record<string, { done: number; total: number }>;
-  /** All columns on this board, for each card's "Move" submenu. */
-  allColumns?: KanbanColumnData[];
-  /** Board members only (not every profile in the system), for the
-      "Change members" submenu — assigning a non-member would grant them
-      read access to the task via RLS. */
-  assignableProfiles?: Profile[];
-  onMoveTask?: (task: KanbanTask, columnId: string) => void;
-  onChangeAssignee?: (task: KanbanTask, userId: string | null) => void;
-  onUpdateDueDate?: (task: KanbanTask, date: string | null) => void;
-  onCopyCard?: (task: KanbanTask) => void;
-  onCopyLink?: (task: KanbanTask) => void;
 }
 
 const COLUMN_ACCENT: Record<string, string> = {
@@ -63,6 +55,7 @@ export function KanbanColumn({
   onCreateTask,
   onOpenTask,
   onDeleteColumn,
+  onRenameColumn,
   onToggleComplete,
   onArchiveTask,
   canDelete,
@@ -70,13 +63,6 @@ export function KanbanColumn({
   canEditBoard,
   currentUserId,
   checklistCounts,
-  allColumns,
-  assignableProfiles,
-  onMoveTask,
-  onChangeAssignee,
-  onUpdateDueDate,
-  onCopyCard,
-  onCopyLink,
 }: Props) {
   // A column is both a sortable item (drag its header to reorder columns)
   // and the droppable zone cards are dropped into — dnd-kit's useSortable
@@ -101,6 +87,20 @@ export function KanbanColumn({
 
   const accent = COLUMN_ACCENT[column.status] || "from-primary/30 to-primary/0";
 
+  const [editingName, setEditingName] = useState(false);
+  const [nameDraft, setNameDraft] = useState(column.name);
+  const canRename = !!canEditBoard && !!onRenameColumn;
+
+  const startEditingName = () => {
+    if (!canRename) return;
+    setNameDraft(column.name);
+    setEditingName(true);
+  };
+  const commitName = () => {
+    setEditingName(false);
+    if (nameDraft.trim() && nameDraft.trim() !== column.name) onRenameColumn?.(column.id, nameDraft);
+  };
+
   return (
     <div
       ref={setNodeRef}
@@ -124,81 +124,86 @@ export function KanbanColumn({
         )}
       >
         <div className="flex items-center justify-between">
-          <div className="flex items-center gap-2">
-            <span className="font-semibold text-sm">{column.name}</span>
-            <span className="text-xs px-1.5 py-0.5 rounded-md bg-background/60 text-muted-foreground font-medium">
+          <div className="flex items-center gap-2 min-w-0 flex-1">
+            {editingName ? (
+              <Input
+                autoFocus
+                value={nameDraft}
+                onChange={(e) => setNameDraft(e.target.value)}
+                onBlur={commitName}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter") { e.preventDefault(); commitName(); }
+                  if (e.key === "Escape") { setEditingName(false); setNameDraft(column.name); }
+                }}
+                onClick={(e) => e.stopPropagation()}
+                onPointerDown={(e) => e.stopPropagation()}
+                className="h-7 text-sm font-semibold px-1.5 py-1"
+              />
+            ) : (
+              <span
+                className={cn("font-semibold text-sm truncate", canRename && "cursor-text hover:bg-background/40 rounded px-1 -mx-1")}
+                onClick={(e) => { if (canRename) { e.stopPropagation(); startEditingName(); } }}
+                onPointerDown={(e) => canRename && e.stopPropagation()}
+              >
+                {column.name}
+              </span>
+            )}
+            <span className="text-xs px-1.5 py-0.5 rounded-md bg-background/60 text-muted-foreground font-medium shrink-0">
               {tasks.length}
             </span>
           </div>
-          <div className="flex items-center gap-0.5">
-            <Button
-              size="icon"
-              variant="ghost"
-              className="h-7 w-7"
-              onClick={() => onCreateTask(column.id)}
-              onPointerDown={(e) => e.stopPropagation()}
-              aria-label="Add task"
-            >
-              <Plus className="h-3.5 w-3.5" />
-            </Button>
-            {canDelete && onDeleteColumn && (
-              <DropdownMenu>
-                <DropdownMenuTrigger asChild>
-                  <Button size="icon" variant="ghost" className="h-7 w-7" onPointerDown={(e) => e.stopPropagation()}>
-                    <MoreVertical className="h-3.5 w-3.5" />
-                  </Button>
-                </DropdownMenuTrigger>
-                <DropdownMenuContent align="end">
-                  <DropdownMenuItem
-                    onClick={() => onDeleteColumn(column.id)}
-                    className="text-destructive"
-                  >
-                    <Trash2 className="h-3.5 w-3.5 mr-2" /> Delete column
-                  </DropdownMenuItem>
-                </DropdownMenuContent>
-              </DropdownMenu>
-            )}
-          </div>
+          {canDelete && onDeleteColumn && (
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button size="icon" variant="ghost" className="h-7 w-7 shrink-0" onPointerDown={(e) => e.stopPropagation()}>
+                  <MoreVertical className="h-3.5 w-3.5" />
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end">
+                <DropdownMenuItem
+                  onClick={() => onDeleteColumn(column.id)}
+                  className="text-destructive"
+                >
+                  <Trash2 className="h-3.5 w-3.5 mr-2" /> Delete column
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
+          )}
         </div>
       </div>
 
       {/* Cards */}
       <SortableContext items={tasks.map((t) => t.id)} strategy={verticalListSortingStrategy}>
-        <div className="flex-1 min-h-[120px] px-2 pb-2 space-y-2 overflow-y-auto">
-          {tasks.length === 0 ? (
-            <button
-              onClick={() => onCreateTask(column.id)}
-              className="w-full mt-2 py-6 px-3 rounded-xl border-2 border-dashed border-border/60 text-xs text-muted-foreground hover:border-primary/40 hover:text-primary hover:bg-primary/5 transition-all"
-            >
-              <Plus className="h-4 w-4 mx-auto mb-1" />
-              Add task
-            </button>
-          ) : (
-            tasks.map((t) => (
-              <KanbanCard
-                key={t.id}
-                task={t}
-                assignee={profiles.find((p) => p.id === t.assignee_id) || null}
-                onClick={() => onOpenTask(t)}
-                onToggleComplete={onToggleComplete ? () => onToggleComplete(t) : undefined}
-                canToggleComplete={!!canEditBoard || t.assignee_id === currentUserId}
-                onArchive={onArchiveTask ? () => onArchiveTask(t) : undefined}
-                canArchive={!!canEditBoard || t.assignee_id === currentUserId}
-                canEdit={!!canEditBoard || t.assignee_id === currentUserId}
-                checklistTotal={checklistCounts?.[t.id]?.total || 0}
-                checklistDone={checklistCounts?.[t.id]?.done || 0}
-                otherColumns={allColumns?.filter((c) => c.id !== column.id).map((c) => ({ id: c.id, name: c.name }))}
-                boardProfiles={assignableProfiles ?? []}
-                onMove={onMoveTask ? (columnId) => onMoveTask(t, columnId) : undefined}
-                onChangeAssignee={onChangeAssignee ? (userId) => onChangeAssignee(t, userId) : undefined}
-                onUpdateDueDate={onUpdateDueDate ? (date) => onUpdateDueDate(t, date) : undefined}
-                onCopyCard={onCopyCard ? () => onCopyCard(t) : undefined}
-                onCopyLink={onCopyLink ? () => onCopyLink(t) : undefined}
-              />
-            ))
-          )}
+        <div className="flex-1 min-h-[60px] px-2 pt-2 space-y-2 overflow-y-auto">
+          {tasks.map((t) => (
+            <KanbanCard
+              key={t.id}
+              task={t}
+              assignee={profiles.find((p) => p.id === t.assignee_id) || null}
+              onClick={() => onOpenTask(t)}
+              onToggleComplete={onToggleComplete ? () => onToggleComplete(t) : undefined}
+              canToggleComplete={!!canEditBoard || t.assignee_id === currentUserId}
+              onArchive={onArchiveTask ? () => onArchiveTask(t) : undefined}
+              canArchive={!!canEditBoard || t.assignee_id === currentUserId}
+              checklistTotal={checklistCounts?.[t.id]?.total || 0}
+              checklistDone={checklistCounts?.[t.id]?.done || 0}
+            />
+          ))}
         </div>
       </SortableContext>
+
+      {/* Trello-style "+ Add a card" trigger, always at the bottom of the
+          list rather than a small icon in the header. */}
+      <div className="px-2 pb-2">
+        <button
+          type="button"
+          onClick={() => onCreateTask(column.id)}
+          onPointerDown={(e) => e.stopPropagation()}
+          className="w-full flex items-center gap-1.5 rounded-lg px-2 py-1.5 text-sm text-muted-foreground hover:bg-background/60 hover:text-foreground transition-colors"
+        >
+          <Plus className="h-4 w-4" /> Add a card
+        </button>
+      </div>
     </div>
   );
 }
