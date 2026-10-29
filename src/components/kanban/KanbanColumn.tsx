@@ -1,9 +1,10 @@
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { useSortable, SortableContext, verticalListSortingStrategy } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Plus, MoreVertical, Trash2 } from "lucide-react";
+import { Textarea } from "@/components/ui/textarea";
+import { Plus, MoreVertical, Trash2, X } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { KanbanCard, KanbanTask, Profile } from "./KanbanCard";
 import {
@@ -24,7 +25,7 @@ interface Props {
   column: KanbanColumnData;
   tasks: KanbanTask[];
   profiles: Profile[];
-  onCreateTask: (columnId: string) => void;
+  onQuickCreateTask: (columnId: string, title: string) => Promise<boolean>;
   onOpenTask: (task: KanbanTask) => void;
   onDeleteColumn?: (columnId: string) => void;
   onRenameColumn?: (columnId: string, name: string) => void;
@@ -52,7 +53,7 @@ export function KanbanColumn({
   column,
   tasks,
   profiles,
-  onCreateTask,
+  onQuickCreateTask,
   onOpenTask,
   onDeleteColumn,
   onRenameColumn,
@@ -99,6 +100,29 @@ export function KanbanColumn({
   const commitName = () => {
     setEditingName(false);
     if (nameDraft.trim() && nameDraft.trim() !== column.name) onRenameColumn?.(column.id, nameDraft);
+  };
+
+  // Trello-style inline "+ Add a card" — a textarea that stays open after
+  // each submit (refocused and cleared) so adding several cards in a row
+  // doesn't need re-opening it each time.
+  const [addingCard, setAddingCard] = useState(false);
+  const [newCardTitle, setNewCardTitle] = useState("");
+  const [submittingCard, setSubmittingCard] = useState(false);
+  const newCardRef = useRef<HTMLTextAreaElement>(null);
+
+  const openAddCard = () => { setAddingCard(true); setNewCardTitle(""); };
+  const closeAddCard = () => { setAddingCard(false); setNewCardTitle(""); };
+  const submitNewCard = async () => {
+    const trimmed = newCardTitle.trim();
+    if (!trimmed || submittingCard) { if (!trimmed) closeAddCard(); return; }
+    setSubmittingCard(true);
+    const ok = await onQuickCreateTask(column.id, trimmed);
+    setSubmittingCard(false);
+    // Only clear the draft on success — on failure (e.g. a transient error)
+    // keep what was typed so it isn't silently lost, same as the old
+    // Create Task dialog did.
+    if (ok) setNewCardTitle("");
+    newCardRef.current?.focus();
   };
 
   return (
@@ -192,17 +216,41 @@ export function KanbanColumn({
         </div>
       </SortableContext>
 
-      {/* Trello-style "+ Add a card" trigger, always at the bottom of the
-          list rather than a small icon in the header. */}
+      {/* Trello-style "+ Add a card" — a textarea in place of the button,
+          at the bottom of the list rather than a small icon in the header. */}
       <div className="px-2 pb-2">
-        <button
-          type="button"
-          onClick={() => onCreateTask(column.id)}
-          onPointerDown={(e) => e.stopPropagation()}
-          className="w-full flex items-center gap-1.5 rounded-lg px-2 py-1.5 text-sm text-muted-foreground hover:bg-background/60 hover:text-foreground transition-colors"
-        >
-          <Plus className="h-4 w-4" /> Add a card
-        </button>
+        {addingCard ? (
+          <div onPointerDown={(e) => e.stopPropagation()}>
+            <Textarea
+              ref={newCardRef}
+              autoFocus
+              disabled={submittingCard}
+              value={newCardTitle}
+              onChange={(e) => setNewCardTitle(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); submitNewCard(); }
+                if (e.key === "Escape") closeAddCard();
+              }}
+              placeholder="Enter a title or paste a link"
+              className="min-h-[60px] text-sm resize-none bg-card"
+            />
+            <div className="flex items-center gap-1.5 mt-2">
+              <Button size="sm" onClick={submitNewCard} disabled={submittingCard}>Add card</Button>
+              <Button size="icon" variant="ghost" className="h-8 w-8" onClick={closeAddCard} aria-label="Cancel">
+                <X className="h-4 w-4" />
+              </Button>
+            </div>
+          </div>
+        ) : (
+          <button
+            type="button"
+            onClick={openAddCard}
+            onPointerDown={(e) => e.stopPropagation()}
+            className="w-full flex items-center gap-1.5 rounded-lg px-2 py-1.5 text-sm text-muted-foreground hover:bg-background/60 hover:text-foreground transition-colors"
+          >
+            <Plus className="h-4 w-4" /> Add a card
+          </button>
+        )}
       </div>
     </div>
   );
