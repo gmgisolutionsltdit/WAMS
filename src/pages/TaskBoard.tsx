@@ -2,6 +2,7 @@ import { useEffect, useState, useCallback, useMemo, useRef } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { useAuth } from "@/contexts/AuthContext";
 import { supabase } from "@/integrations/supabase/client";
+import type { Database } from "@/integrations/supabase/types";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -347,6 +348,28 @@ const TaskBoard = () => {
     setCreateOpen(false);
   };
 
+  // Trello-style inline "+ Add a card" — just a title, created directly
+  // without the full Create Task dialog; the rest (description, assignee,
+  // due date, priority) gets filled in later by opening the card.
+  const quickCreateTask = async (columnId: string, title: string) => {
+    const trimmed = title.trim();
+    if (!trimmed || !boardId) return;
+    const col = columns.find((c) => c.id === columnId);
+    const ticketKey = `${project?.key}-${taskCounter + 1}`;
+    const { error } = await supabase.from("tasks").insert({
+      project_id: projectId!,
+      board_id: boardId,
+      column_id: columnId,
+      ticket_key: ticketKey,
+      title: trimmed,
+      status: (col?.status || "todo") as Database["public"]["Enums"]["task_status"],
+      priority: "medium" as Database["public"]["Enums"]["task_priority"],
+      reporter_id: user!.id,
+      position: Math.max(-1, ...(tasksByColumn[columnId] || []).map((t) => t.position)) + 1,
+    });
+    if (error) { toast.error(error.message); return; }
+  };
+
   const openTaskIdRef = useRef<string | null>(null);
 
   const openTask = async (t: KanbanTask) => {
@@ -627,7 +650,7 @@ const TaskBoard = () => {
                   column={col}
                   tasks={tasksByColumn[col.id] || []}
                   profiles={profiles}
-                  onCreateTask={openCreate}
+                  onQuickCreateTask={quickCreateTask}
                   onOpenTask={openTask}
                   onDeleteColumn={deleteColumn}
                   onRenameColumn={renameColumn}
