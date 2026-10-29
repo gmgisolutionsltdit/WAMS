@@ -134,7 +134,7 @@ export function KanbanCard({
         <h4
           className={cn(
             "flex-1 min-w-0 text-sm font-medium leading-snug line-clamp-2 text-left break-words transition-all duration-200",
-            task.completed_at && "line-through text-muted-foreground",
+            task.completed_at && "text-muted-foreground",
           )}
         >
           {task.title}
