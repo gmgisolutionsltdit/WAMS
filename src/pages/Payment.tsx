@@ -10,6 +10,10 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Badge } from "@/components/ui/badge";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogFooter } from "@/components/ui/dialog";
+import {
+  AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription,
+  AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger,
+} from "@/components/ui/alert-dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
@@ -492,6 +496,124 @@ function AdminLoanPanel({ loans, renderRow }: { loans: any[]; renderRow: (loan: 
  * both admin and the employee.
  * ===================================================================== */
 
+/** Past payroll_settlements for one employee — one row per recorded month,
+    each column mirroring one of the My Payments cards above. Delete is
+    admin-only (gated by the caller passing canDelete, and backed by the
+    "Admins delete payroll settlements" RLS policy either way). */
+function PaymentHistoryTable({
+  userId, canDelete, refreshKey,
+}: { userId: string; canDelete: boolean; refreshKey?: number }) {
+  const [rows, setRows] = useState<PayrollSettlementRow[]>([]);
+  const [loading, setLoading] = useState(false);
+  const [deletingId, setDeletingId] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!userId) { setRows([]); return; }
+    setLoading(true);
+    (async () => {
+      const { data } = await supabase.from("payroll_settlements").select("*")
+        .eq("user_id", userId).order("month", { ascending: false });
+      setRows((data || []) as PayrollSettlementRow[]);
+      setLoading(false);
+    })();
+  }, [userId, refreshKey]);
+
+  const deleteRow = async (id: string) => {
+    setDeletingId(id);
+    const { error } = await supabase.from("payroll_settlements").delete().eq("id", id);
+    setDeletingId(null);
+    if (error) { toast.error(error.message); return; }
+    toast.success("Payment history entry deleted");
+    setRows((prev) => prev.filter((r) => r.id !== id));
+  };
+
+  // What was actually disbursed by this settlement — each figure counts
+  // only while its own Adjust Now flag was checked when it was recorded,
+  // same gating the live Net Payment card uses.
+  const netFor = (r: PayrollSettlementRow) =>
+    (r.net_hours_paid ? Number(r.net_hours_amount) : 0)
+    + (r.expense_paid ? Number(r.expense_amount_paid) : 0)
+    + (r.loan_paid ? Number(r.loan_amount_paid) : 0);
+
+  const colCount = canDelete ? 7 : 6;
+
+  return (
+    <div className="space-y-2">
+      <p className="text-sm font-medium">Payment History</p>
+      <div className="overflow-x-auto rounded-md border">
+        <Table>
+          <TableHeader>
+            <TableRow>
+              <TableHead>Month</TableHead>
+              <TableHead className="text-right">Net Salary</TableHead>
+              <TableHead className="text-right">Expense Paid</TableHead>
+              <TableHead className="text-right">Loan Paid</TableHead>
+              <TableHead className="text-right">Net Payment</TableHead>
+              <TableHead>Status</TableHead>
+              {canDelete && <TableHead className="text-right">Action</TableHead>}
+            </TableRow>
+          </TableHeader>
+          <TableBody>
+            {loading ? (
+              <TableRow><TableCell colSpan={colCount} className="text-center text-muted-foreground py-6"><Loader2 className="h-4 w-4 animate-spin inline mr-2" />Loading…</TableCell></TableRow>
+            ) : rows.length === 0 ? (
+              <TableRow><TableCell colSpan={colCount} className="text-center text-muted-foreground py-6">No payment history yet</TableCell></TableRow>
+            ) : rows.map((r) => (
+              <TableRow key={r.id}>
+                <TableCell className="whitespace-nowrap">{format(new Date(r.month), "MMMM yyyy")}</TableCell>
+                <TableCell className="text-right">
+                  {r.net_hours_paid ? fmtBDT(r.net_hours_amount) : <span className="text-muted-foreground text-xs">Carried</span>}
+                </TableCell>
+                <TableCell className="text-right">
+                  {r.expense_paid ? fmtBDT(r.expense_amount_paid) : <span className="text-muted-foreground text-xs">Carried</span>}
+                </TableCell>
+                <TableCell className="text-right">
+                  {r.loan_paid ? fmtBDT(r.loan_amount_paid) : <span className="text-muted-foreground text-xs">Carried</span>}
+                </TableCell>
+                <TableCell className="text-right font-semibold">{fmtBDT(netFor(r))}</TableCell>
+                <TableCell>
+                  <Badge
+                    className={
+                      r.approval_status === "approved" ? "bg-success text-white" :
+                      r.approval_status === "rejected" ? "bg-destructive text-white" : ""
+                    }
+                    variant={r.approval_status === "pending_approval" ? "outline" : undefined}
+                  >
+                    {r.approval_status === "pending_approval" ? "Pending" : r.approval_status === "approved" ? "Approved" : "Rejected"}
+                  </Badge>
+                </TableCell>
+                {canDelete && (
+                  <TableCell className="text-right">
+                    <AlertDialog>
+                      <AlertDialogTrigger asChild>
+                        <Button size="icon" variant="ghost" disabled={deletingId === r.id} aria-label="Delete this history entry">
+                          <Trash2 className="h-4 w-4 text-destructive" />
+                        </Button>
+                      </AlertDialogTrigger>
+                      <AlertDialogContent>
+                        <AlertDialogHeader>
+                          <AlertDialogTitle>Delete this payment history entry?</AlertDialogTitle>
+                          <AlertDialogDescription>
+                            This permanently removes the {format(new Date(r.month), "MMMM yyyy")} payment record. This cannot be undone.
+                          </AlertDialogDescription>
+                        </AlertDialogHeader>
+                        <AlertDialogFooter>
+                          <AlertDialogCancel>Cancel</AlertDialogCancel>
+                          <AlertDialogAction onClick={() => deleteRow(r.id)}>Delete</AlertDialogAction>
+                        </AlertDialogFooter>
+                      </AlertDialogContent>
+                    </AlertDialog>
+                  </TableCell>
+                )}
+              </TableRow>
+            ))}
+          </TableBody>
+        </Table>
+      </div>
+    </div>
+  );
+}
+
 function MyPaymentsTab() {
   const { user } = useAuth();
   const [employees, setEmployees] = useState<{ id: string; full_name: string | null; email: string | null }[]>([]);
@@ -499,6 +621,7 @@ function MyPaymentsTab() {
   const [month, setMonth] = useState(() => format(new Date(), "yyyy-MM"));
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [historyRefresh, setHistoryRefresh] = useState(0);
 
   const [grossSalary, setGrossSalary] = useState(0);
   const [netAdjustment, setNetAdjustment] = useState(0);
@@ -755,6 +878,7 @@ function MyPaymentsTab() {
       }
 
       toast.success("Payment recorded");
+      setHistoryRefresh((k) => k + 1);
       const monthLabel = format(new Date(`${month}-01`), "MMMM yyyy");
       const recordedEmployeeName = employees.find((e) => e.id === selectedUserId)?.full_name
         || employees.find((e) => e.id === selectedUserId)?.email || "An employee";
@@ -910,6 +1034,7 @@ function MyPaymentsTab() {
                 <Button variant="outline" onClick={downloadReceipt}>Download Receipt</Button>
               )}
             </div>
+            <PaymentHistoryTable userId={selectedUserId} canDelete refreshKey={historyRefresh} />
           </div>
         )}
       </CardContent>
@@ -1181,6 +1306,8 @@ function MyPaymentsSummary() {
             {settlement && (
               <Button variant="outline" onClick={downloadReceipt}>Download Receipt</Button>
             )}
+
+            {user?.id && <PaymentHistoryTable userId={user.id} canDelete={false} />}
 
             {teamPending.length > 0 && (
               <div className="space-y-2">
