@@ -38,6 +38,10 @@ interface Props {
   checklistCounts?: Record<string, { done: number; total: number }>;
   /** All columns on this board, for each card's "Move" submenu. */
   allColumns?: KanbanColumnData[];
+  /** Board members only (not every profile in the system), for the
+      "Change members" submenu — assigning a non-member would grant them
+      read access to the task via RLS. */
+  assignableProfiles?: Profile[];
   onMoveTask?: (task: KanbanTask, columnId: string) => void;
   onChangeAssignee?: (task: KanbanTask, userId: string | null) => void;
   onUpdateDueDate?: (task: KanbanTask, date: string | null) => void;
@@ -67,6 +71,7 @@ export function KanbanColumn({
   currentUserId,
   checklistCounts,
   allColumns,
+  assignableProfiles,
   onMoveTask,
   onChangeAssignee,
   onUpdateDueDate,
@@ -183,7 +188,7 @@ export function KanbanColumn({
                 checklistTotal={checklistCounts?.[t.id]?.total || 0}
                 checklistDone={checklistCounts?.[t.id]?.done || 0}
                 otherColumns={allColumns?.filter((c) => c.id !== column.id).map((c) => ({ id: c.id, name: c.name }))}
-                boardProfiles={profiles}
+                boardProfiles={assignableProfiles ?? []}
                 onMove={onMoveTask ? (columnId) => onMoveTask(t, columnId) : undefined}
                 onChangeAssignee={onChangeAssignee ? (userId) => onChangeAssignee(t, userId) : undefined}
                 onUpdateDueDate={onUpdateDueDate ? (date) => onUpdateDueDate(t, date) : undefined}

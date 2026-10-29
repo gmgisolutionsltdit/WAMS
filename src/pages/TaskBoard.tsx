@@ -453,11 +453,14 @@ const TaskBoard = () => {
   };
 
   // Card menu "Move" — same column_id/status change drag-and-drop makes,
-  // dropped at the end of the target column.
+  // dropped at the end of the target column. Based on the highest existing
+  // position (not the column's card count), since cards dragged out of a
+  // column can leave gaps — using the count alone could collide with a
+  // position that's still in use and leave the sort order ambiguous.
   const moveTask = async (task: KanbanTask, columnId: string) => {
     const col = columns.find((c) => c.id === columnId);
     if (!col) return;
-    const position = tasksByColumn[columnId]?.length || 0;
+    const position = Math.max(-1, ...(tasksByColumn[columnId] || []).map((t) => t.position)) + 1;
     setTasks((prev) => prev.map((t) => (t.id === task.id ? { ...t, column_id: columnId, status: col.status, position } : t)));
     const { error } = await supabase.from("tasks").update({ column_id: columnId, status: col.status as TaskStatus, position }).eq("id", task.id);
     if (error) { toast.error(error.message); fetchAll(); return; }
@@ -480,7 +483,15 @@ const TaskBoard = () => {
 
   const copyCard = async (task: KanbanTask) => {
     if (!task.column_id || !boardId) return;
-    const ticketKey = `${project?.key}-${taskCounter + 1}`;
+    // Re-count right before inserting rather than trust the taskCounter
+    // closure — it narrows, but doesn't close, the window for two
+    // concurrent copies/creates to land on the same ticket_key (the column
+    // has no uniqueness constraint to catch that at the DB level).
+    const { count } = await supabase
+      .from("tasks")
+      .select("id", { count: "exact", head: true })
+      .eq("project_id", projectId!);
+    const ticketKey = `${project?.key}-${(count ?? taskCounter) + 1}`;
     const { error } = await supabase.from("tasks").insert({
       project_id: projectId!,
       board_id: boardId,
@@ -493,7 +504,7 @@ const TaskBoard = () => {
       assignee_id: task.assignee_id,
       reporter_id: user!.id,
       due_date: task.due_date,
-      position: tasksByColumn[task.column_id]?.length || 0,
+      position: Math.max(-1, ...(tasksByColumn[task.column_id] || []).map((t) => t.position)) + 1,
     });
     if (error) { toast.error(error.message); return; }
     toast.success("Card copied");
@@ -703,6 +714,7 @@ const TaskBoard = () => {
                   currentUserId={user?.id}
                   checklistCounts={checklistCounts}
                   allColumns={columns}
+                  assignableProfiles={memberProfiles}
                   onMoveTask={moveTask}
                   onChangeAssignee={changeAssignee}
                   onUpdateDueDate={updateTaskDueDate}
