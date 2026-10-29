@@ -25,7 +25,7 @@ interface Props {
   column: KanbanColumnData;
   tasks: KanbanTask[];
   profiles: Profile[];
-  onQuickCreateTask: (columnId: string, title: string) => Promise<boolean>;
+  onQuickCreateTask: (columnId: string, title: string, atIndex?: number) => Promise<boolean>;
   onOpenTask: (task: KanbanTask) => void;
   onDeleteColumn?: (columnId: string) => void;
   onRenameColumn?: (columnId: string, name: string) => void;
@@ -103,27 +103,78 @@ export function KanbanColumn({
   };
 
   // Trello-style inline "+ Add a card" — a textarea that stays open after
-  // each submit (refocused and cleared) so adding several cards in a row
-  // doesn't need re-opening it each time.
-  const [addingCard, setAddingCard] = useState(false);
+  // each submit (refocused, cleared, and advanced to the next slot) so
+  // adding several cards in a row doesn't need re-opening it each time.
+  // `insertAt` is the index within this column's cards to insert before
+  // (0 = top of the list; tasks.length = the bottom "+ Add a card" button,
+  // i.e. append).
+  const [insertAt, setInsertAt] = useState<number | null>(null);
   const [newCardTitle, setNewCardTitle] = useState("");
   const [submittingCard, setSubmittingCard] = useState(false);
   const newCardRef = useRef<HTMLTextAreaElement>(null);
 
-  const openAddCard = () => { setAddingCard(true); setNewCardTitle(""); };
-  const closeAddCard = () => { setAddingCard(false); setNewCardTitle(""); };
+  const openAddCard = (index: number) => { setInsertAt(index); setNewCardTitle(""); };
+  const closeAddCard = () => { setInsertAt(null); setNewCardTitle(""); };
   const submitNewCard = async () => {
+    if (insertAt === null) return;
     const trimmed = newCardTitle.trim();
     if (!trimmed || submittingCard) { if (!trimmed) closeAddCard(); return; }
     setSubmittingCard(true);
-    const ok = await onQuickCreateTask(column.id, trimmed);
+    const ok = await onQuickCreateTask(column.id, trimmed, insertAt);
     setSubmittingCard(false);
     // Only clear the draft on success — on failure (e.g. a transient error)
     // keep what was typed so it isn't silently lost, same as the old
-    // Create Task dialog did.
-    if (ok) setNewCardTitle("");
+    // Create Task dialog did. On success, advance past the card just
+    // created so the next one stacks below it instead of above.
+    if (ok) { setNewCardTitle(""); setInsertAt((i) => (i === null ? null : i + 1)); }
     newCardRef.current?.focus();
   };
+
+  const addCardForm = (
+    <div onPointerDown={(e) => e.stopPropagation()}>
+      <Textarea
+        ref={newCardRef}
+        autoFocus
+        disabled={submittingCard}
+        value={newCardTitle}
+        onChange={(e) => setNewCardTitle(e.target.value)}
+        onKeyDown={(e) => {
+          if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); submitNewCard(); }
+          if (e.key === "Escape") closeAddCard();
+        }}
+        placeholder="Enter a title or paste a link"
+        className="min-h-[60px] text-sm resize-none bg-card"
+      />
+      <div className="flex items-center gap-1.5 mt-2 mb-2">
+        <Button size="sm" onClick={submitNewCard} disabled={submittingCard}>Add card</Button>
+        <Button size="icon" variant="ghost" className="h-8 w-8" onClick={closeAddCard} aria-label="Cancel">
+          <X className="h-4 w-4" />
+        </Button>
+      </div>
+    </div>
+  );
+
+  // Thin hover-reveal "+" strip shown above each card (and above the first
+  // one, at the top of the list) for inserting a card at that exact spot —
+  // Trello's own "add card here" affordance, distinct from the always-
+  // visible "+ Add a card" button at the bottom of the column.
+  const addCardGap = (index: number) => (
+    <button
+      type="button"
+      onClick={() => openAddCard(index)}
+      onPointerDown={(e) => e.stopPropagation()}
+      className="group/gap relative block w-full h-2.5 shrink-0"
+      aria-label="Add a card here"
+    >
+      <span className="absolute inset-x-1 top-1/2 -translate-y-1/2 border-t border-dashed border-transparent group-hover/gap:border-primary/50 transition-colors" />
+      <Plus
+        className={cn(
+          "absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 h-3.5 w-3.5 rounded-full p-0.5",
+          "bg-primary text-primary-foreground opacity-0 group-hover/gap:opacity-100 transition-opacity",
+        )}
+      />
+    </button>
+  );
 
   return (
     <div
@@ -198,53 +249,34 @@ export function KanbanColumn({
 
       {/* Cards */}
       <SortableContext items={tasks.map((t) => t.id)} strategy={verticalListSortingStrategy}>
-        <div className="flex-1 min-h-[60px] px-2 pt-2 space-y-2 overflow-y-auto">
-          {tasks.map((t) => (
-            <KanbanCard
-              key={t.id}
-              task={t}
-              assignee={profiles.find((p) => p.id === t.assignee_id) || null}
-              onClick={() => onOpenTask(t)}
-              onToggleComplete={onToggleComplete ? () => onToggleComplete(t) : undefined}
-              canToggleComplete={!!canEditBoard || t.assignee_id === currentUserId}
-              onArchive={onArchiveTask ? () => onArchiveTask(t) : undefined}
-              canArchive={!!canEditBoard || t.assignee_id === currentUserId}
-              checklistTotal={checklistCounts?.[t.id]?.total || 0}
-              checklistDone={checklistCounts?.[t.id]?.done || 0}
-            />
+        <div className="flex-1 min-h-[60px] px-2 pt-1 overflow-y-auto">
+          {tasks.map((t, idx) => (
+            <div key={t.id}>
+              {insertAt === idx ? addCardForm : addCardGap(idx)}
+              <KanbanCard
+                task={t}
+                assignee={profiles.find((p) => p.id === t.assignee_id) || null}
+                onClick={() => onOpenTask(t)}
+                onToggleComplete={onToggleComplete ? () => onToggleComplete(t) : undefined}
+                canToggleComplete={!!canEditBoard || t.assignee_id === currentUserId}
+                onArchive={onArchiveTask ? () => onArchiveTask(t) : undefined}
+                canArchive={!!canEditBoard || t.assignee_id === currentUserId}
+                checklistTotal={checklistCounts?.[t.id]?.total || 0}
+                checklistDone={checklistCounts?.[t.id]?.done || 0}
+              />
+            </div>
           ))}
         </div>
       </SortableContext>
 
       {/* Trello-style "+ Add a card" — a textarea in place of the button,
-          at the bottom of the list rather than a small icon in the header. */}
+          always at the bottom of the column (appending), separate from the
+          hover "+" gaps above each card for inserting at a specific spot. */}
       <div className="px-2 pb-2">
-        {addingCard ? (
-          <div onPointerDown={(e) => e.stopPropagation()}>
-            <Textarea
-              ref={newCardRef}
-              autoFocus
-              disabled={submittingCard}
-              value={newCardTitle}
-              onChange={(e) => setNewCardTitle(e.target.value)}
-              onKeyDown={(e) => {
-                if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); submitNewCard(); }
-                if (e.key === "Escape") closeAddCard();
-              }}
-              placeholder="Enter a title or paste a link"
-              className="min-h-[60px] text-sm resize-none bg-card"
-            />
-            <div className="flex items-center gap-1.5 mt-2">
-              <Button size="sm" onClick={submitNewCard} disabled={submittingCard}>Add card</Button>
-              <Button size="icon" variant="ghost" className="h-8 w-8" onClick={closeAddCard} aria-label="Cancel">
-                <X className="h-4 w-4" />
-              </Button>
-            </div>
-          </div>
-        ) : (
+        {insertAt === tasks.length ? addCardForm : (
           <button
             type="button"
-            onClick={openAddCard}
+            onClick={() => openAddCard(tasks.length)}
             onPointerDown={(e) => e.stopPropagation()}
             className="w-full flex items-center gap-1.5 rounded-lg px-2 py-1.5 text-sm text-muted-foreground hover:bg-background/60 hover:text-foreground transition-colors"
           >
