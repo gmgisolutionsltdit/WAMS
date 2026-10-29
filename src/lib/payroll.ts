@@ -38,12 +38,16 @@ export const MONTHS = [
   "July", "August", "September", "October", "November", "December",
 ];
 
+// Only used for jsPDF text (pay slip / payment receipt below) — jsPDF's
+// built-in fonts use WinAnsi encoding and can't render "৳", which comes out
+// as a garbled glyph in the generated PDF, so BDT gets a plain-ASCII label
+// here instead of the Unicode currency sign.
 export function fmtMoney(amount: number, currency = "BDT") {
   const formatted = new Intl.NumberFormat("en-US", {
     minimumFractionDigits: 2,
     maximumFractionDigits: 2,
   }).format(amount || 0);
-  const symbol = currency === "BDT" ? "৳" : currency === "USD" ? "$" : `${currency} `;
+  const symbol = currency === "BDT" ? "Tk " : currency === "USD" ? "$" : `${currency} `;
   return `${symbol}${formatted}`;
 }
 
