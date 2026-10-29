@@ -1,7 +1,8 @@
 import { useEffect, useState, useCallback, useMemo, useRef } from "react";
-import { useParams, useNavigate } from "react-router-dom";
+import { useParams, useNavigate, useSearchParams } from "react-router-dom";
 import { useAuth } from "@/contexts/AuthContext";
 import { supabase } from "@/integrations/supabase/client";
+import type { Database } from "@/integrations/supabase/types";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -38,10 +39,12 @@ import { cn } from "@/lib/utils";
 import { recordRecentBoard } from "@/lib/boardPrefs";
 
 const PRIORITIES = ["low", "medium", "high", "urgent"];
+type TaskStatus = Database["public"]["Enums"]["task_status"];
 
 const TaskBoard = () => {
   const { id: projectId } = useParams<{ id: string }>();
   const navigate = useNavigate();
+  const [searchParams, setSearchParams] = useSearchParams();
   const { user, role } = useAuth();
 
   const [project, setProject] = useState<any>(null);
@@ -361,6 +364,19 @@ const TaskBoard = () => {
     setChecklistItems(checklist || []);
   };
 
+  // "Copy link" puts ?task=<id> in the URL — once the board's tasks have
+  // loaded, open that card and strip the param so it doesn't reopen on
+  // every realtime refetch.
+  const deepLinkedTaskId = searchParams.get("task");
+  useEffect(() => {
+    if (!deepLinkedTaskId || tasks.length === 0) return;
+    const t = tasks.find((x) => x.id === deepLinkedTaskId);
+    setSearchParams((prev) => { prev.delete("task"); return prev; }, { replace: true });
+    if (t) openTask(t);
+    else toast.error("That card wasn't found — it may have been deleted or archived");
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [deepLinkedTaskId, tasks]);
+
   const refreshChecklist = async (taskId: string) => {
     const { data } = await supabase
       .from("task_checklist_items")
@@ -434,6 +450,63 @@ const TaskBoard = () => {
     const { error } = await supabase.from("tasks").update({ archived: true }).eq("id", task.id);
     if (error) { toast.error(error.message); fetchAll(); return; }
     toast.success("Card archived");
+  };
+
+  // Card menu "Move" — same column_id/status change drag-and-drop makes,
+  // dropped at the end of the target column.
+  const moveTask = async (task: KanbanTask, columnId: string) => {
+    const col = columns.find((c) => c.id === columnId);
+    if (!col) return;
+    const position = tasksByColumn[columnId]?.length || 0;
+    setTasks((prev) => prev.map((t) => (t.id === task.id ? { ...t, column_id: columnId, status: col.status, position } : t)));
+    const { error } = await supabase.from("tasks").update({ column_id: columnId, status: col.status as TaskStatus, position }).eq("id", task.id);
+    if (error) { toast.error(error.message); fetchAll(); return; }
+    toast.success(`Moved to ${col.name}`);
+  };
+
+  const changeAssignee = async (task: KanbanTask, userId: string | null) => {
+    setTasks((prev) => prev.map((t) => (t.id === task.id ? { ...t, assignee_id: userId } : t)));
+    const { error } = await supabase.from("tasks").update({ assignee_id: userId }).eq("id", task.id);
+    if (error) { toast.error(error.message); fetchAll(); return; }
+    toast.success(userId ? "Member assigned" : "Unassigned");
+  };
+
+  const updateTaskDueDate = async (task: KanbanTask, date: string | null) => {
+    setTasks((prev) => prev.map((t) => (t.id === task.id ? { ...t, due_date: date } : t)));
+    const { error } = await supabase.from("tasks").update({ due_date: date }).eq("id", task.id);
+    if (error) { toast.error(error.message); fetchAll(); return; }
+    toast.success("Due date updated");
+  };
+
+  const copyCard = async (task: KanbanTask) => {
+    if (!task.column_id || !boardId) return;
+    const ticketKey = `${project?.key}-${taskCounter + 1}`;
+    const { error } = await supabase.from("tasks").insert({
+      project_id: projectId!,
+      board_id: boardId,
+      column_id: task.column_id,
+      ticket_key: ticketKey,
+      title: `${task.title} (copy)`,
+      description: task.description,
+      status: task.status as TaskStatus,
+      priority: task.priority as Database["public"]["Enums"]["task_priority"],
+      assignee_id: task.assignee_id,
+      reporter_id: user!.id,
+      due_date: task.due_date,
+      position: tasksByColumn[task.column_id]?.length || 0,
+    });
+    if (error) { toast.error(error.message); return; }
+    toast.success("Card copied");
+  };
+
+  const copyCardLink = async (task: KanbanTask) => {
+    const url = `${window.location.origin}/tasks/${projectId}?task=${task.id}`;
+    try {
+      await navigator.clipboard.writeText(url);
+      toast.success("Link copied");
+    } catch {
+      toast.error("Couldn't copy link");
+    }
   };
 
   /* ---------- Column CRUD ---------- */
@@ -629,6 +702,12 @@ const TaskBoard = () => {
                   canEditBoard={canEditBoard}
                   currentUserId={user?.id}
                   checklistCounts={checklistCounts}
+                  allColumns={columns}
+                  onMoveTask={moveTask}
+                  onChangeAssignee={changeAssignee}
+                  onUpdateDueDate={updateTaskDueDate}
+                  onCopyCard={copyCard}
+                  onCopyLink={copyCardLink}
                 />
               ))}
             </div>

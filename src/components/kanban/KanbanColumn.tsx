@@ -36,6 +36,13 @@ interface Props {
   canEditBoard?: boolean;
   currentUserId?: string;
   checklistCounts?: Record<string, { done: number; total: number }>;
+  /** All columns on this board, for each card's "Move" submenu. */
+  allColumns?: KanbanColumnData[];
+  onMoveTask?: (task: KanbanTask, columnId: string) => void;
+  onChangeAssignee?: (task: KanbanTask, userId: string | null) => void;
+  onUpdateDueDate?: (task: KanbanTask, date: string | null) => void;
+  onCopyCard?: (task: KanbanTask) => void;
+  onCopyLink?: (task: KanbanTask) => void;
 }
 
 const COLUMN_ACCENT: Record<string, string> = {
@@ -59,6 +66,12 @@ export function KanbanColumn({
   canEditBoard,
   currentUserId,
   checklistCounts,
+  allColumns,
+  onMoveTask,
+  onChangeAssignee,
+  onUpdateDueDate,
+  onCopyCard,
+  onCopyLink,
 }: Props) {
   // A column is both a sortable item (drag its header to reorder columns)
   // and the droppable zone cards are dropped into — dnd-kit's useSortable
@@ -166,8 +179,16 @@ export function KanbanColumn({
                 canToggleComplete={!!canEditBoard || t.assignee_id === currentUserId}
                 onArchive={onArchiveTask ? () => onArchiveTask(t) : undefined}
                 canArchive={!!canEditBoard || t.assignee_id === currentUserId}
+                canEdit={!!canEditBoard || t.assignee_id === currentUserId}
                 checklistTotal={checklistCounts?.[t.id]?.total || 0}
                 checklistDone={checklistCounts?.[t.id]?.done || 0}
+                otherColumns={allColumns?.filter((c) => c.id !== column.id).map((c) => ({ id: c.id, name: c.name }))}
+                boardProfiles={profiles}
+                onMove={onMoveTask ? (columnId) => onMoveTask(t, columnId) : undefined}
+                onChangeAssignee={onChangeAssignee ? (userId) => onChangeAssignee(t, userId) : undefined}
+                onUpdateDueDate={onUpdateDueDate ? (date) => onUpdateDueDate(t, date) : undefined}
+                onCopyCard={onCopyCard ? () => onCopyCard(t) : undefined}
+                onCopyLink={onCopyLink ? () => onCopyLink(t) : undefined}
               />
             ))
           )}

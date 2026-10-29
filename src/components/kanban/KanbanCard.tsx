@@ -1,7 +1,20 @@
+import { useState } from "react";
 import { useSortable } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
-import { Calendar as CalendarIcon, AlertTriangle, MessageSquare, CheckSquare, CheckCircle2, Circle, Pencil, Archive } from "lucide-react";
+import {
+  Calendar as CalendarIcon, AlertTriangle, MessageSquare, CheckSquare, CheckCircle2, Circle, Pencil, Archive,
+  SquareKanban, Tag, Users, Image, ArrowRightLeft, ExternalLink, Copy, Link2, Repeat, UserX,
+} from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import {
+  DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator,
+  DropdownMenuSub, DropdownMenuSubContent, DropdownMenuSubTrigger, DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+import {
+  Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle,
+} from "@/components/ui/dialog";
 import { cn } from "@/lib/utils";
 
 export type KanbanTask = {
@@ -45,6 +58,18 @@ interface Props {
   commentCount?: number;
   checklistTotal?: number;
   checklistDone?: number;
+  /** Other columns on this board, for the "Move" submenu. */
+  otherColumns?: { id: string; name: string }[];
+  /** Board members, for the "Change members" submenu. */
+  boardProfiles?: Profile[];
+  onMove?: (columnId: string) => void;
+  onChangeAssignee?: (userId: string | null) => void;
+  onUpdateDueDate?: (date: string | null) => void;
+  onCopyCard?: () => void;
+  onCopyLink?: () => void;
+  /** Gates Move / Change members / Edit dates / Copy card / Archive — the
+      same permission already used for toggling complete / archiving. */
+  canEdit?: boolean;
 }
 
 export function KanbanCard({
@@ -59,7 +84,17 @@ export function KanbanCard({
   commentCount = 0,
   checklistTotal = 0,
   checklistDone = 0,
+  otherColumns = [],
+  boardProfiles = [],
+  onMove,
+  onChangeAssignee,
+  onUpdateDueDate,
+  onCopyCard,
+  onCopyLink,
+  canEdit = true,
 }: Props) {
+  const [dateDialogOpen, setDateDialogOpen] = useState(false);
+  const [dateDraft, setDateDraft] = useState(task.due_date || "");
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
     id: task.id,
     data: { type: "task", task },
@@ -163,18 +198,125 @@ export function KanbanCard({
                 <Archive className="h-3 w-3" />
               </button>
             )}
-            <button
-              type="button"
-              onClick={(e) => { e.stopPropagation(); onClick(); }}
-              onPointerDown={(e) => e.stopPropagation()}
-              className="p-0.5 rounded hover:bg-muted focus-visible:bg-muted text-muted-foreground"
-              aria-label="Edit card"
-            >
-              <Pencil className="h-3 w-3" />
-            </button>
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <button
+                  type="button"
+                  onClick={(e) => e.stopPropagation()}
+                  onPointerDown={(e) => e.stopPropagation()}
+                  className="p-0.5 rounded hover:bg-muted focus-visible:bg-muted text-muted-foreground"
+                  aria-label="Edit card"
+                >
+                  <Pencil className="h-3 w-3" />
+                </button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end" className="w-56" onClick={(e) => e.stopPropagation()}>
+                <DropdownMenuItem onSelect={onClick}>
+                  <SquareKanban className="h-3.5 w-3.5 mr-2" /> Open card
+                </DropdownMenuItem>
+                <DropdownMenuItem disabled>
+                  <Tag className="h-3.5 w-3.5 mr-2" /> Edit labels
+                  <span className="ml-auto text-[10px] text-muted-foreground">Coming soon</span>
+                </DropdownMenuItem>
+                <DropdownMenuSub>
+                  <DropdownMenuSubTrigger disabled={!canEdit || (!onChangeAssignee)}>
+                    <Users className="h-3.5 w-3.5 mr-2" /> Change members
+                  </DropdownMenuSubTrigger>
+                  <DropdownMenuSubContent>
+                    <DropdownMenuItem onSelect={() => onChangeAssignee?.(null)}>
+                      <UserX className="h-3.5 w-3.5 mr-2" /> Unassigned
+                    </DropdownMenuItem>
+                    {boardProfiles.length > 0 && <DropdownMenuSeparator />}
+                    {boardProfiles.map((p) => (
+                      <DropdownMenuItem key={p.id} onSelect={() => onChangeAssignee?.(p.id)}>
+                        <Avatar className="h-4 w-4 mr-2">
+                          <AvatarImage src={p.photo_url || undefined} />
+                          <AvatarFallback className="text-[8px]">
+                            {(p.full_name || p.email || "?").slice(0, 2).toUpperCase()}
+                          </AvatarFallback>
+                        </Avatar>
+                        {p.full_name || p.email}
+                      </DropdownMenuItem>
+                    ))}
+                  </DropdownMenuSubContent>
+                </DropdownMenuSub>
+                <DropdownMenuItem disabled>
+                  <Image className="h-3.5 w-3.5 mr-2" /> Change cover
+                  <span className="ml-auto text-[10px] text-muted-foreground">Coming soon</span>
+                </DropdownMenuItem>
+                <DropdownMenuItem
+                  disabled={!canEdit || !onUpdateDueDate}
+                  onSelect={() => { setDateDraft(task.due_date || ""); setDateDialogOpen(true); }}
+                >
+                  <CalendarIcon className="h-3.5 w-3.5 mr-2" /> Edit dates
+                </DropdownMenuItem>
+                <DropdownMenuSub>
+                  <DropdownMenuSubTrigger disabled={!canEdit || !onMove || otherColumns.length === 0}>
+                    <ArrowRightLeft className="h-3.5 w-3.5 mr-2" /> Move
+                  </DropdownMenuSubTrigger>
+                  <DropdownMenuSubContent>
+                    {otherColumns.map((c) => (
+                      <DropdownMenuItem key={c.id} onSelect={() => onMove?.(c.id)}>
+                        {c.name}
+                      </DropdownMenuItem>
+                    ))}
+                  </DropdownMenuSubContent>
+                </DropdownMenuSub>
+                <DropdownMenuItem disabled>
+                  <ExternalLink className="h-3.5 w-3.5 mr-2" /> Create Jira work item
+                  <span className="ml-auto text-[10px] text-muted-foreground">Not available</span>
+                </DropdownMenuItem>
+                <DropdownMenuSeparator />
+                <DropdownMenuItem disabled={!canEdit || !onCopyCard} onSelect={onCopyCard}>
+                  <Copy className="h-3.5 w-3.5 mr-2" /> Copy card
+                </DropdownMenuItem>
+                <DropdownMenuItem disabled={!onCopyLink} onSelect={onCopyLink}>
+                  <Link2 className="h-3.5 w-3.5 mr-2" /> Copy link
+                </DropdownMenuItem>
+                <DropdownMenuItem disabled>
+                  <Repeat className="h-3.5 w-3.5 mr-2" /> Mirror
+                  <span className="ml-auto text-[10px] text-muted-foreground">Coming soon</span>
+                </DropdownMenuItem>
+                <DropdownMenuSeparator />
+                <DropdownMenuItem
+                  disabled={!canEdit || !onArchive}
+                  onSelect={onArchive}
+                  className="text-destructive focus:text-destructive"
+                >
+                  <Archive className="h-3.5 w-3.5 mr-2" /> Archive
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
           </div>
         )}
       </div>
+
+      {onUpdateDueDate && (
+        <Dialog open={dateDialogOpen} onOpenChange={setDateDialogOpen}>
+          <DialogContent className="max-w-xs" onClick={(e) => e.stopPropagation()}>
+            <DialogHeader>
+              <DialogTitle>Edit dates</DialogTitle>
+            </DialogHeader>
+            <div>
+              <label className="text-xs text-muted-foreground">Due date</label>
+              <Input type="date" value={dateDraft} onChange={(e) => setDateDraft(e.target.value)} className="mt-1" />
+            </div>
+            <DialogFooter className="gap-2 sm:gap-2">
+              {task.due_date && (
+                <Button
+                  variant="outline"
+                  onClick={() => { onUpdateDueDate(null); setDateDialogOpen(false); }}
+                >
+                  Clear
+                </Button>
+              )}
+              <Button onClick={() => { onUpdateDueDate(dateDraft || null); setDateDialogOpen(false); }}>
+                Save
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+      )}
 
       {task.description && (
         <p className="text-xs text-muted-foreground line-clamp-2 mb-2 break-words">{task.description}</p>
