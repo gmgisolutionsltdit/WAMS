@@ -353,10 +353,28 @@ const TaskBoard = () => {
   // due date, priority) gets filled in later by opening the card. Returns
   // whether it succeeded so the inline form can keep/restore the draft on
   // failure instead of silently dropping what was typed.
-  const quickCreateTask = async (columnId: string, title: string): Promise<boolean> => {
+  //
+  // `atIndex` places the new card at that position within the column
+  // (0 = top; omitted/column length = append at the bottom), matching the
+  // hover "+" gaps shown above each card. Existing cards at or after that
+  // index get shifted up by one first, the same contiguous 0..n-1 position
+  // scheme drag-and-drop reordering already keeps.
+  const quickCreateTask = async (columnId: string, title: string, atIndex?: number): Promise<boolean> => {
     const trimmed = title.trim();
     if (!trimmed || !boardId) return false;
     const col = columns.find((c) => c.id === columnId);
+    const colTasks = tasksByColumn[columnId] || [];
+    const insertPos = atIndex ?? colTasks.length;
+    const toShift = colTasks.filter((t) => t.position >= insertPos);
+    if (toShift.length) {
+      const shiftResults = await Promise.all(
+        toShift.map((t) => supabase.from("tasks").update({ position: t.position + 1 }).eq("id", t.id)),
+      );
+      const shiftErr = shiftResults.find((r) => r.error);
+      if (shiftErr?.error) { toast.error(shiftErr.error.message); return false; }
+      const shiftedIds = new Set(toShift.map((t) => t.id));
+      setTasks((prev) => prev.map((t) => (shiftedIds.has(t.id) ? { ...t, position: t.position + 1 } : t)));
+    }
     const ticketKey = `${project?.key}-${taskCounter + 1}`;
     const { error } = await supabase.from("tasks").insert({
       project_id: projectId!,
@@ -367,9 +385,9 @@ const TaskBoard = () => {
       status: (col?.status || "todo") as Database["public"]["Enums"]["task_status"],
       priority: "medium" as Database["public"]["Enums"]["task_priority"],
       reporter_id: user!.id,
-      position: Math.max(-1, ...(tasksByColumn[columnId] || []).map((t) => t.position)) + 1,
+      position: insertPos,
     });
-    if (error) { toast.error(error.message); return false; }
+    if (error) { toast.error(error.message); fetchAll(); return false; }
     // Advance locally rather than wait for the realtime refetch — the
     // inline form stays open for back-to-back submits, and two quick
     // creates before that refetch lands would otherwise reuse the same
