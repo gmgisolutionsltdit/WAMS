@@ -10,6 +10,10 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Badge } from "@/components/ui/badge";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogFooter } from "@/components/ui/dialog";
+import {
+  AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription,
+  AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger,
+} from "@/components/ui/alert-dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
@@ -492,6 +496,198 @@ function AdminLoanPanel({ loans, renderRow }: { loans: any[]; renderRow: (loan: 
  * both admin and the employee.
  * ===================================================================== */
 
+/** Past payroll_settlements for one employee — one row per recorded month,
+    each column mirroring one of the My Payments cards above. Delete is
+    admin-only (gated by the caller passing canDelete, and backed by the
+    "Admins delete payroll settlements" RLS policy either way). */
+function PaymentHistoryTable({
+  userId, canDelete, refreshKey,
+}: { userId: string; canDelete: boolean; refreshKey?: number }) {
+  const { user } = useAuth();
+  const [rows, setRows] = useState<PayrollSettlementRow[]>([]);
+  const [loading, setLoading] = useState(false);
+  const [deletingId, setDeletingId] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!userId) { setRows([]); return; }
+    setLoading(true);
+    (async () => {
+      const { data } = await supabase.from("payroll_settlements").select("*")
+        .eq("user_id", userId).order("month", { ascending: false });
+      setRows((data || []) as PayrollSettlementRow[]);
+      setLoading(false);
+    })();
+  }, [userId, refreshKey]);
+
+  // Deleting a settlement row alone would leave the loan balance and
+  // expense-advance recovery it applied (via "Recorded via My Payments"
+  // ledger entries) stuck in place — reverse exactly those logged actions
+  // first, the same append-only-ledger convention the rest of My Payments
+  // uses, so balances stay consistent and re-recording the month later
+  // doesn't double up. Returns false (and leaves everything untouched) if
+  // any step fails, so the settlement itself is never deleted out from
+  // under a ledger reversal that didn't fully go through.
+  const reverseSettlementLedgers = async (row: PayrollSettlementRow): Promise<boolean> => {
+    const { data: expenseActions, error: expenseActionsErr } = await supabase
+      .from("expense_recovery_actions")
+      .select("expense_claim_id, amount")
+      .eq("user_id", row.user_id).eq("month", row.month).eq("note", "Recorded via My Payments");
+    if (expenseActionsErr) { toast.error(expenseActionsErr.message); return false; }
+    for (const action of expenseActions || []) {
+      const { data: claim, error: claimErr } = await supabase
+        .from("expense_claims").select("amount, recovered_amount")
+        .eq("id", action.expense_claim_id).maybeSingle();
+      if (claimErr) { toast.error(claimErr.message); return false; }
+      if (!claim) continue;
+      const newRecovered = Math.max(0, Number(claim.recovered_amount || 0) - Number(action.amount));
+      const { error: updErr } = await supabase.from("expense_claims").update({
+        recovered_amount: newRecovered,
+        recovery_status: newRecovered <= 0 ? "open" : newRecovered >= Number(claim.amount) ? "fully_recovered" : "partially_recovered",
+      }).eq("id", action.expense_claim_id);
+      if (updErr) { toast.error(updErr.message); return false; }
+      const { error: insErr } = await supabase.from("expense_recovery_actions").insert({
+        expense_claim_id: action.expense_claim_id, user_id: row.user_id, action_type: "specific_amount",
+        amount: -Number(action.amount), remaining_after: Number(claim.amount) - newRecovered,
+        month: row.month, admin_id: user!.id, note: "Reversed — payment history entry deleted",
+      });
+      if (insErr) { toast.error(insErr.message); return false; }
+    }
+
+    const { data: loanActions, error: loanActionsErr } = await supabase
+      .from("personal_advance_actions")
+      .select("personal_advance_id, amount")
+      .eq("user_id", row.user_id).eq("month", row.month)
+      .eq("action_type", "payroll_deduction").eq("note", "Recorded via My Payments");
+    if (loanActionsErr) { toast.error(loanActionsErr.message); return false; }
+    for (const action of loanActions || []) {
+      const { data: loanRow, error: loanErr } = await supabase
+        .from("personal_advances").select("remaining_balance, status")
+        .eq("id", action.personal_advance_id).maybeSingle();
+      if (loanErr) { toast.error(loanErr.message); return false; }
+      if (!loanRow) continue;
+      const newRemaining = Number(loanRow.remaining_balance || 0) + Number(action.amount);
+      const { error: updErr } = await supabase.from("personal_advances").update({
+        remaining_balance: newRemaining,
+        status: newRemaining > 0 && loanRow.status === "closed" ? "approved" : loanRow.status,
+      }).eq("id", action.personal_advance_id);
+      // Most likely cause of failure here: reopening this loan to "approved"
+      // would collide with the one-active-loan-per-employee unique index
+      // because a newer loan is already active — surfaced as an error
+      // rather than silently leaving the old loan closed with a wrong balance.
+      if (updErr) { toast.error(updErr.message); return false; }
+      const { error: insErr } = await supabase.from("personal_advance_actions").insert({
+        personal_advance_id: action.personal_advance_id, user_id: row.user_id, action_type: "payroll_deduction",
+        amount: -Number(action.amount), remaining_after: newRemaining,
+        month: row.month, created_by: user!.id, note: "Reversed — payment history entry deleted",
+      });
+      if (insErr) { toast.error(insErr.message); return false; }
+    }
+    return true;
+  };
+
+  const deleteRow = async (row: PayrollSettlementRow) => {
+    setDeletingId(row.id);
+    const reversed = await reverseSettlementLedgers(row);
+    if (!reversed) {
+      setDeletingId(null);
+      toast.error("Nothing was deleted — couldn't fully reverse this payment's loan/expense ledger effects.");
+      return;
+    }
+    const { error } = await supabase.from("payroll_settlements").delete().eq("id", row.id);
+    setDeletingId(null);
+    if (error) { toast.error(error.message); return; }
+    toast.success("Payment history entry deleted and its loan/expense effects reversed");
+    setRows((prev) => prev.filter((r) => r.id !== row.id));
+  };
+
+  // What was actually disbursed by this settlement — each figure counts
+  // only while its own Adjust Now flag was checked when it was recorded,
+  // same gating the live Net Payment card uses.
+  const netFor = (r: PayrollSettlementRow) =>
+    (r.net_hours_paid ? Number(r.net_hours_amount) : 0)
+    + (r.expense_paid ? Number(r.expense_amount_paid) : 0)
+    + (r.loan_paid ? Number(r.loan_amount_paid) : 0);
+
+  const colCount = canDelete ? 7 : 6;
+
+  return (
+    <div className="space-y-2">
+      <p className="text-sm font-medium">Payment History</p>
+      <div className="overflow-x-auto rounded-md border">
+        <Table>
+          <TableHeader>
+            <TableRow>
+              <TableHead>Month</TableHead>
+              <TableHead className="text-right">Net Salary</TableHead>
+              <TableHead className="text-right">Expense Paid</TableHead>
+              <TableHead className="text-right">Loan Paid</TableHead>
+              <TableHead className="text-right">Net Payment</TableHead>
+              <TableHead>Status</TableHead>
+              {canDelete && <TableHead className="text-right">Action</TableHead>}
+            </TableRow>
+          </TableHeader>
+          <TableBody>
+            {loading ? (
+              <TableRow><TableCell colSpan={colCount} className="text-center text-muted-foreground py-6"><Loader2 className="h-4 w-4 animate-spin inline mr-2" />Loading…</TableCell></TableRow>
+            ) : rows.length === 0 ? (
+              <TableRow><TableCell colSpan={colCount} className="text-center text-muted-foreground py-6">No payment history yet</TableCell></TableRow>
+            ) : rows.map((r) => (
+              <TableRow key={r.id}>
+                <TableCell className="whitespace-nowrap">{format(new Date(r.month), "MMMM yyyy")}</TableCell>
+                <TableCell className="text-right">
+                  {r.net_hours_paid ? fmtBDT(r.net_hours_amount) : <span className="text-muted-foreground text-xs">Carried</span>}
+                </TableCell>
+                <TableCell className="text-right">
+                  {r.expense_paid ? fmtBDT(r.expense_amount_paid) : <span className="text-muted-foreground text-xs">Carried</span>}
+                </TableCell>
+                <TableCell className="text-right">
+                  {r.loan_paid ? fmtBDT(r.loan_amount_paid) : <span className="text-muted-foreground text-xs">Carried</span>}
+                </TableCell>
+                <TableCell className="text-right font-semibold">{fmtBDT(netFor(r))}</TableCell>
+                <TableCell>
+                  <Badge
+                    className={
+                      r.approval_status === "approved" ? "bg-success text-white" :
+                      r.approval_status === "rejected" ? "bg-destructive text-white" : ""
+                    }
+                    variant={r.approval_status === "pending_approval" ? "outline" : undefined}
+                  >
+                    {r.approval_status === "pending_approval" ? "Pending" : r.approval_status === "approved" ? "Approved" : "Rejected"}
+                  </Badge>
+                </TableCell>
+                {canDelete && (
+                  <TableCell className="text-right">
+                    <AlertDialog>
+                      <AlertDialogTrigger asChild>
+                        <Button size="icon" variant="ghost" disabled={deletingId === r.id} aria-label="Delete this history entry">
+                          <Trash2 className="h-4 w-4 text-destructive" />
+                        </Button>
+                      </AlertDialogTrigger>
+                      <AlertDialogContent>
+                        <AlertDialogHeader>
+                          <AlertDialogTitle>Delete this payment history entry?</AlertDialogTitle>
+                          <AlertDialogDescription>
+                            This permanently removes the {format(new Date(r.month), "MMMM yyyy")} payment record and reverses any
+                            loan deduction or expense-advance recovery it applied. This cannot be undone.
+                          </AlertDialogDescription>
+                        </AlertDialogHeader>
+                        <AlertDialogFooter>
+                          <AlertDialogCancel>Cancel</AlertDialogCancel>
+                          <AlertDialogAction onClick={() => deleteRow(r)}>Delete</AlertDialogAction>
+                        </AlertDialogFooter>
+                      </AlertDialogContent>
+                    </AlertDialog>
+                  </TableCell>
+                )}
+              </TableRow>
+            ))}
+          </TableBody>
+        </Table>
+      </div>
+    </div>
+  );
+}
+
 function MyPaymentsTab() {
   const { user } = useAuth();
   const [employees, setEmployees] = useState<{ id: string; full_name: string | null; email: string | null }[]>([]);
@@ -499,6 +695,7 @@ function MyPaymentsTab() {
   const [month, setMonth] = useState(() => format(new Date(), "yyyy-MM"));
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [historyRefresh, setHistoryRefresh] = useState(0);
 
   const [grossSalary, setGrossSalary] = useState(0);
   const [netAdjustment, setNetAdjustment] = useState(0);
@@ -755,6 +952,7 @@ function MyPaymentsTab() {
       }
 
       toast.success("Payment recorded");
+      setHistoryRefresh((k) => k + 1);
       const monthLabel = format(new Date(`${month}-01`), "MMMM yyyy");
       const recordedEmployeeName = employees.find((e) => e.id === selectedUserId)?.full_name
         || employees.find((e) => e.id === selectedUserId)?.email || "An employee";
@@ -910,6 +1108,7 @@ function MyPaymentsTab() {
                 <Button variant="outline" onClick={downloadReceipt}>Download Receipt</Button>
               )}
             </div>
+            <PaymentHistoryTable userId={selectedUserId} canDelete refreshKey={historyRefresh} />
           </div>
         )}
       </CardContent>
@@ -1181,6 +1380,8 @@ function MyPaymentsSummary() {
             {settlement && (
               <Button variant="outline" onClick={downloadReceipt}>Download Receipt</Button>
             )}
+
+            {user?.id && <PaymentHistoryTable userId={user.id} canDelete={false} />}
 
             {teamPending.length > 0 && (
               <div className="space-y-2">
