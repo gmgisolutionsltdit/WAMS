@@ -503,6 +503,7 @@ function AdminLoanPanel({ loans, renderRow }: { loans: any[]; renderRow: (loan: 
 function PaymentHistoryTable({
   userId, canDelete, refreshKey,
 }: { userId: string; canDelete: boolean; refreshKey?: number }) {
+  const { user } = useAuth();
   const [rows, setRows] = useState<PayrollSettlementRow[]>([]);
   const [loading, setLoading] = useState(false);
   const [deletingId, setDeletingId] = useState<string | null>(null);
@@ -518,13 +519,85 @@ function PaymentHistoryTable({
     })();
   }, [userId, refreshKey]);
 
-  const deleteRow = async (id: string) => {
-    setDeletingId(id);
-    const { error } = await supabase.from("payroll_settlements").delete().eq("id", id);
+  // Deleting a settlement row alone would leave the loan balance and
+  // expense-advance recovery it applied (via "Recorded via My Payments"
+  // ledger entries) stuck in place — reverse exactly those logged actions
+  // first, the same append-only-ledger convention the rest of My Payments
+  // uses, so balances stay consistent and re-recording the month later
+  // doesn't double up. Returns false (and leaves everything untouched) if
+  // any step fails, so the settlement itself is never deleted out from
+  // under a ledger reversal that didn't fully go through.
+  const reverseSettlementLedgers = async (row: PayrollSettlementRow): Promise<boolean> => {
+    const { data: expenseActions, error: expenseActionsErr } = await supabase
+      .from("expense_recovery_actions")
+      .select("expense_claim_id, amount")
+      .eq("user_id", row.user_id).eq("month", row.month).eq("note", "Recorded via My Payments");
+    if (expenseActionsErr) { toast.error(expenseActionsErr.message); return false; }
+    for (const action of expenseActions || []) {
+      const { data: claim, error: claimErr } = await supabase
+        .from("expense_claims").select("amount, recovered_amount")
+        .eq("id", action.expense_claim_id).maybeSingle();
+      if (claimErr) { toast.error(claimErr.message); return false; }
+      if (!claim) continue;
+      const newRecovered = Math.max(0, Number(claim.recovered_amount || 0) - Number(action.amount));
+      const { error: updErr } = await supabase.from("expense_claims").update({
+        recovered_amount: newRecovered,
+        recovery_status: newRecovered <= 0 ? "open" : newRecovered >= Number(claim.amount) ? "fully_recovered" : "partially_recovered",
+      }).eq("id", action.expense_claim_id);
+      if (updErr) { toast.error(updErr.message); return false; }
+      const { error: insErr } = await supabase.from("expense_recovery_actions").insert({
+        expense_claim_id: action.expense_claim_id, user_id: row.user_id, action_type: "specific_amount",
+        amount: -Number(action.amount), remaining_after: Number(claim.amount) - newRecovered,
+        month: row.month, admin_id: user!.id, note: "Reversed — payment history entry deleted",
+      });
+      if (insErr) { toast.error(insErr.message); return false; }
+    }
+
+    const { data: loanActions, error: loanActionsErr } = await supabase
+      .from("personal_advance_actions")
+      .select("personal_advance_id, amount")
+      .eq("user_id", row.user_id).eq("month", row.month)
+      .eq("action_type", "payroll_deduction").eq("note", "Recorded via My Payments");
+    if (loanActionsErr) { toast.error(loanActionsErr.message); return false; }
+    for (const action of loanActions || []) {
+      const { data: loanRow, error: loanErr } = await supabase
+        .from("personal_advances").select("remaining_balance, status")
+        .eq("id", action.personal_advance_id).maybeSingle();
+      if (loanErr) { toast.error(loanErr.message); return false; }
+      if (!loanRow) continue;
+      const newRemaining = Number(loanRow.remaining_balance || 0) + Number(action.amount);
+      const { error: updErr } = await supabase.from("personal_advances").update({
+        remaining_balance: newRemaining,
+        status: newRemaining > 0 && loanRow.status === "closed" ? "approved" : loanRow.status,
+      }).eq("id", action.personal_advance_id);
+      // Most likely cause of failure here: reopening this loan to "approved"
+      // would collide with the one-active-loan-per-employee unique index
+      // because a newer loan is already active — surfaced as an error
+      // rather than silently leaving the old loan closed with a wrong balance.
+      if (updErr) { toast.error(updErr.message); return false; }
+      const { error: insErr } = await supabase.from("personal_advance_actions").insert({
+        personal_advance_id: action.personal_advance_id, user_id: row.user_id, action_type: "payroll_deduction",
+        amount: -Number(action.amount), remaining_after: newRemaining,
+        month: row.month, created_by: user!.id, note: "Reversed — payment history entry deleted",
+      });
+      if (insErr) { toast.error(insErr.message); return false; }
+    }
+    return true;
+  };
+
+  const deleteRow = async (row: PayrollSettlementRow) => {
+    setDeletingId(row.id);
+    const reversed = await reverseSettlementLedgers(row);
+    if (!reversed) {
+      setDeletingId(null);
+      toast.error("Nothing was deleted — couldn't fully reverse this payment's loan/expense ledger effects.");
+      return;
+    }
+    const { error } = await supabase.from("payroll_settlements").delete().eq("id", row.id);
     setDeletingId(null);
     if (error) { toast.error(error.message); return; }
-    toast.success("Payment history entry deleted");
-    setRows((prev) => prev.filter((r) => r.id !== id));
+    toast.success("Payment history entry deleted and its loan/expense effects reversed");
+    setRows((prev) => prev.filter((r) => r.id !== row.id));
   };
 
   // What was actually disbursed by this settlement — each figure counts
@@ -594,12 +667,13 @@ function PaymentHistoryTable({
                         <AlertDialogHeader>
                           <AlertDialogTitle>Delete this payment history entry?</AlertDialogTitle>
                           <AlertDialogDescription>
-                            This permanently removes the {format(new Date(r.month), "MMMM yyyy")} payment record. This cannot be undone.
+                            This permanently removes the {format(new Date(r.month), "MMMM yyyy")} payment record and reverses any
+                            loan deduction or expense-advance recovery it applied. This cannot be undone.
                           </AlertDialogDescription>
                         </AlertDialogHeader>
                         <AlertDialogFooter>
                           <AlertDialogCancel>Cancel</AlertDialogCancel>
-                          <AlertDialogAction onClick={() => deleteRow(r.id)}>Delete</AlertDialogAction>
+                          <AlertDialogAction onClick={() => deleteRow(r)}>Delete</AlertDialogAction>
                         </AlertDialogFooter>
                       </AlertDialogContent>
                     </AlertDialog>
