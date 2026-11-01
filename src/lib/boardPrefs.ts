@@ -46,22 +46,12 @@ export const recordRecentBoard = (id: string): string[] => {
   return next;
 };
 
-const BOARD_COLORS = [
-  "bg-gradient-to-br from-blue-400 to-blue-600",
-  "bg-gradient-to-br from-emerald-400 to-emerald-600",
-  "bg-gradient-to-br from-purple-400 to-purple-600",
-  "bg-gradient-to-br from-rose-400 to-rose-600",
-  "bg-gradient-to-br from-amber-400 to-amber-600",
-  "bg-gradient-to-br from-cyan-400 to-cyan-600",
-  "bg-gradient-to-br from-indigo-400 to-indigo-600",
-  "bg-gradient-to-br from-pink-400 to-pink-600",
-  "bg-gradient-to-br from-teal-400 to-teal-600",
-  "bg-gradient-to-br from-orange-400 to-orange-600",
-];
+// Every new board uses the same flat background — matching Trello, where
+// a newly created board gets one default color rather than a random one
+// per board. Darkens slightly on hover via the caller's `group` class.
+const DEFAULT_BOARD_COLOR = "bg-indigo-100 group-hover:bg-indigo-200 transition-colors";
 
-/** Deterministic per-board color so each board tile looks distinct and stays the same color across reloads. */
-export const colorForBoard = (id: string): string => {
-  let hash = 0;
-  for (let i = 0; i < id.length; i++) hash = (hash * 31 + id.charCodeAt(i)) >>> 0;
-  return BOARD_COLORS[hash % BOARD_COLORS.length];
-};
+/** Still takes a board id for call-site compatibility, but every board
+    gets the same flat color now (kept as a function in case per-board
+    colors come back as a user-chosen setting later). */
+export const colorForBoard = (_id: string): string => DEFAULT_BOARD_COLOR;

@@ -94,7 +94,7 @@ export const BoardSearchCreate = ({ className }: { className?: string }) => {
                     type="button"
                     onMouseDown={(e) => e.preventDefault()}
                     onClick={() => openBoard(b.id)}
-                    className="w-full flex items-center gap-2 px-3 py-2 text-sm hover:bg-accent text-left"
+                    className="group w-full flex items-center gap-2 px-3 py-2 text-sm hover:bg-accent text-left"
                   >
                     <span className={cn("h-6 w-9 rounded shrink-0", colorForBoard(b.id))} />
                     <span className="flex-1 min-w-0">
