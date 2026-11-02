@@ -2344,6 +2344,8 @@ export type Database = {
           position: number
           priority: Database["public"]["Enums"]["task_priority"]
           project_id: string
+          recurring: string | null
+          reminder: string | null
           reporter_id: string
           start_date: string | null
           status: Database["public"]["Enums"]["task_status"]
@@ -2369,6 +2371,8 @@ export type Database = {
           position?: number
           priority?: Database["public"]["Enums"]["task_priority"]
           project_id: string
+          recurring?: string | null
+          reminder?: string | null
           reporter_id: string
           start_date?: string | null
           status?: Database["public"]["Enums"]["task_status"]
@@ -2394,6 +2398,8 @@ export type Database = {
           position?: number
           priority?: Database["public"]["Enums"]["task_priority"]
           project_id?: string
+          recurring?: string | null
+          reminder?: string | null
           reporter_id?: string
           start_date?: string | null
           status?: Database["public"]["Enums"]["task_status"]
@@ -2862,6 +2868,19 @@ export type Database = {
       manager_candidates: {
         Args: Record<PropertyKey, never>
         Returns: { id: string; full_name: string | null; email: string | null }[]
+      }
+      get_board_assignable_profiles: {
+        Args: Record<PropertyKey, never>
+        Returns: {
+          id: string
+          full_name: string | null
+          email: string | null
+          photo_url: string | null
+          department: string | null
+          designation: string | null
+          company_wing: string | null
+          reporting_manager_id: string | null
+        }[]
       }
       team_member_directory: {
         Args: Record<PropertyKey, never>

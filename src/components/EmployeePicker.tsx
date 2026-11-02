@@ -17,6 +17,10 @@ interface EmployeePickerProps {
   allowUnassigned?: boolean;
   /** Restrict shown employees to this allow-list (e.g. project members) */
   restrictToIds?: string[];
+  /** Use this employee list instead of the RLS-scoped useVisibleEmployees()
+      hook — e.g. to show every company employee rather than just the
+      manager-visibility subset (grouped under a single "All Employees" heading). */
+  overrideEmployees?: VisibleEmployee[];
   className?: string;
   disabled?: boolean;
 }
@@ -27,11 +31,17 @@ export const EmployeePicker = ({
   placeholder = "Select employee",
   allowUnassigned = true,
   restrictToIds,
+  overrideEmployees,
   className,
   disabled,
 }: EmployeePickerProps) => {
   const [open, setOpen] = useState(false);
-  const { groups, flat } = useVisibleEmployees();
+  const { groups: visibleGroupsHook, flat: visibleFlatHook } = useVisibleEmployees();
+  const groups = useMemo(
+    () => (overrideEmployees ? [{ label: "All Employees", employees: overrideEmployees }] : visibleGroupsHook),
+    [overrideEmployees, visibleGroupsHook],
+  );
+  const flat = overrideEmployees || visibleFlatHook;
 
   const allowSet = useMemo(
     () => (restrictToIds ? new Set(restrictToIds) : null),

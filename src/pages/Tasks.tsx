@@ -1,7 +1,8 @@
 import { useEffect, useState, useCallback, useMemo } from "react";
 import { useNavigate } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
-import { Plus, FolderKanban, Star, Clock } from "lucide-react";
+import { useAuth } from "@/contexts/AuthContext";
+import { Plus, FolderKanban, Star, Clock, Users } from "lucide-react";
 import { useRealtimeSubscription } from "@/hooks/useRealtimeSubscription";
 import { colorForBoard, getStarredBoardIds, toggleStarredBoard, getRecentBoardIds } from "@/lib/boardPrefs";
 import { BoardSearchCreate } from "@/components/tasks/BoardSearchCreate";
@@ -10,7 +11,7 @@ import { cn } from "@/lib/utils";
 
 type Board = {
   id: string; key: string; name: string; description: string | null;
-  wing: string | null; owner_id: string; archived: boolean;
+  wing: string | null; owner_id: string; archived: boolean; visibility: "private" | "workspace" | "public";
 };
 
 const BoardTile = ({ board, starred, onToggleStar, onOpen }: {
@@ -42,7 +43,9 @@ const BoardTile = ({ board, starred, onToggleStar, onOpen }: {
 
 const Tasks = () => {
   const navigate = useNavigate();
+  const { user } = useAuth();
   const [boards, setBoards] = useState<Board[]>([]);
+  const [memberBoardIds, setMemberBoardIds] = useState<Set<string>>(new Set());
 
   const [starredIds, setStarredIds] = useState<string[]>(() => getStarredBoardIds());
   const [recentIds, setRecentIds] = useState<string[]>(() => getRecentBoardIds());
@@ -52,8 +55,16 @@ const Tasks = () => {
     setBoards((data || []) as Board[]);
   }, []);
 
+  const fetchMembership = useCallback(async () => {
+    if (!user) return;
+    const { data } = await supabase.from("project_members").select("project_id").eq("user_id", user.id);
+    setMemberBoardIds(new Set((data || []).map((m) => m.project_id)));
+  }, [user]);
+
   useEffect(() => { fetchBoards(); }, [fetchBoards]);
+  useEffect(() => { fetchMembership(); }, [fetchMembership]);
   useRealtimeSubscription("projects", fetchBoards, "task-boards-list");
+  useRealtimeSubscription("project_members", fetchMembership, "task-boards-membership");
 
   // Refresh "recently viewed" whenever the board list changes (e.g. returning from a board just opened).
   useEffect(() => { setRecentIds(getRecentBoardIds()); }, [boards]);
@@ -63,6 +74,17 @@ const Tasks = () => {
   const boardsById = useMemo(() => new Map(boards.map((b) => [b.id, b])), [boards]);
   const starredBoards = starredIds.map((id) => boardsById.get(id)).filter((b): b is Board => !!b);
   const recentBoards = recentIds.map((id) => boardsById.get(id)).filter((b): b is Board => !!b).slice(0, 5);
+
+  // "Your workspaces" = boards you own or are a member of. "Guest workspace"
+  // = every other board that still shows up here (RLS already limited
+  // `boards` to ones you can view — workspace-visibility boards for any
+  // role, legacy Public boards, or boards an admin can see without being a
+  // member) — surfaced separately so the Tasks home screen makes it obvious
+  // which boards you belong to vs. which are just viewable/open to anyone.
+  const yourBoards = boards.filter((b) => b.owner_id === user?.id || memberBoardIds.has(b.id));
+  const guestWorkspaceBoards = boards.filter(
+    (b) => b.owner_id !== user?.id && !memberBoardIds.has(b.id)
+  );
 
   return (
     <div className="space-y-6">
@@ -104,9 +126,9 @@ const Tasks = () => {
       )}
 
       <section className="space-y-2">
-        <h3 className="text-sm font-semibold text-muted-foreground">Your boards</h3>
+        <h3 className="text-sm font-semibold text-muted-foreground">YOUR WORKSPACES</h3>
         <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-3">
-          {boards.map((b) => (
+          {yourBoards.map((b) => (
             <BoardTile key={b.id} board={b} starred={starredIds.includes(b.id)} onToggleStar={toggleStar} onOpen={() => navigate(`/tasks/${b.id}`)} />
           ))}
           <BoardCreatePopover
@@ -123,6 +145,19 @@ const Tasks = () => {
           />
         </div>
       </section>
+
+      {guestWorkspaceBoards.length > 0 && (
+        <section className="space-y-2">
+          <h3 className="flex items-center gap-2 text-sm font-semibold text-muted-foreground">
+            <Users className="h-4 w-4" /> GUEST WORKSPACE
+          </h3>
+          <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-3">
+            {guestWorkspaceBoards.map((b) => (
+              <BoardTile key={b.id} board={b} starred={starredIds.includes(b.id)} onToggleStar={toggleStar} onOpen={() => navigate(`/tasks/${b.id}`)} />
+            ))}
+          </div>
+        </section>
+      )}
     </div>
   );
 };

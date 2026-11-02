@@ -12,6 +12,9 @@ export type KanbanTask = {
   priority: string;
   assignee_id: string | null;
   due_date: string | null;
+  start_date?: string | null;
+  recurring?: string | null;
+  reminder?: string | null;
   column_id: string | null;
   status: string;
   position: number;
