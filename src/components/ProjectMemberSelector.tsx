@@ -1,6 +1,7 @@
-import { useEffect, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
+import { useBoardAssignableProfiles } from "@/hooks/useBoardAssignableProfiles";
 import { notifyEmployee } from "@/lib/notifications";
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription,
@@ -19,17 +20,6 @@ import { cn } from "@/lib/utils";
 
 type Member = { user_id: string; role: string };
 
-type AssignableProfile = {
-  id: string;
-  full_name: string | null;
-  email: string | null;
-  photo_url: string | null;
-  department: string | null;
-  designation: string | null;
-  company_wing: string | null;
-  reporting_manager_id: string | null;
-};
-
 interface Props {
   projectId: string;
   project: { owner_id: string; wing: string | null; name?: string } | null;
@@ -44,29 +34,9 @@ const initials = (name?: string | null, email?: string | null) =>
 
 export const ProjectMemberSelector = ({ projectId, project, members, onChanged, open, onOpenChange }: Props) => {
   const { user } = useAuth();
-  const [profiles, setProfiles] = useState<AssignableProfile[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+  const { profiles, loading, error } = useBoardAssignableProfiles(open);
   const [search, setSearch] = useState("");
   const [busyId, setBusyId] = useState<string | null>(null);
-
-  useEffect(() => {
-    if (!open) return;
-    let active = true;
-    setLoading(true);
-    supabase.rpc("get_board_assignable_profiles").then(({ data, error: err }) => {
-      if (!active) return;
-      if (err) {
-        setError(err.message);
-        setProfiles([]);
-      } else {
-        setError(null);
-        setProfiles((data || []) as AssignableProfile[]);
-      }
-      setLoading(false);
-    });
-    return () => { active = false; };
-  }, [open]);
 
   const memberMap = useMemo(() => {
     const m = new Map<string, string>();

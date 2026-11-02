@@ -2344,6 +2344,8 @@ export type Database = {
           position: number
           priority: Database["public"]["Enums"]["task_priority"]
           project_id: string
+          recurring: string | null
+          reminder: string | null
           reporter_id: string
           start_date: string | null
           status: Database["public"]["Enums"]["task_status"]
@@ -2369,6 +2371,8 @@ export type Database = {
           position?: number
           priority?: Database["public"]["Enums"]["task_priority"]
           project_id: string
+          recurring?: string | null
+          reminder?: string | null
           reporter_id: string
           start_date?: string | null
           status?: Database["public"]["Enums"]["task_status"]
@@ -2394,6 +2398,8 @@ export type Database = {
           position?: number
           priority?: Database["public"]["Enums"]["task_priority"]
           project_id?: string
+          recurring?: string | null
+          reminder?: string | null
           reporter_id?: string
           start_date?: string | null
           status?: Database["public"]["Enums"]["task_status"]

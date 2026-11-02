@@ -19,6 +19,8 @@ import { useRealtimeSubscription } from "@/hooks/useRealtimeSubscription";
 import { EmployeePicker } from "@/components/EmployeePicker";
 import { ProjectMemberSelector } from "@/components/ProjectMemberSelector";
 import { BoardMenu } from "@/components/tasks/BoardMenu";
+import { TaskDatesPopover } from "@/components/tasks/TaskDatesPopover";
+import { useBoardAssignableProfiles } from "@/hooks/useBoardAssignableProfiles";
 import {
   DndContext,
   DragEndEvent,
@@ -55,6 +57,7 @@ const TaskBoard = () => {
   const [loadError, setLoadError] = useState<string | null>(null);
 
   const [activeTask, setActiveTask] = useState<KanbanTask | null>(null);
+  const { profiles: allAssignableProfiles } = useBoardAssignableProfiles(!!activeTask);
   const [draggingTask, setDraggingTask] = useState<KanbanTask | null>(null);
   const [comments, setComments] = useState<any[]>([]);
   const [newComment, setNewComment] = useState("");
@@ -788,6 +791,22 @@ const TaskBoard = () => {
                   />
                 </DialogTitle>
               </DialogHeader>
+              <div className="flex items-center gap-2 flex-wrap -mt-1">
+                <TaskDatesPopover
+                  startDate={activeTask.start_date || null}
+                  dueDate={activeTask.due_date || null}
+                  recurring={activeTask.recurring || null}
+                  reminder={activeTask.reminder || null}
+                  onSave={(patch) => updateTask(patch)}
+                />
+                <EmployeePicker
+                  value={activeTask.assignee_id}
+                  onChange={(id) => updateTask({ assignee_id: id })}
+                  placeholder="Members"
+                  overrideEmployees={allAssignableProfiles}
+                  className="w-auto h-auto py-1.5"
+                />
+              </div>
               <div className="grid grid-cols-3 gap-4">
                 <div className="col-span-2 space-y-3">
                   <div>
@@ -891,23 +910,6 @@ const TaskBoard = () => {
                       <SelectTrigger><SelectValue /></SelectTrigger>
                       <SelectContent>{PRIORITIES.map((p) => <SelectItem key={p} value={p}>{p}</SelectItem>)}</SelectContent>
                     </Select>
-                  </div>
-                  <div>
-                    <Label>Assignee</Label>
-                    <EmployeePicker
-                      value={activeTask.assignee_id}
-                      onChange={(id) => updateTask({ assignee_id: id })}
-                      placeholder="Unassigned"
-                      restrictToIds={memberProfiles.map((p) => p.id)}
-                    />
-                  </div>
-                  <div>
-                    <Label>Due Date</Label>
-                    <Input
-                      type="date"
-                      value={activeTask.due_date || ""}
-                      onChange={(e) => updateTask({ due_date: e.target.value || null })}
-                    />
                   </div>
                   <div className="text-xs text-muted-foreground pt-2">
                     Reporter: {profileFor((activeTask as any).reporter_id)?.full_name || "—"}
