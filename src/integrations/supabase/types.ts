@@ -2863,6 +2863,19 @@ export type Database = {
         Args: Record<PropertyKey, never>
         Returns: { id: string; full_name: string | null; email: string | null }[]
       }
+      get_board_assignable_profiles: {
+        Args: Record<PropertyKey, never>
+        Returns: {
+          id: string
+          full_name: string | null
+          email: string | null
+          photo_url: string | null
+          department: string | null
+          designation: string | null
+          company_wing: string | null
+          reporting_manager_id: string | null
+        }[]
+      }
       team_member_directory: {
         Args: Record<PropertyKey, never>
         Returns: {

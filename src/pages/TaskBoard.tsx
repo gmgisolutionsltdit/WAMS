@@ -609,9 +609,9 @@ const TaskBoard = () => {
               <h2
                 className={cn(
                   "text-2xl font-semibold truncate rounded px-1 -mx-1",
-                  isOwnerOrAdmin && "cursor-text hover:bg-accent"
+                  canEditBoard && "cursor-text hover:bg-accent"
                 )}
-                onClick={() => { if (!isOwnerOrAdmin) return; setTitleDraft(project.name); setEditingTitle(true); }}
+                onClick={() => { if (!canEditBoard) return; setTitleDraft(project.name); setEditingTitle(true); }}
               >
                 {project.name}
               </h2>
@@ -626,7 +626,7 @@ const TaskBoard = () => {
             <Plus className="h-4 w-4 mr-1" /> Column
           </Button>
           <Button variant="outline" size="sm" onClick={() => setMembersOpen(true)}>
-            <UserPlus className="mr-1 h-4 w-4" /> Members ({members.length})
+            <UserPlus className="mr-1 h-4 w-4" /> Share ({members.length})
           </Button>
           <ProjectMemberSelector
             projectId={projectId!}
