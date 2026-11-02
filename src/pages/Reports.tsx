@@ -30,6 +30,11 @@ const Reports = () => {
   const [departments, setDepartments] = useState<string[]>([]);
   const [expanded, setExpanded] = useState<Record<string, boolean>>({});
   const [allEmployees, setAllEmployees] = useState<{ id: string; full_name: string | null; email: string | null; department: string | null }[]>([]);
+  // Every user_id with at least one attendance_logs row in the current date
+  // range — fetched unbounded (id only), separate from the capped 500-row
+  // `logs` used for display, so an employee whose rows fall outside that cap
+  // isn't wrongly reported as having no attendance at all.
+  const [presentUserIds, setPresentUserIds] = useState<Set<string>>(new Set());
 
   const days = useMemo(() => mergeDailySessions(logs as AttendanceSession[]), [logs]);
 
@@ -37,9 +42,8 @@ const Reports = () => {
   // admins see everyone, managers see their reports) — so an employee with no
   // punches at all in the selected range still shows up, the same way the
   // Performance Summary tab lists every employee even with all-zero stats.
-  const employeesWithLogs = useMemo(() => new Set(days.map((d) => d.userId)), [days]);
   const missingEmployees = useMemo(() => {
-    let list = allEmployees.filter((e) => !employeesWithLogs.has(e.id));
+    let list = allEmployees.filter((e) => !presentUserIds.has(e.id));
     if (name.trim()) {
       const q = name.toLowerCase();
       list = list.filter((e) => (e.full_name || "").toLowerCase().includes(q) || (e.email || "").toLowerCase().includes(q));
@@ -48,15 +52,9 @@ const Reports = () => {
       list = list.filter((e) => e.department === department);
     }
     return list;
-  }, [allEmployees, employeesWithLogs, name, department]);
+  }, [allEmployees, presentUserIds, name, department]);
 
-  const fetchLogs = async () => {
-    let query = supabase
-      .from("attendance_logs")
-      .select("*, profiles!attendance_logs_user_id_fkey(full_name, email, department)")
-      .order("date", { ascending: false })
-      .limit(500);
-
+  const effectiveDateRange = () => {
     let effectiveFrom = dateFrom;
     let effectiveTo = dateTo;
     if (monthFrom || monthTo) {
@@ -69,6 +67,17 @@ const Reports = () => {
       effectiveFrom = format(start, "yyyy-MM-dd");
       effectiveTo = format(end, "yyyy-MM-dd");
     }
+    return { effectiveFrom, effectiveTo };
+  };
+
+  const fetchLogs = async () => {
+    const { effectiveFrom, effectiveTo } = effectiveDateRange();
+
+    let query = supabase
+      .from("attendance_logs")
+      .select("*, profiles!attendance_logs_user_id_fkey(full_name, email, department)")
+      .order("date", { ascending: false })
+      .limit(500);
     if (effectiveFrom) query = query.gte("date", effectiveFrom);
     if (effectiveTo) query = query.lte("date", effectiveTo);
 
@@ -87,8 +96,22 @@ const Reports = () => {
     setLogs(rows);
   };
 
+  // Unbounded (id-only) presence check, decoupled from fetchLogs' 500-row
+  // display cap, so "no attendance recorded" is only ever shown for an
+  // employee who truly has zero rows in range, not one whose rows just
+  // didn't make the cap.
+  const fetchPresentUserIds = async () => {
+    const { effectiveFrom, effectiveTo } = effectiveDateRange();
+    let query = supabase.from("attendance_logs").select("user_id");
+    if (effectiveFrom) query = query.gte("date", effectiveFrom);
+    if (effectiveTo) query = query.lte("date", effectiveTo);
+    const { data } = await query;
+    setPresentUserIds(new Set((data || []).map((r) => r.user_id)));
+  };
+
   useEffect(() => {
     fetchLogs();
+    fetchPresentUserIds();
     (async () => {
       const { data } = await supabase.from("profiles").select("id, full_name, email, department");
       setAllEmployees((data || []) as typeof allEmployees);
@@ -164,7 +187,7 @@ const Reports = () => {
             <Input type="date" value={dateTo} disabled={!!monthFrom || !!monthTo} onChange={(e) => setDateTo(e.target.value)} />
           </div>
           <div className="flex gap-2">
-            <Button onClick={fetchLogs} className="flex-1">Filter</Button>
+            <Button onClick={() => { fetchLogs(); fetchPresentUserIds(); }} className="flex-1">Filter</Button>
             <Button variant="outline" onClick={clearFilters}>Clear</Button>
           </div>
         </div>
