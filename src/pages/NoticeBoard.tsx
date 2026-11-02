@@ -354,6 +354,15 @@ const NoticeBoard = () => {
     if (next) fetchArchived();
   };
 
+  const noticeList = showArchived ? archivedNotices : notices;
+  const noticePageCount = Math.max(1, Math.ceil(noticeList.length / PAGE_SIZE));
+  const currentNoticePage = Math.min(page, noticePageCount);
+  const noticePageItems = noticeList.slice((currentNoticePage - 1) * PAGE_SIZE, currentNoticePage * PAGE_SIZE);
+  const selectAllNotices = () => {
+    if (showArchived) setSelectedArchived(new Set(noticePageItems.map((n) => n.id)));
+    else setSelectedNotices(new Set(noticePageItems.map((n) => n.id)));
+  };
+
   return (
     <div className="space-y-6">
       <div className="flex justify-between items-center flex-wrap gap-4">
@@ -398,20 +407,7 @@ const NoticeBoard = () => {
       {!showArchived && (
       <Card>
         <CardHeader>
-          <div className="flex items-start justify-between gap-3">
-            <CardTitle className="text-base flex items-center gap-2"><CalendarClock className="h-4 w-4" /> Requests Activity</CardTitle>
-            {filteredActivity.length > PAGE_SIZE && (
-              <div className="flex items-center gap-2 shrink-0">
-                <Button variant="outline" size="sm" disabled={currentActivityPage <= 1} onClick={() => setActivityPage(currentActivityPage - 1)}>
-                  <ChevronLeft className="h-4 w-4 mr-1" /> Previous
-                </Button>
-                <span className="text-sm text-muted-foreground whitespace-nowrap">Page {currentActivityPage} of {activityPageCount}</span>
-                <Button variant="outline" size="sm" disabled={currentActivityPage >= activityPageCount} onClick={() => setActivityPage(currentActivityPage + 1)}>
-                  Next <ChevronRight className="h-4 w-4 ml-1" />
-                </Button>
-              </div>
-            )}
-          </div>
+          <CardTitle className="text-base flex items-center gap-2"><CalendarClock className="h-4 w-4" /> Requests Activity</CardTitle>
           <CardDescription>Requests and decisions you're involved in or can approve.</CardDescription>
         </CardHeader>
         <CardContent className="space-y-3">
@@ -451,7 +447,10 @@ const NoticeBoard = () => {
                     <Archive className="h-4 w-4 mr-1" /> Archive Selected{selectedActivity.size > 0 ? ` (${selectedActivity.size})` : ""}
                   </Button>
                   {selectedActivity.size > 0 && (
-                    <Button variant="ghost" size="sm" onClick={() => setSelectedActivity(new Set())}>Clear selection</Button>
+                    <>
+                      <Button variant="ghost" size="sm" onClick={() => setSelectedActivity(new Set(pagedActivity.filter(canActOnActivity).map(activityKey)))}>Select all</Button>
+                      <Button variant="ghost" size="sm" onClick={() => setSelectedActivity(new Set())}>Clear selection</Button>
+                    </>
                   )}
                 </>
               ) : (
@@ -460,7 +459,10 @@ const NoticeBoard = () => {
                     <ArchiveRestore className="h-4 w-4 mr-1" /> Unarchive Selected{selectedActivity.size > 0 ? ` (${selectedActivity.size})` : ""}
                   </Button>
                   {selectedActivity.size > 0 && (
-                    <Button variant="ghost" size="sm" onClick={() => setSelectedActivity(new Set())}>Clear selection</Button>
+                    <>
+                      <Button variant="ghost" size="sm" onClick={() => setSelectedActivity(new Set(pagedActivity.filter(canActOnActivity).map(activityKey)))}>Select all</Button>
+                      <Button variant="ghost" size="sm" onClick={() => setSelectedActivity(new Set())}>Clear selection</Button>
+                    </>
                   )}
                 </>
               )}
@@ -510,6 +512,18 @@ const NoticeBoard = () => {
               ))}
             </>
           )}
+
+          {filteredActivity.length > PAGE_SIZE && (
+            <div className="flex items-center justify-center gap-3 pt-2">
+              <Button variant="outline" size="sm" disabled={currentActivityPage <= 1} onClick={() => setActivityPage(currentActivityPage - 1)}>
+                <ChevronLeft className="h-4 w-4 mr-1" /> Previous
+              </Button>
+              <span className="text-sm text-muted-foreground whitespace-nowrap">Page {currentActivityPage} of {activityPageCount}</span>
+              <Button variant="outline" size="sm" disabled={currentActivityPage >= activityPageCount} onClick={() => setActivityPage(currentActivityPage + 1)}>
+                Next <ChevronRight className="h-4 w-4 ml-1" />
+              </Button>
+            </div>
+          )}
         </CardContent>
       </Card>
       )}
@@ -532,7 +546,10 @@ const NoticeBoard = () => {
                 <Archive className="h-4 w-4 mr-1" /> Archive Selected{selectedNotices.size > 0 ? ` (${selectedNotices.size})` : ""}
               </Button>
               {selectedNotices.size > 0 && (
-                <Button variant="ghost" size="sm" onClick={() => setSelectedNotices(new Set())}>Clear selection</Button>
+                <>
+                  <Button variant="ghost" size="sm" onClick={selectAllNotices}>Select all</Button>
+                  <Button variant="ghost" size="sm" onClick={() => setSelectedNotices(new Set())}>Clear selection</Button>
+                </>
               )}
             </>
           ) : (
@@ -546,7 +563,10 @@ const NoticeBoard = () => {
                 <ArchiveRestore className="h-4 w-4 mr-1" /> Unarchive Selected{selectedArchived.size > 0 ? ` (${selectedArchived.size})` : ""}
               </Button>
               {selectedArchived.size > 0 && (
-                <Button variant="ghost" size="sm" onClick={() => setSelectedArchived(new Set())}>Clear selection</Button>
+                <>
+                  <Button variant="ghost" size="sm" onClick={selectAllNotices}>Select all</Button>
+                  <Button variant="ghost" size="sm" onClick={() => setSelectedArchived(new Set())}>Clear selection</Button>
+                </>
               )}
             </>
           )}

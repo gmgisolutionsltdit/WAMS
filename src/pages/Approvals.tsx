@@ -720,20 +720,7 @@ const Approvals = () => {
         return (
       <Card>
         <CardHeader>
-          <div className="flex items-start justify-between gap-3">
-            <CardTitle>History</CardTitle>
-            {activeHistory.length > HISTORY_PAGE_SIZE && (
-              <div className="flex items-center gap-2 shrink-0">
-                <Button variant="outline" size="sm" disabled={currentHistoryPage <= 1} onClick={() => setCurrentHistoryPage(currentHistoryPage - 1)}>
-                  <ChevronLeft className="h-4 w-4 mr-1" /> Previous
-                </Button>
-                <span className="text-sm text-muted-foreground whitespace-nowrap">Page {currentHistoryPage} of {historyPageCount}</span>
-                <Button variant="outline" size="sm" disabled={currentHistoryPage >= historyPageCount} onClick={() => setCurrentHistoryPage(currentHistoryPage + 1)}>
-                  Next <ChevronRight className="h-4 w-4 ml-1" />
-                </Button>
-              </div>
-            )}
-          </div>
+          <CardTitle>History</CardTitle>
           <CardDescription>Track every decided request and how it was resolved.</CardDescription>
         </CardHeader>
         <CardContent>
@@ -941,6 +928,18 @@ const Approvals = () => {
               </Table>
             </TabsContent>
           </Tabs>
+
+          {activeHistory.length > HISTORY_PAGE_SIZE && (
+            <div className="flex items-center justify-center gap-3 pt-3">
+              <Button variant="outline" size="sm" disabled={currentHistoryPage <= 1} onClick={() => setCurrentHistoryPage(currentHistoryPage - 1)}>
+                <ChevronLeft className="h-4 w-4 mr-1" /> Previous
+              </Button>
+              <span className="text-sm text-muted-foreground whitespace-nowrap">Page {currentHistoryPage} of {historyPageCount}</span>
+              <Button variant="outline" size="sm" disabled={currentHistoryPage >= historyPageCount} onClick={() => setCurrentHistoryPage(currentHistoryPage + 1)}>
+                Next <ChevronRight className="h-4 w-4 ml-1" />
+              </Button>
+            </div>
+          )}
         </CardContent>
       </Card>
         );
