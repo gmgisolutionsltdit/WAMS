@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
@@ -50,6 +50,11 @@ type ChangedDay = {
   newDueHours: number;
 };
 
+/** Per-day Overtime (actual, from attendance) vs Approved Overtime (from
+ * approved OT requests + manual corrections), for drilling into why the two
+ * totals diverge over a range. */
+type DayDetail = { date: string; otActual: number; otApproved: number };
+
 type MonthlySummary = Summary & { month: string };
 
 const round1 = (n: number) => Math.round(n * 10) / 10;
@@ -97,6 +102,8 @@ const ReportsSummary = () => {
   const [monthlyRows, setMonthlyRows] = useState<MonthlySummary[]>([]);
   const [changedDays, setChangedDays] = useState<ChangedDay[]>([]);
   const [showChanged, setShowChanged] = useState(false);
+  const [dayDetails, setDayDetails] = useState<Record<string, DayDetail[]>>({});
+  const [expandedUserId, setExpandedUserId] = useState<string | null>(null);
 
   useEffect(() => {
     if (!isAdmin) return;
@@ -236,6 +243,7 @@ const ReportsSummary = () => {
       }
 
       const changed: ChangedDay[] = [];
+      const otActualByUserDate = new Map<string, number>(); // key: `${user_id}|${date}`
       const days = mergeDailySessions((attRows || []) as AttendanceSession[]);
       days.forEach((day) => {
         const userId = day.userId as string;
@@ -260,6 +268,8 @@ const ReportsSummary = () => {
         // time worked counts in full there, no requirement to beat.
         if (dayKind.nonWorking && !onLeave && worked > 0) {
           targets.forEach((t) => { t.otActualDays += 1; t.otActualHoursTotal += worked; });
+          const key = `${userId}|${day.date}`;
+          otActualByUserDate.set(key, (otActualByUserDate.get(key) || 0) + worked);
         }
 
         // Late: compare against the stored, authoritative arrival once
@@ -303,7 +313,10 @@ const ReportsSummary = () => {
         // hours beyond the (penalty-adjusted) requirement, same as
         // Attendance.tsx's OVERTIME (OT) column.
         if (!nonWorking && closed && worked > requiredWithPenalty) {
-          targets.forEach((t) => { t.otActualDays += 1; t.otActualHoursTotal += worked - requiredWithPenalty; });
+          const extra = worked - requiredWithPenalty;
+          targets.forEach((t) => { t.otActualDays += 1; t.otActualHoursTotal += extra; });
+          const key = `${userId}|${day.date}`;
+          otActualByUserDate.set(key, (otActualByUserDate.get(key) || 0) + extra);
         }
         if (Math.abs(oldDue - newDue) > 0.01) {
           changed.push({ userId, name: s.name, date: day.date, oldDueHours: round1(oldDue), newDueHours: round1(newDue) });
@@ -366,6 +379,22 @@ const ReportsSummary = () => {
         if (sm) sm.otDays = set.size;
       });
 
+      // Per-day Overtime (actual) vs Approved Overtime, for the "View
+      // day-by-day" drill-down — every date that contributed to either
+      // column, per user.
+      const allKeys = new Set<string>([...otActualByUserDate.keys(), ...otPerDay.keys()]);
+      const byUserDayDetails = new Map<string, DayDetail[]>();
+      allKeys.forEach((key) => {
+        const [userId, date] = key.split("|");
+        const list = byUserDayDetails.get(userId) || [];
+        list.push({ date, otActual: otActualByUserDate.get(key) || 0, otApproved: otPerDay.get(key) || 0 });
+        byUserDayDetails.set(userId, list);
+      });
+      const dayDetailsByUser: Record<string, DayDetail[]> = {};
+      byUserDayDetails.forEach((list, userId) => {
+        dayDetailsByUser[userId] = list.sort((a, b) => a.date.localeCompare(b.date));
+      });
+
       // Discard this response if a newer fetch (e.g. the Employee filter
       // changed again) has already started — applying it now would show
       // stale counts for whichever employee is currently selected.
@@ -373,6 +402,7 @@ const ReportsSummary = () => {
         setRows(Array.from(byUser.values()).sort((a, b) => a.name.localeCompare(b.name)));
         setMonthlyRows(Array.from(byUserMonth.values()).sort((a, b) => b.month.localeCompare(a.month)));
         setChangedDays(changed.sort((a, b) => a.date.localeCompare(b.date)));
+        setDayDetails(dayDetailsByUser);
       }
     } finally {
       if (seq === fetchSeq.current) setLoading(false);
@@ -456,29 +486,71 @@ const ReportsSummary = () => {
                       <TableHead>Overtime</TableHead>
                       <TableHead>Approved Overtime</TableHead>
                       <TableHead>Net Hours</TableHead>
+                      <TableHead />
                     </TableRow>
                   </TableHeader>
                   <TableBody>
                     {rows.length === 0 ? (
-                      <TableRow><TableCell colSpan={8} className="text-center text-muted-foreground">No records</TableCell></TableRow>
+                      <TableRow><TableCell colSpan={9} className="text-center text-muted-foreground">No records</TableCell></TableRow>
                     ) : rows.map((r) => {
                       const net = netHoursOf(r);
+                      const details = dayDetails[r.userId] || [];
+                      const isExpanded = expandedUserId === r.userId;
                       return (
-                        <TableRow key={r.userId}>
-                          <TableCell className="font-medium">{r.name}</TableCell>
-                          <TableCell><Badge variant={r.role === "admin" ? "default" : r.role === "manager" ? "secondary" : "outline"}>{r.role}</Badge></TableCell>
-                          <TableCell>{r.lateDays} days · avg {r.lateDays > 0 ? humanMinutes(Math.round(r.lateMinutesTotal / r.lateDays)) : "—"}</TableCell>
-                          <TableCell>{r.lessThan7Days} days · avg {r.lessThan7Days > 0 ? fmtHoursMin(r.lessThan7HoursTotal / r.lessThan7Days) : "0 hr 0min"}</TableCell>
-                          <TableCell>{r.shortDays} days · {fmtHoursMin(r.shortfallHoursTotal)}</TableCell>
-                          <TableCell>{r.otActualDays} days · {fmtHoursMin(r.otActualHoursTotal)}</TableCell>
-                          <TableCell>{r.otDays} days · {fmtHoursMin(r.otHoursTotal)}</TableCell>
-                          <TableCell>
-                            <div className="font-semibold">{net.value}</div>
-                            <div className={net.isOvertime ? "text-xs text-green-600" : "text-xs text-red-600"}>
-                              {net.isOvertime ? "Overtime" : "Due Time"}
-                            </div>
-                          </TableCell>
-                        </TableRow>
+                        <Fragment key={r.userId}>
+                          <TableRow>
+                            <TableCell className="font-medium">{r.name}</TableCell>
+                            <TableCell><Badge variant={r.role === "admin" ? "default" : r.role === "manager" ? "secondary" : "outline"}>{r.role}</Badge></TableCell>
+                            <TableCell>{r.lateDays} days · avg {r.lateDays > 0 ? humanMinutes(Math.round(r.lateMinutesTotal / r.lateDays)) : "—"}</TableCell>
+                            <TableCell>{r.lessThan7Days} days · avg {r.lessThan7Days > 0 ? fmtHoursMin(r.lessThan7HoursTotal / r.lessThan7Days) : "0 hr 0min"}</TableCell>
+                            <TableCell>{r.shortDays} days · {fmtHoursMin(r.shortfallHoursTotal)}</TableCell>
+                            <TableCell>{r.otActualDays} days · {fmtHoursMin(r.otActualHoursTotal)}</TableCell>
+                            <TableCell>{r.otDays} days · {fmtHoursMin(r.otHoursTotal)}</TableCell>
+                            <TableCell>
+                              <div className="font-semibold">{net.value}</div>
+                              <div className={net.isOvertime ? "text-xs text-green-600" : "text-xs text-red-600"}>
+                                {net.isOvertime ? "Overtime" : "Due Time"}
+                              </div>
+                            </TableCell>
+                            <TableCell>
+                              {details.length > 0 && (
+                                <Button size="sm" variant="ghost" onClick={() => setExpandedUserId(isExpanded ? null : r.userId)}>
+                                  <Eye className="h-4 w-4 mr-1" /> {isExpanded ? "Hide" : "View"} days
+                                </Button>
+                              )}
+                            </TableCell>
+                          </TableRow>
+                          {isExpanded && (
+                            <TableRow>
+                              <TableCell colSpan={9} className="bg-muted/30">
+                                <p className="text-xs text-muted-foreground mb-2">
+                                  Every date contributing to Overtime (actual, from attendance) or Approved Overtime
+                                  (approved OT requests + approved manual corrections) in this range.
+                                </p>
+                                <div className="overflow-x-auto">
+                                  <Table>
+                                    <TableHeader>
+                                      <TableRow>
+                                        <TableHead>Date</TableHead>
+                                        <TableHead>Overtime (actual)</TableHead>
+                                        <TableHead>Approved Overtime</TableHead>
+                                      </TableRow>
+                                    </TableHeader>
+                                    <TableBody>
+                                      {details.map((d) => (
+                                        <TableRow key={d.date}>
+                                          <TableCell>{d.date}</TableCell>
+                                          <TableCell>{d.otActual > 0 ? fmtHoursMin(d.otActual) : "—"}</TableCell>
+                                          <TableCell>{d.otApproved > 0 ? fmtHoursMin(d.otApproved) : "—"}</TableCell>
+                                        </TableRow>
+                                      ))}
+                                    </TableBody>
+                                  </Table>
+                                </div>
+                              </TableCell>
+                            </TableRow>
+                          )}
+                        </Fragment>
                       );
                     })}
                   </TableBody>
