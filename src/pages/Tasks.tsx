@@ -76,12 +76,14 @@ const Tasks = () => {
   const recentBoards = recentIds.map((id) => boardsById.get(id)).filter((b): b is Board => !!b).slice(0, 5);
 
   // "Your workspaces" = boards you own or are a member of. "Guest workspace"
-  // = workspace-visibility boards everyone can see/edit but you haven't
-  // joined — surfaced separately so the Tasks home screen makes it obvious
-  // which boards you belong to vs. which are just open to anyone.
+  // = every other board that still shows up here (RLS already limited
+  // `boards` to ones you can view — workspace-visibility boards for any
+  // role, legacy Public boards, or boards an admin can see without being a
+  // member) — surfaced separately so the Tasks home screen makes it obvious
+  // which boards you belong to vs. which are just viewable/open to anyone.
   const yourBoards = boards.filter((b) => b.owner_id === user?.id || memberBoardIds.has(b.id));
   const guestWorkspaceBoards = boards.filter(
-    (b) => b.visibility === "workspace" && b.owner_id !== user?.id && !memberBoardIds.has(b.id)
+    (b) => b.owner_id !== user?.id && !memberBoardIds.has(b.id)
   );
 
   return (
