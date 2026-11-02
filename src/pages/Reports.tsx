@@ -29,9 +29,26 @@ const Reports = () => {
   const [monthTo, setMonthTo] = useState(""); // YYYY-MM
   const [departments, setDepartments] = useState<string[]>([]);
   const [expanded, setExpanded] = useState<Record<string, boolean>>({});
+  const [allEmployees, setAllEmployees] = useState<{ id: string; full_name: string | null; email: string | null; department: string | null }[]>([]);
 
   const days = useMemo(() => mergeDailySessions(logs as AttendanceSession[]), [logs]);
 
+  // Every employee visible to this viewer (same RLS as attendance_logs itself:
+  // admins see everyone, managers see their reports) — so an employee with no
+  // punches at all in the selected range still shows up, the same way the
+  // Performance Summary tab lists every employee even with all-zero stats.
+  const employeesWithLogs = useMemo(() => new Set(days.map((d) => d.userId)), [days]);
+  const missingEmployees = useMemo(() => {
+    let list = allEmployees.filter((e) => !employeesWithLogs.has(e.id));
+    if (name.trim()) {
+      const q = name.toLowerCase();
+      list = list.filter((e) => (e.full_name || "").toLowerCase().includes(q) || (e.email || "").toLowerCase().includes(q));
+    }
+    if (department && department !== "all") {
+      list = list.filter((e) => e.department === department);
+    }
+    return list;
+  }, [allEmployees, employeesWithLogs, name, department]);
 
   const fetchLogs = async () => {
     let query = supabase
@@ -73,8 +90,9 @@ const Reports = () => {
   useEffect(() => {
     fetchLogs();
     (async () => {
-      const { data } = await supabase.from("profiles").select("department").not("department", "is", null);
-      const unique = Array.from(new Set((data || []).map((d: any) => d.department).filter(Boolean))) as string[];
+      const { data } = await supabase.from("profiles").select("id, full_name, email, department");
+      setAllEmployees((data || []) as typeof allEmployees);
+      const unique = Array.from(new Set((data || []).map((d) => d.department).filter(Boolean))) as string[];
       setDepartments(unique.sort());
     })();
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -167,7 +185,7 @@ const Reports = () => {
             </TableRow>
           </TableHeader>
           <TableBody>
-            {days.length === 0 ? (
+            {days.length === 0 && missingEmployees.length === 0 ? (
               <TableRow><TableCell colSpan={10} className="text-center text-muted-foreground">No records</TableCell></TableRow>
             ) : days.map((day) => {
               const isOpen = !!expanded[day.key];
@@ -247,6 +265,14 @@ const Reports = () => {
                 </Fragment>
               );
             })}
+            {missingEmployees.map((e) => (
+              <TableRow key={e.id} className="text-muted-foreground">
+                <TableCell />
+                <TableCell>{e.full_name || e.email || "—"}</TableCell>
+                <TableCell>{e.department || "—"}</TableCell>
+                <TableCell colSpan={7} className="text-xs">No attendance recorded for this period</TableCell>
+              </TableRow>
+            ))}
           </TableBody>
         </Table>
 
