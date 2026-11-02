@@ -31,19 +31,22 @@ const emptyForm = { title: "", body: "", category: "general", priority: "normal"
 const NoticeBoard = () => {
   const { user, role } = useAuth();
   const canManage = role === "admin";
-  const canDeleteActivity = role === "admin" || role === "manager";
-  const [notices, setNotices] = useState<any[]>([]);
+  const [allNotices, setAllNotices] = useState<any[]>([]);
   const [open, setOpen] = useState(false);
   const [form, setForm] = useState(emptyForm);
   const [editOpen, setEditOpen] = useState(false);
   const [editId, setEditId] = useState<string | null>(null);
   const [editForm, setEditForm] = useState(emptyForm);
   const [showArchived, setShowArchived] = useState(false);
-  const [archivedNotices, setArchivedNotices] = useState<any[]>([]);
+  // Which notices/activity entries *I* have personally archived — archiving
+  // is per-viewer (it only hides the item from the person who archived it),
+  // so this is never written to the shared notice/request row itself.
+  const [dismissedNoticeIds, setDismissedNoticeIds] = useState<Set<string>>(new Set());
   const [selectedArchived, setSelectedArchived] = useState<Set<string>>(new Set());
   const [page, setPage] = useState(1);
 
   const [activity, setActivity] = useState<any[]>([]);
+  const [dismissedActivityKeys, setDismissedActivityKeys] = useState<Set<string>>(new Set());
   const [namesByUser, setNamesByUser] = useState<Record<string, string>>({});
   const [leaveTypeNames, setLeaveTypeNames] = useState<Record<string, string>>({});
   const [filterDate, setFilterDate] = useState("");
@@ -63,13 +66,17 @@ const NoticeBoard = () => {
 
   const fetchNotices = async () => {
     const { data } = await supabase.from("notices").select("*").eq("is_active", true).order("pinned", { ascending: false }).order("published_at", { ascending: false });
-    setNotices(data || []);
+    setAllNotices(data || []);
   };
 
-  const fetchArchived = async () => {
-    const { data } = await supabase.from("notices").select("*").eq("is_active", false).order("published_at", { ascending: false });
-    setArchivedNotices(data || []);
+  const fetchDismissedNotices = async () => {
+    if (!user) return;
+    const { data } = await supabase.from("notice_dismissals").select("notice_id").eq("user_id", user.id);
+    setDismissedNoticeIds(new Set((data || []).map((d) => d.notice_id)));
   };
+
+  const notices = allNotices.filter((n) => !dismissedNoticeIds.has(n.id));
+  const archivedNotices = allNotices.filter((n) => dismissedNoticeIds.has(n.id));
 
   /**
    * Leave / late-time request + approval activity, sourced straight from
@@ -122,7 +129,13 @@ const NoticeBoard = () => {
     setNamesByUser(map);
   };
 
-  useEffect(() => { fetchNotices(); fetchActivity(); }, []);
+  const fetchDismissedActivity = async () => {
+    if (!user) return;
+    const { data } = await supabase.from("activity_dismissals").select("kind, item_id").eq("user_id", user.id);
+    setDismissedActivityKeys(new Set((data || []).map((d) => `${d.kind}:${d.item_id}`)));
+  };
+
+  useEffect(() => { fetchNotices(); fetchDismissedNotices(); fetchActivity(); fetchDismissedActivity(); }, []);
   useRealtimeSubscription("leave_requests", fetchActivity, "notice-board-leave");
   useRealtimeSubscription("late_time_requests", fetchActivity, "notice-board-late");
   useRealtimeSubscription("manual_time_requests", fetchActivity, "notice-board-manual");
@@ -168,32 +181,30 @@ const NoticeBoard = () => {
   };
 
   const TYPE_LABELS: Record<string, string> = { leave: "Leave", late: "Late Time", manual: "Manual Entry", ot: "Overtime" };
-  const ACTIVITY_TABLE: Record<string, string> = {
-    leave: "leave_requests", late: "late_time_requests", manual: "manual_time_requests", ot: "overtime_requests",
-  };
 
-  /** Who can archive/unarchive this row: admin (any), manager (anyone they
-   * approve, never their own), or the requester archiving their own row —
-   * RLS (can_approve() OR owner, via the owner-archive-only trigger) is what
-   * actually enforces this, this just decides whether to show the control. */
-  const canActOnActivity = (r: { user_id: string }) =>
-    canManage || (role === "manager" && canDeleteActivity && r.user_id !== user?.id) || r.user_id === user?.id;
+  /** Archiving here is purely personal (it only hides the entry from your
+   * own feed, never anyone else's), so anyone who can see a row at all —
+   * already decided by that table's own RLS — can archive/unarchive it for
+   * themselves. */
+  const canActOnActivity = (_r: { user_id: string }) => true;
 
   const activityKey = (r: { _kind: string; id: string }) => `${r._kind}:${r.id}`;
 
-  /** Archives/unarchives exactly this one request row (eq("id", ...)) — it
-   * can never touch any other employee's requests or notices. */
+  /** Archives/unarchives exactly this one entry for the signed-in user only
+   * — never touches the shared row or any other viewer's feed. */
   const setActivityArchived = async (r: { id: string; _kind: string }, archived: boolean) => {
-    const { data, error } = await supabase.from(ACTIVITY_TABLE[r._kind]).update({ archived }).eq("id", r.id).select("id");
+    if (!user) return;
+    const { error } = archived
+      ? await supabase.from("activity_dismissals").upsert({ user_id: user.id, kind: r._kind, item_id: r.id })
+      : await supabase.from("activity_dismissals").delete().eq("user_id", user.id).eq("kind", r._kind).eq("item_id", r.id);
     if (error) { toast.error(error.message); return; }
-    if (!data?.length) { toast.error(`You're not allowed to ${archived ? "archive" : "unarchive"} this entry.`); return; }
     toast.success(`Entry ${archived ? "archived" : "unarchived"}`);
-    // Apply locally right away — the realtime-triggered fetchActivity() below
-    // still runs to reconcile with the server, but the row shouldn't wait on
-    // a network round trip (or risk a slower, stale fetch briefly undoing
-    // this) to move between the active and archived lists.
-    setActivity((prev) => prev.map((row) => (row._kind === r._kind && row.id === r.id ? { ...row, archived } : row)));
-    fetchActivity();
+    setDismissedActivityKeys((prev) => {
+      const next = new Set(prev);
+      const key = activityKey(r);
+      if (archived) next.add(key); else next.delete(key);
+      return next;
+    });
   };
 
   const toggleSelectedActivity = (key: string, checked: boolean) => {
@@ -205,22 +216,28 @@ const NoticeBoard = () => {
   };
 
   const archiveSelectedActivity = async (archived: boolean) => {
-    if (selectedActivity.size === 0) return;
+    if (selectedActivity.size === 0 || !user) return;
     if (!confirm(`${archived ? "Archive" : "Unarchive"} ${selectedActivity.size} selected ${selectedActivity.size === 1 ? "entry" : "entries"}?`)) return;
-    const byKind: Record<string, string[]> = {};
-    selectedActivity.forEach((key) => {
-      const [kind, id] = key.split(":");
-      (byKind[kind] ??= []).push(id);
-    });
-    const results = await Promise.all(
-      Object.entries(byKind).map(([kind, ids]) => supabase.from(ACTIVITY_TABLE[kind]).update({ archived }).in("id", ids))
-    );
-    const failed = results.find((res) => res.error);
-    if (failed?.error) { toast.error(failed.error.message); return; }
+    const keys = Array.from(selectedActivity);
+    const { error } = archived
+      ? await supabase.from("activity_dismissals").upsert(
+          keys.map((key) => { const [kind, id] = key.split(":"); return { user_id: user.id, kind, item_id: id }; })
+        )
+      : await (async () => {
+          const results = await Promise.all(keys.map((key) => {
+            const [kind, id] = key.split(":");
+            return supabase.from("activity_dismissals").delete().eq("user_id", user.id).eq("kind", kind).eq("item_id", id);
+          }));
+          return { error: results.find((res) => res.error)?.error };
+        })();
+    if (error) { toast.error(error.message); return; }
     toast.success(`Entries ${archived ? "archived" : "unarchived"}`);
-    setActivity((prev) => prev.map((row) => (selectedActivity.has(activityKey(row)) ? { ...row, archived } : row)));
+    setDismissedActivityKeys((prev) => {
+      const next = new Set(prev);
+      keys.forEach((key) => { if (archived) next.add(key); else next.delete(key); });
+      return next;
+    });
     setSelectedActivity(new Set());
-    fetchActivity();
   };
 
   const toggleArchivedActivityView = () => {
@@ -234,7 +251,7 @@ const NoticeBoard = () => {
     .sort((a, b) => a.name.localeCompare(b.name));
 
   const filteredActivity = activity.filter((r) => {
-    if (!!r.archived !== showArchivedActivity) return false;
+    if (dismissedActivityKeys.has(activityKey(r)) !== showArchivedActivity) return false;
     if (filterDate && activityDate(r) !== filterDate) return false;
     if (filterUser !== "all" && r.user_id !== filterUser) return false;
     if (filterType !== "all" && r._kind !== filterType) return false;
@@ -290,12 +307,15 @@ const NoticeBoard = () => {
     fetchNotices();
   };
 
+  /** Archiving a notice only hides it from the signed-in user — it never
+   * touches the shared notices row, so it stays visible/active for
+   * everyone else (and still counts in the dashboard's active-notices feed). */
   const archive = async (id: string) => {
-    if (!confirm("Archive notice?")) return;
-    const { error } = await supabase.rpc("soft_delete_notices", { _ids: [id] });
+    if (!user || !confirm("Archive notice?")) return;
+    const { error } = await supabase.from("notice_dismissals").upsert({ user_id: user.id, notice_id: id });
     if (error) { toast.error(error.message); return; }
     toast.success("Notice archived");
-    fetchNotices();
+    setDismissedNoticeIds((prev) => new Set(prev).add(id));
   };
 
   const toggleSelected = (id: string, checked: boolean) => {
@@ -307,13 +327,14 @@ const NoticeBoard = () => {
   };
 
   const archiveSelected = async () => {
-    if (selectedNotices.size === 0) return;
+    if (selectedNotices.size === 0 || !user) return;
     if (!confirm(`Archive ${selectedNotices.size} selected notice${selectedNotices.size === 1 ? "" : "s"}?`)) return;
-    const { error } = await supabase.rpc("soft_delete_notices", { _ids: Array.from(selectedNotices) });
+    const ids = Array.from(selectedNotices);
+    const { error } = await supabase.from("notice_dismissals").upsert(ids.map((id) => ({ user_id: user.id, notice_id: id })));
     if (error) { toast.error(error.message); return; }
     toast.success("Notices archived");
+    setDismissedNoticeIds((prev) => { const next = new Set(prev); ids.forEach((id) => next.add(id)); return next; });
     setSelectedNotices(new Set());
-    fetchNotices();
   };
 
   const toggleSelectedArchived = (id: string, checked: boolean) => {
@@ -325,21 +346,21 @@ const NoticeBoard = () => {
   };
 
   const unarchive = async (id: string) => {
-    const { error } = await supabase.rpc("restore_notices", { _ids: [id] });
+    if (!user) return;
+    const { error } = await supabase.from("notice_dismissals").delete().eq("user_id", user.id).eq("notice_id", id);
     if (error) { toast.error(error.message); return; }
     toast.success("Notice restored");
-    fetchArchived();
-    fetchNotices();
+    setDismissedNoticeIds((prev) => { const next = new Set(prev); next.delete(id); return next; });
   };
 
   const unarchiveSelected = async () => {
-    if (selectedArchived.size === 0) return;
-    const { error } = await supabase.rpc("restore_notices", { _ids: Array.from(selectedArchived) });
+    if (selectedArchived.size === 0 || !user) return;
+    const ids = Array.from(selectedArchived);
+    const { error } = await supabase.from("notice_dismissals").delete().eq("user_id", user.id).in("notice_id", ids);
     if (error) { toast.error(error.message); return; }
     toast.success("Notices restored");
+    setDismissedNoticeIds((prev) => { const next = new Set(prev); ids.forEach((id) => next.delete(id)); return next; });
     setSelectedArchived(new Set());
-    fetchArchived();
-    fetchNotices();
   };
 
   const togglePin = async (n: any) => {
@@ -348,10 +369,17 @@ const NoticeBoard = () => {
   };
 
   const toggleArchivedView = () => {
-    const next = !showArchived;
-    setShowArchived(next);
+    setShowArchived((v) => !v);
     setPage(1);
-    if (next) fetchArchived();
+  };
+
+  const noticeList = showArchived ? archivedNotices : notices;
+  const noticePageCount = Math.max(1, Math.ceil(noticeList.length / PAGE_SIZE));
+  const currentNoticePage = Math.min(page, noticePageCount);
+  const noticePageItems = noticeList.slice((currentNoticePage - 1) * PAGE_SIZE, currentNoticePage * PAGE_SIZE);
+  const selectAllNotices = () => {
+    if (showArchived) setSelectedArchived(new Set(noticePageItems.map((n) => n.id)));
+    else setSelectedNotices(new Set(noticePageItems.map((n) => n.id)));
   };
 
   return (
@@ -398,20 +426,7 @@ const NoticeBoard = () => {
       {!showArchived && (
       <Card>
         <CardHeader>
-          <div className="flex items-start justify-between gap-3">
-            <CardTitle className="text-base flex items-center gap-2"><CalendarClock className="h-4 w-4" /> Requests Activity</CardTitle>
-            {filteredActivity.length > PAGE_SIZE && (
-              <div className="flex items-center gap-2 shrink-0">
-                <Button variant="outline" size="sm" disabled={currentActivityPage <= 1} onClick={() => setActivityPage(currentActivityPage - 1)}>
-                  <ChevronLeft className="h-4 w-4 mr-1" /> Previous
-                </Button>
-                <span className="text-sm text-muted-foreground whitespace-nowrap">Page {currentActivityPage} of {activityPageCount}</span>
-                <Button variant="outline" size="sm" disabled={currentActivityPage >= activityPageCount} onClick={() => setActivityPage(currentActivityPage + 1)}>
-                  Next <ChevronRight className="h-4 w-4 ml-1" />
-                </Button>
-              </div>
-            )}
-          </div>
+          <CardTitle className="text-base flex items-center gap-2"><CalendarClock className="h-4 w-4" /> Requests Activity</CardTitle>
           <CardDescription>Requests and decisions you're involved in or can approve.</CardDescription>
         </CardHeader>
         <CardContent className="space-y-3">
@@ -451,7 +466,10 @@ const NoticeBoard = () => {
                     <Archive className="h-4 w-4 mr-1" /> Archive Selected{selectedActivity.size > 0 ? ` (${selectedActivity.size})` : ""}
                   </Button>
                   {selectedActivity.size > 0 && (
-                    <Button variant="ghost" size="sm" onClick={() => setSelectedActivity(new Set())}>Clear selection</Button>
+                    <>
+                      <Button variant="ghost" size="sm" onClick={() => setSelectedActivity(new Set(pagedActivity.filter(canActOnActivity).map(activityKey)))}>Select all</Button>
+                      <Button variant="ghost" size="sm" onClick={() => setSelectedActivity(new Set())}>Clear selection</Button>
+                    </>
                   )}
                 </>
               ) : (
@@ -460,7 +478,10 @@ const NoticeBoard = () => {
                     <ArchiveRestore className="h-4 w-4 mr-1" /> Unarchive Selected{selectedActivity.size > 0 ? ` (${selectedActivity.size})` : ""}
                   </Button>
                   {selectedActivity.size > 0 && (
-                    <Button variant="ghost" size="sm" onClick={() => setSelectedActivity(new Set())}>Clear selection</Button>
+                    <>
+                      <Button variant="ghost" size="sm" onClick={() => setSelectedActivity(new Set(pagedActivity.filter(canActOnActivity).map(activityKey)))}>Select all</Button>
+                      <Button variant="ghost" size="sm" onClick={() => setSelectedActivity(new Set())}>Clear selection</Button>
+                    </>
                   )}
                 </>
               )}
@@ -510,6 +531,18 @@ const NoticeBoard = () => {
               ))}
             </>
           )}
+
+          {filteredActivity.length > PAGE_SIZE && (
+            <div className="flex items-center justify-center gap-3 pt-2">
+              <Button variant="outline" size="sm" disabled={currentActivityPage <= 1} onClick={() => setActivityPage(currentActivityPage - 1)}>
+                <ChevronLeft className="h-4 w-4 mr-1" /> Previous
+              </Button>
+              <span className="text-sm text-muted-foreground whitespace-nowrap">Page {currentActivityPage} of {activityPageCount}</span>
+              <Button variant="outline" size="sm" disabled={currentActivityPage >= activityPageCount} onClick={() => setActivityPage(currentActivityPage + 1)}>
+                Next <ChevronRight className="h-4 w-4 ml-1" />
+              </Button>
+            </div>
+          )}
         </CardContent>
       </Card>
       )}
@@ -532,7 +565,10 @@ const NoticeBoard = () => {
                 <Archive className="h-4 w-4 mr-1" /> Archive Selected{selectedNotices.size > 0 ? ` (${selectedNotices.size})` : ""}
               </Button>
               {selectedNotices.size > 0 && (
-                <Button variant="ghost" size="sm" onClick={() => setSelectedNotices(new Set())}>Clear selection</Button>
+                <>
+                  <Button variant="ghost" size="sm" onClick={selectAllNotices}>Select all</Button>
+                  <Button variant="ghost" size="sm" onClick={() => setSelectedNotices(new Set())}>Clear selection</Button>
+                </>
               )}
             </>
           ) : (
@@ -546,7 +582,10 @@ const NoticeBoard = () => {
                 <ArchiveRestore className="h-4 w-4 mr-1" /> Unarchive Selected{selectedArchived.size > 0 ? ` (${selectedArchived.size})` : ""}
               </Button>
               {selectedArchived.size > 0 && (
-                <Button variant="ghost" size="sm" onClick={() => setSelectedArchived(new Set())}>Clear selection</Button>
+                <>
+                  <Button variant="ghost" size="sm" onClick={selectAllNotices}>Select all</Button>
+                  <Button variant="ghost" size="sm" onClick={() => setSelectedArchived(new Set())}>Clear selection</Button>
+                </>
               )}
             </>
           )}
