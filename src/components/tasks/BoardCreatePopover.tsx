@@ -9,15 +9,13 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import { toast } from "sonner";
 import { ChevronLeft, LayoutGrid, X } from "lucide-react";
 
-type Visibility = "private" | "workspace" | "public";
+type Visibility = "private" | "workspace";
 
 // Trello-style visibility: who can see the board, and (for "workspace") who
-// can edit it too — "public" stays view-only for non-members, same as
-// Trello's "anyone on the internet can see, only board members can edit".
+// can edit it too.
 const VISIBILITY_OPTIONS: Record<Visibility, { label: string; description: string }> = {
   private: { label: "Private", description: "Only board members can see and edit this board." },
   workspace: { label: "Workspace", description: "Everyone in the company can see and edit this board." },
-  public: { label: "Public", description: "Everyone in the company can see this board. Only board members can edit." },
 };
 
 // projects.key must be a unique, short identifier (it prefixes every ticket,
