@@ -29,32 +29,17 @@ const Reports = () => {
   const [monthTo, setMonthTo] = useState(""); // YYYY-MM
   const [departments, setDepartments] = useState<string[]>([]);
   const [expanded, setExpanded] = useState<Record<string, boolean>>({});
-  const [allEmployees, setAllEmployees] = useState<{ id: string; full_name: string | null; email: string | null; department: string | null }[]>([]);
-  // Every user_id with at least one attendance_logs row in the current date
-  // range — fetched unbounded (id only), separate from the capped 500-row
-  // `logs` used for display, so an employee whose rows fall outside that cap
-  // isn't wrongly reported as having no attendance at all.
-  const [presentUserIds, setPresentUserIds] = useState<Set<string>>(new Set());
 
   const days = useMemo(() => mergeDailySessions(logs as AttendanceSession[]), [logs]);
 
-  // Every employee visible to this viewer (same RLS as attendance_logs itself:
-  // admins see everyone, managers see their reports) — so an employee with no
-  // punches at all in the selected range still shows up, the same way the
-  // Performance Summary tab lists every employee even with all-zero stats.
-  const missingEmployees = useMemo(() => {
-    let list = allEmployees.filter((e) => !presentUserIds.has(e.id));
-    if (name.trim()) {
-      const q = name.toLowerCase();
-      list = list.filter((e) => (e.full_name || "").toLowerCase().includes(q) || (e.email || "").toLowerCase().includes(q));
-    }
-    if (department && department !== "all") {
-      list = list.filter((e) => e.department === department);
-    }
-    return list;
-  }, [allEmployees, presentUserIds, name, department]);
 
-  const effectiveDateRange = () => {
+  const fetchLogs = async () => {
+    let query = supabase
+      .from("attendance_logs")
+      .select("*, profiles!attendance_logs_user_id_fkey(full_name, email, department)")
+      .order("date", { ascending: false })
+      .limit(500);
+
     let effectiveFrom = dateFrom;
     let effectiveTo = dateTo;
     if (monthFrom || monthTo) {
@@ -67,17 +52,6 @@ const Reports = () => {
       effectiveFrom = format(start, "yyyy-MM-dd");
       effectiveTo = format(end, "yyyy-MM-dd");
     }
-    return { effectiveFrom, effectiveTo };
-  };
-
-  const fetchLogs = async () => {
-    const { effectiveFrom, effectiveTo } = effectiveDateRange();
-
-    let query = supabase
-      .from("attendance_logs")
-      .select("*, profiles!attendance_logs_user_id_fkey(full_name, email, department)")
-      .order("date", { ascending: false })
-      .limit(500);
     if (effectiveFrom) query = query.gte("date", effectiveFrom);
     if (effectiveTo) query = query.lte("date", effectiveTo);
 
@@ -96,26 +70,11 @@ const Reports = () => {
     setLogs(rows);
   };
 
-  // Unbounded (id-only) presence check, decoupled from fetchLogs' 500-row
-  // display cap, so "no attendance recorded" is only ever shown for an
-  // employee who truly has zero rows in range, not one whose rows just
-  // didn't make the cap.
-  const fetchPresentUserIds = async () => {
-    const { effectiveFrom, effectiveTo } = effectiveDateRange();
-    let query = supabase.from("attendance_logs").select("user_id");
-    if (effectiveFrom) query = query.gte("date", effectiveFrom);
-    if (effectiveTo) query = query.lte("date", effectiveTo);
-    const { data } = await query;
-    setPresentUserIds(new Set((data || []).map((r) => r.user_id)));
-  };
-
   useEffect(() => {
     fetchLogs();
-    fetchPresentUserIds();
     (async () => {
-      const { data } = await supabase.from("profiles").select("id, full_name, email, department");
-      setAllEmployees((data || []) as typeof allEmployees);
-      const unique = Array.from(new Set((data || []).map((d) => d.department).filter(Boolean))) as string[];
+      const { data } = await supabase.from("profiles").select("department").not("department", "is", null);
+      const unique = Array.from(new Set((data || []).map((d: any) => d.department).filter(Boolean))) as string[];
       setDepartments(unique.sort());
     })();
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -187,7 +146,7 @@ const Reports = () => {
             <Input type="date" value={dateTo} disabled={!!monthFrom || !!monthTo} onChange={(e) => setDateTo(e.target.value)} />
           </div>
           <div className="flex gap-2">
-            <Button onClick={() => { fetchLogs(); fetchPresentUserIds(); }} className="flex-1">Filter</Button>
+            <Button onClick={fetchLogs} className="flex-1">Filter</Button>
             <Button variant="outline" onClick={clearFilters}>Clear</Button>
           </div>
         </div>
@@ -208,7 +167,7 @@ const Reports = () => {
             </TableRow>
           </TableHeader>
           <TableBody>
-            {days.length === 0 && missingEmployees.length === 0 ? (
+            {days.length === 0 ? (
               <TableRow><TableCell colSpan={10} className="text-center text-muted-foreground">No records</TableCell></TableRow>
             ) : days.map((day) => {
               const isOpen = !!expanded[day.key];
@@ -288,14 +247,6 @@ const Reports = () => {
                 </Fragment>
               );
             })}
-            {missingEmployees.map((e) => (
-              <TableRow key={e.id} className="text-muted-foreground">
-                <TableCell />
-                <TableCell>{e.full_name || e.email || "—"}</TableCell>
-                <TableCell>{e.department || "—"}</TableCell>
-                <TableCell colSpan={7} className="text-xs">No attendance recorded for this period</TableCell>
-              </TableRow>
-            ))}
           </TableBody>
         </Table>
 
