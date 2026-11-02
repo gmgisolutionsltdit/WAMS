@@ -236,6 +236,12 @@ const ReportsSummary = () => {
       }
 
       const changed: ChangedDay[] = [];
+      // Every `${user_id}|${date}` that actually has Overtime (actual, from
+      // attendance) — Approved Overtime only counts a day that's in this
+      // set, so an approved OT request or manual correction on a day with
+      // zero actual overtime (e.g. a pre-approved credit with no matching
+      // clock-in/out) doesn't inflate Approved Overtime / Net Hours.
+      const otActualDateKeys = new Set<string>();
       const days = mergeDailySessions((attRows || []) as AttendanceSession[]);
       days.forEach((day) => {
         const userId = day.userId as string;
@@ -260,6 +266,7 @@ const ReportsSummary = () => {
         // time worked counts in full there, no requirement to beat.
         if (dayKind.nonWorking && !onLeave && worked > 0) {
           targets.forEach((t) => { t.otActualDays += 1; t.otActualHoursTotal += worked; });
+          otActualDateKeys.add(`${userId}|${day.date}`);
         }
 
         // Late: compare against the stored, authoritative arrival once
@@ -304,6 +311,7 @@ const ReportsSummary = () => {
         // Attendance.tsx's OVERTIME (OT) column.
         if (!nonWorking && closed && worked > requiredWithPenalty) {
           targets.forEach((t) => { t.otActualDays += 1; t.otActualHoursTotal += worked - requiredWithPenalty; });
+          otActualDateKeys.add(`${userId}|${day.date}`);
         }
         if (Math.abs(oldDue - newDue) > 0.01) {
           changed.push({ userId, name: s.name, date: day.date, oldDueHours: round1(oldDue), newDueHours: round1(newDue) });
@@ -314,7 +322,10 @@ const ReportsSummary = () => {
       // an OT request's hours plus the latest approved manual-time
       // correction's overtime_hours for that date (manual entries are
       // approved through Pending Approvals directly, with no separate OT
-      // request row of their own).
+      // request row of their own). Below, this is then restricted to dates
+      // that also have actual Overtime (otActualDateKeys) — an approved
+      // request/correction on a day with zero actual overtime no longer
+      // counts toward Approved Overtime or Net Hours.
       const otPerDay = new Map<string, number>(); // key: `${user_id}|${date}`
       (otRows || []).forEach((r) => {
         const key = `${r.user_id}|${r.date}`;
@@ -340,6 +351,7 @@ const ReportsSummary = () => {
       const otDaySetsMonthly = new Map<string, Set<string>>();
       otPerDay.forEach((hours, key) => {
         if (hours <= 0) return; // a 0h approved entry (e.g. an unfilled override) isn't an OT day
+        if (!otActualDateKeys.has(key)) return; // approved with no matching actual overtime that day
         const [userId, date] = key.split("|");
         const s = byUser.get(userId);
         if (s) {
