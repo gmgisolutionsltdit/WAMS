@@ -1,14 +1,13 @@
-/** Trello-style preset label colors — stored as the color key itself in
- * tasks.labels (text[]), e.g. ["green", "red"]. No custom per-label names
- * yet, matching the "Edit labels" card-menu entry's current scope. */
-export const LABEL_COLORS: { key: string; name: string; className: string }[] = [
-  { key: "green", name: "Green", className: "bg-emerald-500" },
-  { key: "yellow", name: "Yellow", className: "bg-yellow-400" },
-  { key: "orange", name: "Orange", className: "bg-orange-500" },
-  { key: "red", name: "Red", className: "bg-red-500" },
-  { key: "purple", name: "Purple", className: "bg-purple-500" },
-  { key: "blue", name: "Blue", className: "bg-blue-500" },
+/** Trello's label color palette (6 columns of light/base/dark-ish variants). */
+export const LABEL_PALETTE: string[] = [
+  "#baf3db", "#f8e6a0", "#fedec8", "#ffd5d2", "#dfd8fd",
+  "#4bce97", "#f5cd47", "#fea362", "#f87168", "#9f8fef",
+  "#1f845a", "#946f00", "#c25100", "#c9372c", "#6e5dc6",
+  "#cce0ff", "#c6edfb", "#baf3db", "#fdd0ec", "#dcdfe4",
+  "#579dff", "#6cc3e0", "#4bce97", "#e774bb", "#8590a2",
+  "#0c66e4", "#227d9b", "#1f845a", "#ae4787", "#626f86",
 ];
 
-export const labelClassName = (key: string): string =>
-  LABEL_COLORS.find((c) => c.key === key)?.className || "bg-slate-400";
+export const DEFAULT_LABEL_COLOR = LABEL_PALETTE[5];
+
+export type TaskLabel = { id: string; board_id: string; name: string; color: string; position: number };

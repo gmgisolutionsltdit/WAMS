@@ -8,11 +8,11 @@ import {
 } from "lucide-react";
 import {
   DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger,
-  DropdownMenuSub, DropdownMenuSubTrigger, DropdownMenuSubContent, DropdownMenuSeparator,
+  DropdownMenuSeparator,
 } from "@/components/ui/dropdown-menu";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import { Button } from "@/components/ui/button";
-import { LABEL_COLORS, labelClassName } from "@/lib/taskLabels";
+import { TaskLabelsPanel } from "@/components/tasks/TaskLabelsPopover";
+import type { TaskLabel } from "@/lib/taskLabels";
 import { cn } from "@/lib/utils";
 
 export type KanbanTask = {
@@ -63,9 +63,10 @@ interface Props {
   /** Card-menu actions (Trello's hover ⋯ menu) — omitted entirely when the
    * viewer can't edit the board, same gating as archive/complete. */
   onCopy?: () => void;
-  otherColumns?: { id: string; name: string }[];
-  onMove?: (columnId: string) => void;
-  onUpdateLabels?: (labels: string[]) => void;
+  onMove?: () => void;
+  boardId?: string;
+  boardLabels?: TaskLabel[];
+  onToggleLabel?: (labelId: string) => void;
   canManageCard?: boolean;
 }
 
@@ -82,9 +83,10 @@ export function KanbanCard({
   checklistTotal = 0,
   checklistDone = 0,
   onCopy,
-  otherColumns = [],
   onMove,
-  onUpdateLabels,
+  boardId,
+  boardLabels = [],
+  onToggleLabel,
   canManageCard = true,
 }: Props) {
   const [labelsOpen, setLabelsOpen] = useState(false);
@@ -125,9 +127,11 @@ export function KanbanCard({
     >
       {task.labels && task.labels.length > 0 && (
         <div className="flex gap-1 mb-1.5">
-          {task.labels.map((key) => (
-            <span key={key} className={cn("h-1.5 w-6 rounded-full", labelClassName(key))} />
-          ))}
+          {task.labels.map((id) => {
+            const l = boardLabels.find((bl) => bl.id === id);
+            if (!l) return null;
+            return <span key={id} className="h-1.5 w-6 rounded-full" style={{ backgroundColor: l.color }} title={l.name} />;
+          })}
         </div>
       )}
 
@@ -144,7 +148,7 @@ export function KanbanCard({
         >
           {priority.label}
         </span>
-        {!isOverlay && canManageCard && (onCopy || onMove || onUpdateLabels || onArchive) && (
+        {!isOverlay && canManageCard && (onCopy || onMove || onToggleLabel || onArchive) && (
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
               <button
@@ -164,21 +168,14 @@ export function KanbanCard({
                 </DropdownMenuItem>
               )}
               {onMove && (
-                <DropdownMenuSub>
-                  <DropdownMenuSubTrigger disabled={otherColumns.length === 0}>
-                    <ArrowRightLeft className="h-3.5 w-3.5 mr-2" /> Move
-                  </DropdownMenuSubTrigger>
-                  <DropdownMenuSubContent>
-                    {otherColumns.map((c) => (
-                      <DropdownMenuItem key={c.id} onClick={() => onMove(c.id)}>{c.name}</DropdownMenuItem>
-                    ))}
-                  </DropdownMenuSubContent>
-                </DropdownMenuSub>
+                <DropdownMenuItem onClick={onMove}>
+                  <ArrowRightLeft className="h-3.5 w-3.5 mr-2" /> Move
+                </DropdownMenuItem>
               )}
               <DropdownMenuItem disabled>
                 <Sparkles className="h-3.5 w-3.5 mr-2" /> Mirror <span className="ml-auto text-[10px] text-muted-foreground">Coming soon</span>
               </DropdownMenuItem>
-              {onUpdateLabels && (
+              {onToggleLabel && boardId && (
                 <DropdownMenuItem onClick={() => setLabelsOpen(true)}>
                   <Tag className="h-3.5 w-3.5 mr-2" /> Edit labels
                 </DropdownMenuItem>
@@ -285,36 +282,11 @@ export function KanbanCard({
         )}
       </div>
 
-      {onUpdateLabels && (
+      {onToggleLabel && boardId && (
         <Dialog open={labelsOpen} onOpenChange={setLabelsOpen}>
           <DialogContent className="max-w-xs" onClick={(e) => e.stopPropagation()} onPointerDown={(e) => e.stopPropagation()}>
-            <DialogHeader><DialogTitle className="text-sm">Labels</DialogTitle></DialogHeader>
-            <div className="space-y-1.5">
-              {LABEL_COLORS.map((c) => {
-                const active = (task.labels || []).includes(c.key);
-                return (
-                  <button
-                    key={c.key}
-                    type="button"
-                    onClick={() => {
-                      const next = active
-                        ? (task.labels || []).filter((l) => l !== c.key)
-                        : [...(task.labels || []), c.key];
-                      onUpdateLabels(next);
-                    }}
-                    className={cn(
-                      "w-full flex items-center gap-2 h-9 rounded-md px-3 text-sm text-white transition-opacity",
-                      c.className,
-                      !active && "opacity-60 hover:opacity-80",
-                    )}
-                  >
-                    <span className="flex-1 text-left">{c.name}</span>
-                    {active && <CheckCircle2 className="h-4 w-4" />}
-                  </button>
-                );
-              })}
-            </div>
-            <Button variant="outline" size="sm" onClick={() => setLabelsOpen(false)}>Done</Button>
+            <DialogHeader><DialogTitle className="sr-only">Labels</DialogTitle></DialogHeader>
+            <TaskLabelsPanel boardId={boardId} selectedIds={task.labels || []} onToggle={onToggleLabel} />
           </DialogContent>
         </Dialog>
       )}

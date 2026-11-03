@@ -14,12 +14,15 @@ import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription,
 } from "@/components/ui/dialog";
 import { toast } from "sonner";
-import { ArrowLeft, Plus, MessageSquare, Loader2, AlertCircle, CheckSquare, X, UserPlus } from "lucide-react";
+import { ArrowLeft, Plus, MessageSquare, Loader2, AlertCircle, CheckSquare, X, UserPlus, Tag } from "lucide-react";
 import { useRealtimeSubscription } from "@/hooks/useRealtimeSubscription";
 import { EmployeePicker } from "@/components/EmployeePicker";
 import { ProjectMemberSelector } from "@/components/ProjectMemberSelector";
 import { BoardMenu } from "@/components/tasks/BoardMenu";
 import { TaskDatesPopover } from "@/components/tasks/TaskDatesPopover";
+import { TaskLabelsPopover } from "@/components/tasks/TaskLabelsPopover";
+import { MoveCardDialog } from "@/components/tasks/MoveCardDialog";
+import type { TaskLabel } from "@/lib/taskLabels";
 import { useBoardAssignableProfiles } from "@/hooks/useBoardAssignableProfiles";
 import {
   DndContext,
@@ -199,6 +202,24 @@ const TaskBoard = () => {
   useRealtimeSubscription("tasks", fetchAll, `tasks-${projectId}`);
   useRealtimeSubscription("task_columns", fetchAll, `cols-${projectId}`);
   useRealtimeSubscription("task_checklist_items", fetchAll, `checklist-${projectId}`);
+
+  const [boardLabels, setBoardLabels] = useState<TaskLabel[]>([]);
+  const fetchBoardLabels = useCallback(async () => {
+    if (!boardId) { setBoardLabels([]); return; }
+    const { data } = await supabase.from("task_labels").select("*").eq("board_id", boardId).order("position");
+    setBoardLabels((data || []) as TaskLabel[]);
+  }, [boardId]);
+  useEffect(() => { fetchBoardLabels(); }, [fetchBoardLabels]);
+  useRealtimeSubscription("task_labels", fetchBoardLabels, `labels-${projectId}`);
+
+  const toggleTaskLabel = async (task: KanbanTask, labelId: string) => {
+    const current = task.labels || [];
+    const next = current.includes(labelId) ? current.filter((l) => l !== labelId) : [...current, labelId];
+    setTasks((prev) => prev.map((t) => (t.id === task.id ? { ...t, labels: next } : t)));
+    if (activeTask?.id === task.id) setActiveTask((at) => (at ? { ...at, labels: next } : at));
+    const { error } = await supabase.from("tasks").update({ labels: next }).eq("id", task.id);
+    if (error) { toast.error(error.message); fetchAll(); }
+  };
 
   const memberProfiles = useMemo(() => {
     const ids = new Set(members.map((m) => m.user_id));
@@ -520,20 +541,9 @@ const TaskBoard = () => {
     fetchAll();
   };
 
-  const moveTask = async (task: KanbanTask, columnId: string) => {
-    const col = columns.find((c) => c.id === columnId);
-    if (!col) return;
-    setTasks((prev) => prev.map((t) => (t.id === task.id ? { ...t, column_id: columnId, status: col.status } : t)));
-    const { error } = await supabase.from("tasks").update({ column_id: columnId, status: col.status as Database["public"]["Enums"]["task_status"] }).eq("id", task.id);
-    if (error) { toast.error(error.message); fetchAll(); return; }
-    toast.success(`Moved to ${col.name}`);
-  };
-
-  const updateTaskLabels = async (task: KanbanTask, labels: string[]) => {
-    setTasks((prev) => prev.map((t) => (t.id === task.id ? { ...t, labels } : t)));
-    const { error } = await supabase.from("tasks").update({ labels }).eq("id", task.id);
-    if (error) { toast.error(error.message); fetchAll(); }
-  };
+  // Opens the Trello-style "Move card" dialog (Board → List → Position);
+  // the dialog itself performs the update once the user confirms.
+  const [moveDialogTask, setMoveDialogTask] = useState<KanbanTask | null>(null);
 
   /* ---------- Column CRUD ---------- */
   const addColumn = async () => {
@@ -724,7 +734,6 @@ const TaskBoard = () => {
                 <KanbanColumn
                   key={col.id}
                   column={col}
-                  allColumns={columns}
                   tasks={tasksByColumn[col.id] || []}
                   profiles={profiles}
                   onQuickCreateTask={quickCreateTask}
@@ -734,8 +743,10 @@ const TaskBoard = () => {
                   onToggleComplete={toggleComplete}
                   onArchiveTask={archiveTask}
                   onCopyTask={copyTask}
-                  onMoveTask={moveTask}
-                  onUpdateTaskLabels={updateTaskLabels}
+                  onMoveTask={setMoveDialogTask}
+                  boardId={boardId || undefined}
+                  boardLabels={boardLabels}
+                  onToggleTaskLabel={toggleTaskLabel}
                   canDelete={isOwnerOrAdmin}
                   canDrag={canEditBoard}
                   canEditBoard={canEditBoard}
@@ -853,7 +864,36 @@ const TaskBoard = () => {
                   overrideEmployees={allAssignableProfiles}
                   className="w-auto h-auto py-1.5"
                 />
+                {boardId && (
+                  <TaskLabelsPopover
+                    boardId={boardId}
+                    selectedIds={activeTask.labels || []}
+                    onToggle={(labelId) => toggleTaskLabel(activeTask, labelId)}
+                    trigger={
+                      <Button variant="outline" size="sm" className="h-auto py-1.5">
+                        <Tag className="h-4 w-4 mr-1.5" /> Labels
+                      </Button>
+                    }
+                  />
+                )}
               </div>
+              {(activeTask.labels?.length || 0) > 0 && (
+                <div className="flex flex-wrap gap-1.5">
+                  {activeTask.labels!.map((id) => {
+                    const l = boardLabels.find((bl) => bl.id === id);
+                    if (!l) return null;
+                    return (
+                      <span
+                        key={id}
+                        className="h-6 min-w-[2.5rem] px-2 rounded-md flex items-center justify-center text-xs font-medium text-white"
+                        style={{ backgroundColor: l.color }}
+                      >
+                        {l.name}
+                      </span>
+                    );
+                  })}
+                </div>
+              )}
               <div className="grid grid-cols-3 gap-4">
                 <div className="col-span-2 space-y-3">
                   <div>
@@ -967,6 +1007,16 @@ const TaskBoard = () => {
           )}
         </DialogContent>
       </Dialog>
+
+      {projectId && boardId && (
+        <MoveCardDialog
+          task={moveDialogTask}
+          currentProjectId={projectId}
+          currentTaskBoardId={boardId}
+          onClose={() => setMoveDialogTask(null)}
+          onMoved={fetchAll}
+        />
+      )}
     </div>
   );
 };

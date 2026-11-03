@@ -2309,6 +2309,41 @@ export type Database = {
           },
         ]
       }
+      task_labels: {
+        Row: {
+          board_id: string
+          color: string
+          created_at: string
+          id: string
+          name: string
+          position: number
+        }
+        Insert: {
+          board_id: string
+          color: string
+          created_at?: string
+          id?: string
+          name?: string
+          position?: number
+        }
+        Update: {
+          board_id?: string
+          color?: string
+          created_at?: string
+          id?: string
+          name?: string
+          position?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "task_labels_board_id_fkey"
+            columns: ["board_id"]
+            isOneToOne: false
+            referencedRelation: "task_boards"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       task_comments: {
         Row: {
           body: string
