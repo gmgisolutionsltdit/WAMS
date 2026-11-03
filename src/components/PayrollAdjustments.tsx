@@ -10,7 +10,7 @@ import { classifyDay, netRequiredHours, weekendDaysFor, type WorkSchedule } from
 import { evaluateArrival, type OfficeTime } from "@/lib/officeTime";
 import { mergeDailySessions, type AttendanceSession } from "@/lib/attendance";
 import { salaryBreakdown, perMinuteRate, computeFinalSalary, fmtBDT } from "@/lib/payrollAdjustments";
-import { dedupeLatestManualOT } from "@/lib/payroll";
+import { fetchApprovedOTHoursByUserMonth } from "@/lib/approvedOvertime";
 
 type Schedule = WorkSchedule & OfficeTime & { company_wing?: string | null; base_salary?: number | null };
 
@@ -51,7 +51,7 @@ export const PayrollAdjustments = ({ isAdmin }: { isAdmin: boolean }) => {
     setLoading(true);
     try {
       const [{ data: prof }, { data: attRows }, { data: holidayRows }, { data: leaveRows },
-        { data: dueAdjRows }, { data: recoveryRows }, { data: otRows }, { data: manualOtRows }] = await Promise.all([
+        { data: dueAdjRows }, { data: recoveryRows }, otHoursByUserMonth] = await Promise.all([
         supabase.from("profiles").select("id, base_salary, office_start_time, late_grace_minutes, standard_daily_hours, unpaid_break_minutes, working_days, company_wing").eq("id", targetUserId).maybeSingle(),
         supabase.from("attendance_logs").select("id, user_id, date, clock_in, clock_out, break_minutes, late_minutes, penalty_minutes, penalty_reviewed")
           .eq("user_id", targetUserId).gte("date", monthStartISO).lte("date", monthEndISO),
@@ -61,14 +61,9 @@ export const PayrollAdjustments = ({ isAdmin }: { isAdmin: boolean }) => {
           .eq("user_id", targetUserId).eq("month", monthStartISO).order("created_at", { ascending: false }),
         supabase.from("expense_recovery_actions").select("id, action_type, amount")
           .eq("user_id", targetUserId).eq("month", monthStartISO).order("created_at", { ascending: false }),
-        // OT Payment is based on approved overtime requests plus approved
-        // manual time entries (same two sources "Approved Overtime" on
-        // Reports > Performance History adds together) - not actual worked
-        // overtime from attendance.
-        supabase.from("overtime_requests").select("date, requested_hours")
-          .eq("user_id", targetUserId).in("status", ["approved", "modified"]).gte("date", monthStartISO).lte("date", monthEndISO),
-        supabase.from("manual_time_requests").select("date, overtime_hours, created_at")
-          .eq("user_id", targetUserId).eq("status", "approved").gte("date", monthStartISO).lte("date", monthEndISO),
+        // OT Payment uses the exact same computation as Reports > Performance
+        // Summary's "Approved Overtime" so the two can never silently diverge.
+        fetchApprovedOTHoursByUserMonth([targetUserId], monthStartISO, monthEndISO),
       ]);
 
       const sched = (prof as Schedule) || null;
@@ -93,12 +88,6 @@ export const PayrollAdjustments = ({ isAdmin }: { isAdmin: boolean }) => {
         const weekend = weekendDaysFor(sched);
         const days = mergeDailySessions((attRows || []) as AttendanceSession[]);
         let dueMinutesWithPenalty = 0;
-        // Same gate Reports > Performance Summary applies: an approved
-        // request/correction only counts toward OT Payment if that date also
-        // has matching actual overtime — otherwise a stray or superseded
-        // approval (e.g. for a date with no real attendance session) would
-        // inflate what gets paid.
-        const otActualDates = new Set<string>();
         days.forEach((day) => {
           const dayKind = classifyDay(day.date, holidayMap, weekend);
           const onLeave = leaveSet.has(day.date);
@@ -119,20 +108,12 @@ export const PayrollAdjustments = ({ isAdmin }: { isAdmin: boolean }) => {
           if (!nonWorking && closed && worked < requiredWithPenalty) {
             dueMinutesWithPenalty += Math.round((requiredWithPenalty - worked) * 60);
           }
-
-          if (nonWorking && !onLeave && worked > 0) otActualDates.add(day.date);
-          else if (!nonWorking && closed && worked > requiredWithPenalty) otActualDates.add(day.date);
         });
-        const latestManualOT = dedupeLatestManualOT(
-          (manualOtRows || []) as { date: string; overtime_hours: number; created_at: string }[],
-          (r) => r.date,
-        );
-        const approvedOTMinutes = ((otRows || []) as { date: string; requested_hours: number }[])
-          .filter((r) => otActualDates.has(r.date))
-          .reduce((sum, r) => sum + Math.round(Number(r.requested_hours || 0) * 60), 0)
-          + Array.from(latestManualOT.values())
-            .filter((r) => otActualDates.has(r.date))
-            .reduce((sum, r) => sum + Math.round(Number(r.overtime_hours || 0) * 60), 0);
+        // OT Payment uses the exact same computation as Reports >
+        // Performance Summary's "Approved Overtime" so the two can never
+        // silently diverge.
+        const monthKey = `${targetUserId}|${year}-${String(month).padStart(2, "0")}`;
+        const approvedOTMinutes = Math.round((otHoursByUserMonth.get(monthKey) || 0) * 60);
         setReportTotals({ approvedOTMinutes, dueMinutes: dueMinutesWithPenalty });
       } else {
         setReportTotals({ approvedOTMinutes: 0, dueMinutes: 0 });
@@ -140,7 +121,7 @@ export const PayrollAdjustments = ({ isAdmin }: { isAdmin: boolean }) => {
     } finally {
       setLoading(false);
     }
-  }, [targetUserId, monthStartISO, monthEndISO]);
+  }, [targetUserId, monthStartISO, monthEndISO, year, month]);
 
   useEffect(() => { fetchAll(); }, [fetchAll]);
 
