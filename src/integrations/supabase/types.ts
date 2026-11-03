@@ -2273,6 +2273,7 @@ export type Database = {
       }
       task_columns: {
         Row: {
+          archived: boolean
           board_id: string
           created_at: string
           id: string
@@ -2282,6 +2283,7 @@ export type Database = {
           wip_limit: number | null
         }
         Insert: {
+          archived?: boolean
           board_id: string
           created_at?: string
           id?: string
@@ -2291,6 +2293,7 @@ export type Database = {
           wip_limit?: number | null
         }
         Update: {
+          archived?: boolean
           board_id?: string
           created_at?: string
           id?: string
@@ -2302,6 +2305,41 @@ export type Database = {
         Relationships: [
           {
             foreignKeyName: "task_columns_board_id_fkey"
+            columns: ["board_id"]
+            isOneToOne: false
+            referencedRelation: "task_boards"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      task_labels: {
+        Row: {
+          board_id: string
+          color: string
+          created_at: string
+          id: string
+          name: string
+          position: number
+        }
+        Insert: {
+          board_id: string
+          color: string
+          created_at?: string
+          id?: string
+          name?: string
+          position?: number
+        }
+        Update: {
+          board_id?: string
+          color?: string
+          created_at?: string
+          id?: string
+          name?: string
+          position?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "task_labels_board_id_fkey"
             columns: ["board_id"]
             isOneToOne: false
             referencedRelation: "task_boards"

@@ -4,9 +4,10 @@ import { CSS } from "@dnd-kit/utilities";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
-import { Plus, MoreVertical, Trash2, X } from "lucide-react";
+import { Plus, MoreVertical, Trash2, X, Archive } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { KanbanCard, KanbanTask, Profile } from "./KanbanCard";
+import type { TaskLabel } from "@/lib/taskLabels";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -28,9 +29,15 @@ interface Props {
   onQuickCreateTask: (columnId: string, title: string, atIndex?: number) => Promise<boolean>;
   onOpenTask: (task: KanbanTask) => void;
   onDeleteColumn?: (columnId: string) => void;
+  onArchiveColumn?: (columnId: string) => void;
   onRenameColumn?: (columnId: string, name: string) => void;
   onToggleComplete?: (task: KanbanTask) => void;
   onArchiveTask?: (task: KanbanTask) => void;
+  onCopyTask?: (task: KanbanTask) => void;
+  onMoveTask?: (task: KanbanTask) => void;
+  boardId?: string;
+  boardLabels?: TaskLabel[];
+  onToggleTaskLabel?: (task: KanbanTask, labelId: string) => void;
   canDelete?: boolean;
   canDrag?: boolean;
   // Board-level edit access (member/admin/workspace visibility). A task's
@@ -42,13 +49,6 @@ interface Props {
   checklistCounts?: Record<string, { done: number; total: number }>;
 }
 
-const COLUMN_ACCENT: Record<string, string> = {
-  todo: "from-slate-500/30 to-slate-500/0",
-  in_progress: "from-blue-500/30 to-blue-500/0",
-  in_review: "from-purple-500/30 to-purple-500/0",
-  done: "from-emerald-500/30 to-emerald-500/0",
-};
-
 export function KanbanColumn({
   column,
   tasks,
@@ -56,9 +56,15 @@ export function KanbanColumn({
   onQuickCreateTask,
   onOpenTask,
   onDeleteColumn,
+  onArchiveColumn,
   onRenameColumn,
   onToggleComplete,
   onArchiveTask,
+  onCopyTask,
+  onMoveTask,
+  boardId,
+  boardLabels,
+  onToggleTaskLabel,
   canDelete,
   canDrag = true,
   canEditBoard,
@@ -85,8 +91,6 @@ export function KanbanColumn({
     transform: CSS.Transform.toString(transform),
     transition,
   };
-
-  const accent = COLUMN_ACCENT[column.status] || "from-primary/30 to-primary/0";
 
   const [editingName, setEditingName] = useState(false);
   const [nameDraft, setNameDraft] = useState(column.name);
@@ -181,22 +185,17 @@ export function KanbanColumn({
       ref={setNodeRef}
       style={style}
       className={cn(
-        "min-w-[300px] w-[300px] max-h-full flex flex-col rounded-2xl",
-        "bg-muted/30 backdrop-blur-sm border border-border/60",
-        "transition-all duration-200",
-        isOver && "ring-2 ring-primary/50 bg-primary/5 scale-[1.01]",
+        "min-w-[272px] w-[272px] max-h-full flex flex-col rounded-xl",
+        "bg-muted/60",
+        isOver && "ring-2 ring-primary/40",
         isDragging && "opacity-40",
       )}
     >
-      {/* Header with subtle accent — also the column's drag handle */}
+      {/* Plain header, no gradient/accent — also the column's drag handle */}
       <div
         {...attributes}
         {...(canDrag ? listeners : {})}
-        className={cn(
-          "relative rounded-t-2xl px-3 py-2.5 bg-gradient-to-b",
-          canDrag && "cursor-grab active:cursor-grabbing",
-          accent,
-        )}
+        className={cn("px-3 pt-2.5 pb-1.5", canDrag && "cursor-grab active:cursor-grabbing")}
       >
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-2 min-w-0 flex-1">
@@ -216,18 +215,18 @@ export function KanbanColumn({
               />
             ) : (
               <span
-                className={cn("font-semibold text-sm truncate", canRename && "cursor-text hover:bg-background/40 rounded px-1 -mx-1")}
+                className={cn("font-semibold text-sm truncate", canRename && "cursor-text hover:bg-black/5 rounded px-1 -mx-1")}
                 onClick={(e) => { if (canRename) { e.stopPropagation(); startEditingName(); } }}
                 onPointerDown={(e) => canRename && e.stopPropagation()}
               >
                 {column.name}
               </span>
             )}
-            <span className="text-xs px-1.5 py-0.5 rounded-md bg-background/60 text-muted-foreground font-medium shrink-0">
+            <span className="text-xs text-muted-foreground font-medium shrink-0">
               {tasks.length}
             </span>
           </div>
-          {canDelete && onDeleteColumn && (
+          {canDelete && (onDeleteColumn || onArchiveColumn) && (
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
                 <Button size="icon" variant="ghost" className="h-7 w-7 shrink-0" onPointerDown={(e) => e.stopPropagation()}>
@@ -235,12 +234,19 @@ export function KanbanColumn({
                 </Button>
               </DropdownMenuTrigger>
               <DropdownMenuContent align="end">
-                <DropdownMenuItem
-                  onClick={() => onDeleteColumn(column.id)}
-                  className="text-destructive"
-                >
-                  <Trash2 className="h-3.5 w-3.5 mr-2" /> Delete column
-                </DropdownMenuItem>
+                {onArchiveColumn && (
+                  <DropdownMenuItem onClick={() => onArchiveColumn(column.id)}>
+                    <Archive className="h-3.5 w-3.5 mr-2" /> Archive this list
+                  </DropdownMenuItem>
+                )}
+                {onDeleteColumn && (
+                  <DropdownMenuItem
+                    onClick={() => onDeleteColumn(column.id)}
+                    className="text-destructive"
+                  >
+                    <Trash2 className="h-3.5 w-3.5 mr-2" /> Delete column
+                  </DropdownMenuItem>
+                )}
               </DropdownMenuContent>
             </DropdownMenu>
           )}
@@ -263,6 +269,13 @@ export function KanbanColumn({
                 canArchive={!!canEditBoard || t.assignee_id === currentUserId}
                 checklistTotal={checklistCounts?.[t.id]?.total || 0}
                 checklistDone={checklistCounts?.[t.id]?.done || 0}
+                canManageCard={!!canEditBoard || t.assignee_id === currentUserId}
+                canEditCard={!!canEditBoard}
+                onCopy={onCopyTask ? () => onCopyTask(t) : undefined}
+                onMove={onMoveTask ? () => onMoveTask(t) : undefined}
+                boardId={boardId}
+                boardLabels={boardLabels}
+                onToggleLabel={onToggleTaskLabel ? (labelId) => onToggleTaskLabel(t, labelId) : undefined}
               />
             </div>
           ))}

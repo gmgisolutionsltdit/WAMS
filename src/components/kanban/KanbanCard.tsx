@@ -1,7 +1,18 @@
+import { useState } from "react";
 import { useSortable } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
-import { Calendar as CalendarIcon, AlertTriangle, MessageSquare, CheckSquare, CheckCircle2, Circle, Archive } from "lucide-react";
+import {
+  Calendar as CalendarIcon, AlertTriangle, MessageSquare, CheckSquare, CheckCircle2, Circle, Archive,
+  MoreHorizontal, Copy, ArrowRightLeft, Sparkles, Tag,
+} from "lucide-react";
+import {
+  DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger,
+  DropdownMenuSeparator,
+} from "@/components/ui/dropdown-menu";
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { TaskLabelsPanel } from "@/components/tasks/TaskLabelsPopover";
+import type { TaskLabel } from "@/lib/taskLabels";
 import { cn } from "@/lib/utils";
 
 export type KanbanTask = {
@@ -20,6 +31,7 @@ export type KanbanTask = {
   position: number;
   completed_at?: string | null;
   archived?: boolean;
+  labels?: string[] | null;
 };
 
 export type Profile = {
@@ -29,11 +41,13 @@ export type Profile = {
   photo_url: string | null;
 };
 
-const PRIORITY_STYLES: Record<string, { bg: string; ring: string; label: string }> = {
-  low: { bg: "bg-slate-500/10 text-slate-600 dark:text-slate-300", ring: "ring-slate-400/30", label: "Low" },
-  medium: { bg: "bg-blue-500/10 text-blue-600 dark:text-blue-300", ring: "ring-blue-400/30", label: "Medium" },
-  high: { bg: "bg-orange-500/10 text-orange-600 dark:text-orange-300", ring: "ring-orange-400/40", label: "High" },
-  urgent: { bg: "bg-red-500/10 text-red-600 dark:text-red-300", ring: "ring-red-400/50", label: "Urgent" },
+// Flat, Trello-plain priority chips — a plain gray background for everything
+// but Urgent (which stays legible as a warning), no glow rings or gradients.
+const PRIORITY_STYLES: Record<string, { bg: string; label: string }> = {
+  low: { bg: "bg-muted text-muted-foreground", label: "Low" },
+  medium: { bg: "bg-muted text-muted-foreground", label: "Medium" },
+  high: { bg: "bg-muted text-muted-foreground", label: "High" },
+  urgent: { bg: "bg-red-100 text-red-700 dark:bg-red-950 dark:text-red-300", label: "Urgent" },
 };
 
 interface Props {
@@ -48,6 +62,19 @@ interface Props {
   commentCount?: number;
   checklistTotal?: number;
   checklistDone?: number;
+  /** Card-menu actions (Trello's hover ⋯ menu) — omitted entirely when the
+   * viewer can't edit the board, same gating as archive/complete. */
+  onCopy?: () => void;
+  onMove?: () => void;
+  boardId?: string;
+  boardLabels?: TaskLabel[];
+  onToggleLabel?: (labelId: string) => void;
+  canManageCard?: boolean;
+  /** Copy/Move/Edit-labels all insert or update rows in ways only a board
+   * editor's RLS grants (an assignee-only viewer can update their own task,
+   * per canArchive/canToggleComplete, but can't create or move cards) — so
+   * these three are gated on this instead of the broader canManageCard. */
+  canEditCard?: boolean;
 }
 
 export function KanbanCard({
@@ -62,7 +89,15 @@ export function KanbanCard({
   commentCount = 0,
   checklistTotal = 0,
   checklistDone = 0,
+  onCopy,
+  onMove,
+  boardId,
+  boardLabels = [],
+  onToggleLabel,
+  canManageCard = true,
+  canEditCard = true,
 }: Props) {
+  const [labelsOpen, setLabelsOpen] = useState(false);
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
     id: task.id,
     data: { type: "task", task },
@@ -90,27 +125,71 @@ export function KanbanCard({
       }}
       className={cn(
         "group cursor-grab active:cursor-grabbing select-none text-left",
-        "bg-card/70 backdrop-blur-md border border-border/60 rounded-xl p-3",
-        "shadow-sm transition-all duration-200",
-        task.completed_at
-          ? "opacity-60 saturate-50 hover:opacity-90"
-          : "hover:shadow-md hover:border-primary/40 hover:-translate-y-0.5",
-        isOverlay && "rotate-2 scale-105 shadow-2xl ring-2 ring-primary/40 cursor-grabbing",
+        "bg-card border border-border rounded-lg p-2.5 shadow-sm transition-shadow",
+        task.completed_at ? "opacity-60 hover:opacity-90" : "hover:shadow-md",
+        isOverlay && "shadow-xl cursor-grabbing",
       )}
     >
+      {task.labels && task.labels.length > 0 && (
+        <div className="flex gap-1 mb-1.5">
+          {task.labels.map((id) => {
+            const l = boardLabels.find((bl) => bl.id === id);
+            if (!l) return null;
+            return <span key={id} className="h-1.5 w-6 rounded-full" style={{ backgroundColor: l.color }} title={l.name} />;
+          })}
+        </div>
+      )}
+
       <div className="flex items-center justify-between mb-1.5">
         {task.ticket_key && (
           <span className="text-[10px] font-mono text-muted-foreground tracking-wide">{task.ticket_key}</span>
         )}
-        <span
-          className={cn(
-            "ml-auto text-[10px] font-medium px-1.5 py-0.5 rounded-full ring-1",
-            priority.bg,
-            priority.ring,
-          )}
-        >
+        <span className={cn("text-[10px] font-medium px-1.5 py-0.5 rounded-full", priority.bg)}>
           {priority.label}
         </span>
+        {!isOverlay && canManageCard && (onCopy || onMove || onToggleLabel || onArchive) && (
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <button
+                type="button"
+                onClick={(e) => e.stopPropagation()}
+                onPointerDown={(e) => e.stopPropagation()}
+                className="shrink-0 ml-1 p-0.5 rounded hover:bg-muted text-muted-foreground opacity-0 group-hover:opacity-100 focus-visible:opacity-100 transition-opacity"
+                aria-label="Card menu"
+              >
+                <MoreHorizontal className="h-3.5 w-3.5" />
+              </button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end" onClick={(e) => e.stopPropagation()} onPointerDown={(e) => e.stopPropagation()}>
+              {onCopy && canEditCard && (
+                <DropdownMenuItem onClick={onCopy}>
+                  <Copy className="h-3.5 w-3.5 mr-2" /> Copy card
+                </DropdownMenuItem>
+              )}
+              {onMove && canEditCard && (
+                <DropdownMenuItem onClick={onMove}>
+                  <ArrowRightLeft className="h-3.5 w-3.5 mr-2" /> Move
+                </DropdownMenuItem>
+              )}
+              <DropdownMenuItem disabled>
+                <Sparkles className="h-3.5 w-3.5 mr-2" /> Mirror <span className="ml-auto text-[10px] text-muted-foreground">Coming soon</span>
+              </DropdownMenuItem>
+              {onToggleLabel && boardId && canEditCard && (
+                <DropdownMenuItem onClick={() => setLabelsOpen(true)}>
+                  <Tag className="h-3.5 w-3.5 mr-2" /> Edit labels
+                </DropdownMenuItem>
+              )}
+              {onArchive && (
+                <>
+                  <DropdownMenuSeparator />
+                  <DropdownMenuItem onClick={onArchive} className="text-destructive focus:text-destructive">
+                    <Archive className="h-3.5 w-3.5 mr-2" /> Archive
+                  </DropdownMenuItem>
+                </>
+              )}
+            </DropdownMenuContent>
+          </DropdownMenu>
+        )}
       </div>
 
       <div className="flex items-start gap-1.5 mb-2">
@@ -201,6 +280,21 @@ export function KanbanCard({
           <div className="h-6 w-6 rounded-full border border-dashed border-muted-foreground/30" />
         )}
       </div>
+
+      {onToggleLabel && boardId && (
+        // Wraps the whole Dialog (not just DialogContent) so a click on its
+        // backdrop — a sibling of DialogContent inside the same portal, but
+        // still a React-tree descendant here — is also caught before it can
+        // bubble up to this card's own onClick and open the task detail too.
+        <div onClick={(e) => e.stopPropagation()} onPointerDown={(e) => e.stopPropagation()}>
+          <Dialog open={labelsOpen} onOpenChange={setLabelsOpen}>
+            <DialogContent className="max-w-xs">
+              <DialogHeader><DialogTitle className="sr-only">Labels</DialogTitle></DialogHeader>
+              <TaskLabelsPanel boardId={boardId} selectedIds={task.labels || []} onToggle={onToggleLabel} />
+            </DialogContent>
+          </Dialog>
+        </div>
+      )}
     </div>
   );
 }

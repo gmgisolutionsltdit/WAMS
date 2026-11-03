@@ -14,12 +14,19 @@ import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription,
 } from "@/components/ui/dialog";
 import { toast } from "sonner";
-import { ArrowLeft, Plus, MessageSquare, Loader2, AlertCircle, CheckSquare, X, UserPlus } from "lucide-react";
+import { ArrowLeft, Plus, MessageSquare, Loader2, AlertCircle, CheckSquare, X, UserPlus, Tag, CalendarClock } from "lucide-react";
+import {
+  DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { useRealtimeSubscription } from "@/hooks/useRealtimeSubscription";
 import { EmployeePicker } from "@/components/EmployeePicker";
 import { ProjectMemberSelector } from "@/components/ProjectMemberSelector";
 import { BoardMenu } from "@/components/tasks/BoardMenu";
 import { TaskDatesPopover } from "@/components/tasks/TaskDatesPopover";
+import { TaskLabelsPopover } from "@/components/tasks/TaskLabelsPopover";
+import { MoveCardDialog } from "@/components/tasks/MoveCardDialog";
+import { CopyCardDialog } from "@/components/tasks/CopyCardDialog";
+import type { TaskLabel } from "@/lib/taskLabels";
 import { useBoardAssignableProfiles } from "@/hooks/useBoardAssignableProfiles";
 import {
   DndContext,
@@ -64,6 +71,14 @@ const TaskBoard = () => {
   const [checklistItems, setChecklistItems] = useState<any[]>([]);
   const [newChecklistItem, setNewChecklistItem] = useState("");
   const [checklistCounts, setChecklistCounts] = useState<Record<string, { done: number; total: number }>>({});
+  // Trello's description is a collapsed "Add a more detailed description..."
+  // box until clicked, then becomes a textarea with its own Save/Cancel.
+  const [editingDescription, setEditingDescription] = useState(false);
+  const [descriptionDraft, setDescriptionDraft] = useState("");
+  const labelsTriggerRef = useRef<HTMLButtonElement>(null);
+  const datesWrapperRef = useRef<HTMLDivElement>(null);
+  const membersWrapperRef = useRef<HTMLDivElement>(null);
+  const checklistInputRef = useRef<HTMLInputElement>(null);
 
   const [createOpen, setCreateOpen] = useState(false);
   const [createColId, setCreateColId] = useState<string | null>(null);
@@ -148,7 +163,7 @@ const TaskBoard = () => {
       setBoardId(bId);
 
       const [{ data: cols }, { data: tks }, { count: totalCount }] = await Promise.all([
-        supabase.from("task_columns").select("*").eq("board_id", bId).order("position"),
+        supabase.from("task_columns").select("*").eq("board_id", bId).eq("archived", false).order("position"),
         supabase.from("tasks").select("*").eq("project_id", projectId).eq("archived", false).order("position"),
         // Ticket keys must stay unique even once a task is archived (it keeps
         // its key), so count all tasks here, not just the active ones above.
@@ -199,6 +214,24 @@ const TaskBoard = () => {
   useRealtimeSubscription("tasks", fetchAll, `tasks-${projectId}`);
   useRealtimeSubscription("task_columns", fetchAll, `cols-${projectId}`);
   useRealtimeSubscription("task_checklist_items", fetchAll, `checklist-${projectId}`);
+
+  const [boardLabels, setBoardLabels] = useState<TaskLabel[]>([]);
+  const fetchBoardLabels = useCallback(async () => {
+    if (!boardId) { setBoardLabels([]); return; }
+    const { data } = await supabase.from("task_labels").select("*").eq("board_id", boardId).order("position");
+    setBoardLabels((data || []) as TaskLabel[]);
+  }, [boardId]);
+  useEffect(() => { fetchBoardLabels(); }, [fetchBoardLabels]);
+  useRealtimeSubscription("task_labels", fetchBoardLabels, `labels-${projectId}`);
+
+  const toggleTaskLabel = async (task: KanbanTask, labelId: string) => {
+    const current = task.labels || [];
+    const next = current.includes(labelId) ? current.filter((l) => l !== labelId) : [...current, labelId];
+    setTasks((prev) => prev.map((t) => (t.id === task.id ? { ...t, labels: next } : t)));
+    if (activeTask?.id === task.id) setActiveTask((at) => (at ? { ...at, labels: next } : at));
+    const { error } = await supabase.from("tasks").update({ labels: next }).eq("id", task.id);
+    if (error) { toast.error(error.message); fetchAll(); }
+  };
 
   const memberProfiles = useMemo(() => {
     const ids = new Set(members.map((m) => m.user_id));
@@ -407,6 +440,7 @@ const TaskBoard = () => {
 
   const openTask = async (t: KanbanTask) => {
     setActiveTask(t);
+    setEditingDescription(false);
     openTaskIdRef.current = t.id;
     const [{ data }, { data: checklist }] = await Promise.all([
       supabase.from("task_comments").select("*").eq("task_id", t.id).order("created_at"),
@@ -492,6 +526,14 @@ const TaskBoard = () => {
     toast.success("Card archived");
   };
 
+  // Opens the Trello-style "Copy card" dialog (Name, Keep labels, Board →
+  // List → Position); the dialog itself performs the insert once confirmed.
+  const [copyDialogTask, setCopyDialogTask] = useState<KanbanTask | null>(null);
+
+  // Opens the Trello-style "Move card" dialog (Board → List → Position);
+  // the dialog itself performs the update once the user confirms.
+  const [moveDialogTask, setMoveDialogTask] = useState<KanbanTask | null>(null);
+
   /* ---------- Column CRUD ---------- */
   const addColumn = async () => {
     if (!newColName.trim() || !boardId) return;
@@ -515,6 +557,16 @@ const TaskBoard = () => {
     const { error } = await supabase.from("task_columns").delete().eq("id", colId);
     if (error) { toast.error(error.message); return; }
     toast.success("Column deleted");
+  };
+
+  // Trello's "Archive this list" — hides the list (and its cards stay put,
+  // just no longer shown on the board) without deleting anything, same
+  // soft-archive approach as archiveTask above.
+  const archiveColumn = async (colId: string) => {
+    setColumns((prev) => prev.filter((c) => c.id !== colId));
+    const { error } = await supabase.from("task_columns").update({ archived: true }).eq("id", colId);
+    if (error) { toast.error(error.message); fetchAll(); return; }
+    toast.success("List archived");
   };
 
   const renameColumn = async (colId: string, name: string) => {
@@ -645,6 +697,7 @@ const TaskBoard = () => {
             onOpenMembers={() => setMembersOpen(true)}
             onProjectUpdated={(patch) => setProject((p) => ({ ...p, ...patch }))}
             onTaskRestored={fetchAll}
+            onColumnRestored={fetchAll}
           />
         </div>
       </div>
@@ -686,9 +739,15 @@ const TaskBoard = () => {
                   onQuickCreateTask={quickCreateTask}
                   onOpenTask={openTask}
                   onDeleteColumn={deleteColumn}
+                  onArchiveColumn={archiveColumn}
                   onRenameColumn={renameColumn}
                   onToggleComplete={toggleComplete}
                   onArchiveTask={archiveTask}
+                  onCopyTask={setCopyDialogTask}
+                  onMoveTask={setMoveDialogTask}
+                  boardId={boardId || undefined}
+                  boardLabels={boardLabels}
+                  onToggleTaskLabel={toggleTaskLabel}
                   canDelete={isOwnerOrAdmin}
                   canDrag={canEditBoard}
                   canEditBoard={canEditBoard}
@@ -777,7 +836,7 @@ const TaskBoard = () => {
 
       {/* Task Detail Dialog */}
       <Dialog open={!!activeTask} onOpenChange={(o) => { if (!o) { setActiveTask(null); openTaskIdRef.current = null; } }}>
-        <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
+        <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto top-8 translate-y-0">
           {activeTask && (
             <>
               <DialogHeader>
@@ -787,36 +846,128 @@ const TaskBoard = () => {
                     value={activeTask.title}
                     onChange={(e) => setActiveTask({ ...activeTask, title: e.target.value })}
                     onBlur={(e) => updateTask({ title: e.target.value })}
-                    className="border-0 text-lg font-semibold"
+                    className="border-0 shadow-none px-1 -ml-1 text-lg font-semibold focus-visible:ring-1 focus-visible:ring-primary/40 focus-visible:bg-accent/50"
                   />
                 </DialogTitle>
               </DialogHeader>
+              {/* Trello's row of quick-add shortcuts under the title: a "+ Add"
+                  menu (delegates to the same controls below it) followed by
+                  direct Labels / Dates / Checklist / Members buttons. */}
               <div className="flex items-center gap-2 flex-wrap -mt-1">
-                <TaskDatesPopover
-                  startDate={activeTask.start_date || null}
-                  dueDate={activeTask.due_date || null}
-                  recurring={activeTask.recurring || null}
-                  reminder={activeTask.reminder || null}
-                  onSave={(patch) => updateTask(patch)}
-                />
-                <EmployeePicker
-                  value={activeTask.assignee_id}
-                  onChange={(id) => updateTask({ assignee_id: id })}
-                  placeholder="Members"
-                  overrideEmployees={allAssignableProfiles}
-                  className="w-auto h-auto py-1.5"
-                />
+                <DropdownMenu>
+                  <DropdownMenuTrigger asChild>
+                    <Button variant="outline" size="sm" className="h-auto py-1.5">
+                      <Plus className="h-4 w-4 mr-1.5" /> Add
+                    </Button>
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent align="start">
+                    <DropdownMenuItem onClick={() => labelsTriggerRef.current?.click()}>
+                      <Tag className="h-3.5 w-3.5 mr-2" /> Labels
+                    </DropdownMenuItem>
+                    <DropdownMenuItem onClick={() => datesWrapperRef.current?.querySelector("button")?.click()}>
+                      <CalendarClock className="h-3.5 w-3.5 mr-2" /> Dates
+                    </DropdownMenuItem>
+                    <DropdownMenuItem onClick={() => { checklistInputRef.current?.scrollIntoView({ behavior: "smooth", block: "center" }); checklistInputRef.current?.focus(); }}>
+                      <CheckSquare className="h-3.5 w-3.5 mr-2" /> Checklist
+                    </DropdownMenuItem>
+                    <DropdownMenuItem onClick={() => membersWrapperRef.current?.querySelector("button")?.click()}>
+                      <UserPlus className="h-3.5 w-3.5 mr-2" /> Members
+                    </DropdownMenuItem>
+                  </DropdownMenuContent>
+                </DropdownMenu>
+                {boardId && (
+                  <TaskLabelsPopover
+                    boardId={boardId}
+                    selectedIds={activeTask.labels || []}
+                    onToggle={(labelId) => toggleTaskLabel(activeTask, labelId)}
+                    trigger={
+                      <Button ref={labelsTriggerRef} variant="outline" size="sm" className="h-auto py-1.5">
+                        <Tag className="h-4 w-4 mr-1.5" /> Labels
+                      </Button>
+                    }
+                  />
+                )}
+                <div ref={datesWrapperRef}>
+                  <TaskDatesPopover
+                    startDate={activeTask.start_date || null}
+                    dueDate={activeTask.due_date || null}
+                    recurring={activeTask.recurring || null}
+                    reminder={activeTask.reminder || null}
+                    onSave={(patch) => updateTask(patch)}
+                  />
+                </div>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="h-auto py-1.5"
+                  onClick={() => { checklistInputRef.current?.scrollIntoView({ behavior: "smooth", block: "center" }); checklistInputRef.current?.focus(); }}
+                >
+                  <CheckSquare className="h-4 w-4 mr-1.5" /> Checklist
+                </Button>
+                <div ref={membersWrapperRef}>
+                  <EmployeePicker
+                    value={activeTask.assignee_id}
+                    onChange={(id) => updateTask({ assignee_id: id })}
+                    placeholder="Members"
+                    overrideEmployees={allAssignableProfiles}
+                    className="w-auto h-auto py-1.5"
+                  />
+                </div>
               </div>
+              {(activeTask.labels?.length || 0) > 0 && (
+                <div className="flex flex-wrap gap-1.5">
+                  {activeTask.labels!.map((id) => {
+                    const l = boardLabels.find((bl) => bl.id === id);
+                    if (!l) return null;
+                    return (
+                      <span
+                        key={id}
+                        className="h-6 min-w-[2.5rem] px-2 rounded-md flex items-center justify-center text-xs font-medium text-white"
+                        style={{ backgroundColor: l.color }}
+                      >
+                        {l.name}
+                      </span>
+                    );
+                  })}
+                </div>
+              )}
               <div className="grid grid-cols-3 gap-4">
                 <div className="col-span-2 space-y-3">
                   <div>
                     <Label>Description</Label>
-                    <Textarea
-                      value={activeTask.description || ""}
-                      onChange={(e) => setActiveTask({ ...activeTask, description: e.target.value })}
-                      onBlur={(e) => updateTask({ description: e.target.value })}
-                      rows={5}
-                    />
+                    {editingDescription ? (
+                      <div className="space-y-2 mt-1">
+                        <Textarea
+                          autoFocus
+                          value={descriptionDraft}
+                          onChange={(e) => setDescriptionDraft(e.target.value)}
+                          rows={5}
+                        />
+                        <div className="flex gap-2">
+                          <Button
+                            size="sm"
+                            onClick={() => { updateTask({ description: descriptionDraft }); setEditingDescription(false); }}
+                          >
+                            Save
+                          </Button>
+                          <Button size="sm" variant="ghost" onClick={() => setEditingDescription(false)}>
+                            Cancel
+                          </Button>
+                        </div>
+                      </div>
+                    ) : (
+                      <button
+                        type="button"
+                        onClick={() => { setDescriptionDraft(activeTask.description || ""); setEditingDescription(true); }}
+                        className={cn(
+                          "w-full min-h-[64px] mt-1 rounded-md border border-input bg-muted/40 hover:bg-muted/60 transition-colors",
+                          "text-left text-sm px-3 py-2 whitespace-pre-wrap break-words",
+                          !activeTask.description && "text-muted-foreground",
+                        )}
+                      >
+                        {activeTask.description || "Add a more detailed description..."}
+                      </button>
+                    )}
                   </div>
                   <div>
                     <Label className="flex items-center gap-1">
@@ -850,6 +1001,7 @@ const TaskBoard = () => {
                     </div>
                     <div className="flex gap-2">
                       <Input
+                        ref={checklistInputRef}
                         value={newChecklistItem}
                         onChange={(e) => setNewChecklistItem(e.target.value)}
                         placeholder="Add checklist item..."
@@ -920,6 +1072,25 @@ const TaskBoard = () => {
           )}
         </DialogContent>
       </Dialog>
+
+      {projectId && boardId && (
+        <>
+          <MoveCardDialog
+            task={moveDialogTask}
+            currentProjectId={projectId}
+            currentTaskBoardId={boardId}
+            onClose={() => setMoveDialogTask(null)}
+            onMoved={fetchAll}
+          />
+          <CopyCardDialog
+            task={copyDialogTask}
+            currentProjectId={projectId}
+            currentTaskBoardId={boardId}
+            onClose={() => setCopyDialogTask(null)}
+            onCopied={fetchAll}
+          />
+        </>
+      )}
     </div>
   );
 };
