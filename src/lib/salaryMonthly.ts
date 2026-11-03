@@ -12,6 +12,7 @@ import { classifyDay, netRequiredHours, weekendDaysFor, type WorkSchedule } from
 import { evaluateArrival, type OfficeTime } from "@/lib/officeTime";
 import { mergeDailySessions, type AttendanceSession } from "@/lib/attendance";
 import { salaryBreakdown, perMinuteRate, computeFinalSalary } from "@/lib/payrollAdjustments";
+import { dedupeLatestManualOT } from "@/lib/payroll";
 
 type Schedule = WorkSchedule & OfficeTime & { company_wing?: string | null };
 
@@ -69,7 +70,7 @@ export const computeMonthlySalaryRows = async (
     // Performance History adds together) - not actual worked overtime from
     // attendance.
     supabase.from("overtime_requests").select("user_id, date, requested_hours").in("user_id", targetIds).in("status", ["approved", "modified"]).gte("date", rangeStart).lte("date", rangeEnd),
-    supabase.from("manual_time_requests").select("user_id, date, overtime_hours").in("user_id", targetIds).eq("status", "approved").gte("date", rangeStart).lte("date", rangeEnd),
+    supabase.from("manual_time_requests").select("user_id, date, overtime_hours, created_at").in("user_id", targetIds).eq("status", "approved").gte("date", rangeStart).lte("date", rangeEnd),
   ]);
 
   type ProfileRow = Schedule & { id: string; full_name: string | null; email: string | null; base_salary: number | null };
@@ -94,7 +95,11 @@ export const computeMonthlySalaryRows = async (
     const key = `${r.user_id}|${r.date.slice(0, 7)}`;
     approvedOTMinutes.set(key, (approvedOTMinutes.get(key) || 0) + Math.round(Number(r.requested_hours || 0) * 60));
   });
-  ((manualOtRows || []) as { user_id: string; date: string; overtime_hours: number }[]).forEach((r) => {
+  const latestManualOT = dedupeLatestManualOT(
+    (manualOtRows || []) as { user_id: string; date: string; overtime_hours: number; created_at: string }[],
+    (r) => `${r.user_id}|${r.date}`,
+  );
+  latestManualOT.forEach((r) => {
     const key = `${r.user_id}|${r.date.slice(0, 7)}`;
     approvedOTMinutes.set(key, (approvedOTMinutes.get(key) || 0) + Math.round(Number(r.overtime_hours || 0) * 60));
   });

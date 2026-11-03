@@ -10,6 +10,7 @@ import { classifyDay, netRequiredHours, weekendDaysFor, type WorkSchedule } from
 import { evaluateArrival, type OfficeTime } from "@/lib/officeTime";
 import { mergeDailySessions, type AttendanceSession } from "@/lib/attendance";
 import { salaryBreakdown, perMinuteRate, computeFinalSalary, fmtBDT } from "@/lib/payrollAdjustments";
+import { dedupeLatestManualOT } from "@/lib/payroll";
 
 type Schedule = WorkSchedule & OfficeTime & { company_wing?: string | null; base_salary?: number | null };
 
@@ -66,7 +67,7 @@ export const PayrollAdjustments = ({ isAdmin }: { isAdmin: boolean }) => {
         // overtime from attendance.
         supabase.from("overtime_requests").select("requested_hours")
           .eq("user_id", targetUserId).in("status", ["approved", "modified"]).gte("date", monthStartISO).lte("date", monthEndISO),
-        supabase.from("manual_time_requests").select("overtime_hours")
+        supabase.from("manual_time_requests").select("date, overtime_hours, created_at")
           .eq("user_id", targetUserId).eq("status", "approved").gte("date", monthStartISO).lte("date", monthEndISO),
       ]);
 
@@ -113,9 +114,13 @@ export const PayrollAdjustments = ({ isAdmin }: { isAdmin: boolean }) => {
             dueMinutesWithPenalty += Math.round((requiredWithPenalty - worked) * 60);
           }
         });
+        const latestManualOT = dedupeLatestManualOT(
+          (manualOtRows || []) as { date: string; overtime_hours: number; created_at: string }[],
+          (r) => r.date,
+        );
         const approvedOTMinutes = ((otRows || []) as { requested_hours: number }[])
           .reduce((sum, r) => sum + Math.round(Number(r.requested_hours || 0) * 60), 0)
-          + ((manualOtRows || []) as { overtime_hours: number }[])
+          + Array.from(latestManualOT.values())
             .reduce((sum, r) => sum + Math.round(Number(r.overtime_hours || 0) * 60), 0);
         setReportTotals({ approvedOTMinutes, dueMinutes: dueMinutesWithPenalty });
       } else {

@@ -52,6 +52,28 @@ export function fmtMoney(amount: number, currency = "BDT") {
 }
 
 /**
+ * Collapse approved manual_time_requests rows to one per `${user_id}|${date}`
+ * key, keeping only the most recently created one — a corrected entry stays
+ * approved alongside the original it replaced, so summing every row would
+ * double-count superseded OT. created_at (immutable) is used rather than
+ * updated_at for the same reason Reports > Performance Summary does: an
+ * archive/unarchive bumps updated_at via the table's trigger, which could
+ * otherwise make an older, already-superseded correction look newest.
+ */
+export function dedupeLatestManualOT<T extends { overtime_hours: number | null; created_at: string }>(
+  rows: T[],
+  keyOf: (row: T) => string,
+): Map<string, T> {
+  const latest = new Map<string, T>();
+  rows.forEach((row) => {
+    const key = keyOf(row);
+    const existing = latest.get(key);
+    if (!existing || row.created_at > existing.created_at) latest.set(key, row);
+  });
+  return latest;
+}
+
+/**
  * Sum approved overtime for a user/month: overtime_requests (modified_by
  * uses requested_hours, which already reflects modifications) plus approved
  * manual time entries, which carry their own overtime_hours and never get a
@@ -76,7 +98,7 @@ export async function fetchApprovedOTHours(
       .lt("date", end),
     supabase
       .from("manual_time_requests")
-      .select("overtime_hours, status, date")
+      .select("overtime_hours, status, date, created_at")
       .eq("user_id", userId)
       .eq("status", "approved")
       .gte("date", start)
@@ -85,7 +107,8 @@ export async function fetchApprovedOTHours(
   if (otErr) throw otErr;
   if (manualErr) throw manualErr;
   const otHours = (otRows || []).reduce((sum, r) => sum + Number(r.requested_hours || 0), 0);
-  const manualHours = (manualRows || []).reduce((sum, r) => sum + Number(r.overtime_hours || 0), 0);
+  const latestManual = dedupeLatestManualOT(manualRows || [], (r) => r.date);
+  const manualHours = Array.from(latestManual.values()).reduce((sum, r) => sum + Number(r.overtime_hours || 0), 0);
   return otHours + manualHours;
 }
 
