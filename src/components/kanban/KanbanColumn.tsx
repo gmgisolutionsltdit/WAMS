@@ -275,6 +275,7 @@ export function KanbanColumn({
                 checklistTotal={checklistCounts?.[t.id]?.total || 0}
                 checklistDone={checklistCounts?.[t.id]?.done || 0}
                 canManageCard={!!canEditBoard || t.assignee_id === currentUserId}
+                canEditCard={!!canEditBoard}
                 onCopy={onCopyTask ? () => onCopyTask(t) : undefined}
                 onMove={onMoveTask ? () => onMoveTask(t) : undefined}
                 boardId={boardId}

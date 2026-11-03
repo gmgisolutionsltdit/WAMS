@@ -518,7 +518,17 @@ const TaskBoard = () => {
   // comments/checklist/attachments, same as Trello's own quick copy).
   const copyTask = async (task: KanbanTask) => {
     const colTasks = tasksByColumn[task.column_id || ""] || [];
-    const insertPos = Math.max(-1, ...colTasks.map((t) => t.position)) + 1;
+    const insertPos = task.position + 1;
+    // Shift the source's own later siblings down one to open up insertPos,
+    // same as inserting a brand-new card at a specific spot.
+    const toShift = colTasks.filter((t) => t.position >= insertPos);
+    if (toShift.length) {
+      const shiftResults = await Promise.all(
+        toShift.map((t) => supabase.from("tasks").update({ position: t.position + 1 }).eq("id", t.id)),
+      );
+      const shiftErr = shiftResults.find((r) => r.error);
+      if (shiftErr?.error) { toast.error(shiftErr.error.message); return; }
+    }
     const ticketKey = `${project?.key}-${taskCounter + 1}`;
     const { error } = await supabase.from("tasks").insert({
       project_id: projectId!,

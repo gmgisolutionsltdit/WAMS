@@ -68,6 +68,11 @@ interface Props {
   boardLabels?: TaskLabel[];
   onToggleLabel?: (labelId: string) => void;
   canManageCard?: boolean;
+  /** Copy/Move/Edit-labels all insert or update rows in ways only a board
+   * editor's RLS grants (an assignee-only viewer can update their own task,
+   * per canArchive/canToggleComplete, but can't create or move cards) — so
+   * these three are gated on this instead of the broader canManageCard. */
+  canEditCard?: boolean;
 }
 
 export function KanbanCard({
@@ -88,6 +93,7 @@ export function KanbanCard({
   boardLabels = [],
   onToggleLabel,
   canManageCard = true,
+  canEditCard = true,
 }: Props) {
   const [labelsOpen, setLabelsOpen] = useState(false);
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
@@ -162,12 +168,12 @@ export function KanbanCard({
               </button>
             </DropdownMenuTrigger>
             <DropdownMenuContent align="end" onClick={(e) => e.stopPropagation()} onPointerDown={(e) => e.stopPropagation()}>
-              {onCopy && (
+              {onCopy && canEditCard && (
                 <DropdownMenuItem onClick={onCopy}>
                   <Copy className="h-3.5 w-3.5 mr-2" /> Copy card
                 </DropdownMenuItem>
               )}
-              {onMove && (
+              {onMove && canEditCard && (
                 <DropdownMenuItem onClick={onMove}>
                   <ArrowRightLeft className="h-3.5 w-3.5 mr-2" /> Move
                 </DropdownMenuItem>
@@ -175,7 +181,7 @@ export function KanbanCard({
               <DropdownMenuItem disabled>
                 <Sparkles className="h-3.5 w-3.5 mr-2" /> Mirror <span className="ml-auto text-[10px] text-muted-foreground">Coming soon</span>
               </DropdownMenuItem>
-              {onToggleLabel && boardId && (
+              {onToggleLabel && boardId && canEditCard && (
                 <DropdownMenuItem onClick={() => setLabelsOpen(true)}>
                   <Tag className="h-3.5 w-3.5 mr-2" /> Edit labels
                 </DropdownMenuItem>
@@ -283,12 +289,18 @@ export function KanbanCard({
       </div>
 
       {onToggleLabel && boardId && (
-        <Dialog open={labelsOpen} onOpenChange={setLabelsOpen}>
-          <DialogContent className="max-w-xs" onClick={(e) => e.stopPropagation()} onPointerDown={(e) => e.stopPropagation()}>
-            <DialogHeader><DialogTitle className="sr-only">Labels</DialogTitle></DialogHeader>
-            <TaskLabelsPanel boardId={boardId} selectedIds={task.labels || []} onToggle={onToggleLabel} />
-          </DialogContent>
-        </Dialog>
+        // Wraps the whole Dialog (not just DialogContent) so a click on its
+        // backdrop — a sibling of DialogContent inside the same portal, but
+        // still a React-tree descendant here — is also caught before it can
+        // bubble up to this card's own onClick and open the task detail too.
+        <div onClick={(e) => e.stopPropagation()} onPointerDown={(e) => e.stopPropagation()}>
+          <Dialog open={labelsOpen} onOpenChange={setLabelsOpen}>
+            <DialogContent className="max-w-xs">
+              <DialogHeader><DialogTitle className="sr-only">Labels</DialogTitle></DialogHeader>
+              <TaskLabelsPanel boardId={boardId} selectedIds={task.labels || []} onToggle={onToggleLabel} />
+            </DialogContent>
+          </Dialog>
+        </div>
       )}
     </div>
   );
