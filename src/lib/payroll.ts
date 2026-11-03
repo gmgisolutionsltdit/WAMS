@@ -51,7 +51,14 @@ export function fmtMoney(amount: number, currency = "BDT") {
   return `${symbol}${formatted}`;
 }
 
-/** Sum approved overtime_requests hours (modified_by uses requested_hours which already reflects modifications) for a user/month. */
+/**
+ * Sum approved overtime for a user/month: overtime_requests (modified_by
+ * uses requested_hours, which already reflects modifications) plus approved
+ * manual time entries, which carry their own overtime_hours and never get a
+ * separate overtime_requests row — same two sources Reports > Performance
+ * Summary's "Approved Overtime" adds together, so payroll's OT payment
+ * matches what that figure shows instead of silently excluding manual OT.
+ */
 export async function fetchApprovedOTHours(
   userId: string,
   year: number,
@@ -59,15 +66,27 @@ export async function fetchApprovedOTHours(
 ): Promise<number> {
   const start = new Date(year, month - 1, 1).toISOString().slice(0, 10);
   const end = new Date(year, month, 1).toISOString().slice(0, 10);
-  const { data, error } = await supabase
-    .from("overtime_requests")
-    .select("requested_hours, status, date")
-    .eq("user_id", userId)
-    .in("status", ["approved", "modified"])
-    .gte("date", start)
-    .lt("date", end);
-  if (error) throw error;
-  return (data || []).reduce((sum, r) => sum + Number(r.requested_hours || 0), 0);
+  const [{ data: otRows, error: otErr }, { data: manualRows, error: manualErr }] = await Promise.all([
+    supabase
+      .from("overtime_requests")
+      .select("requested_hours, status, date")
+      .eq("user_id", userId)
+      .in("status", ["approved", "modified"])
+      .gte("date", start)
+      .lt("date", end),
+    supabase
+      .from("manual_time_requests")
+      .select("overtime_hours, status, date")
+      .eq("user_id", userId)
+      .eq("status", "approved")
+      .gte("date", start)
+      .lt("date", end),
+  ]);
+  if (otErr) throw otErr;
+  if (manualErr) throw manualErr;
+  const otHours = (otRows || []).reduce((sum, r) => sum + Number(r.requested_hours || 0), 0);
+  const manualHours = (manualRows || []).reduce((sum, r) => sum + Number(r.overtime_hours || 0), 0);
+  return otHours + manualHours;
 }
 
 export async function fetchIncentivesTotal(
