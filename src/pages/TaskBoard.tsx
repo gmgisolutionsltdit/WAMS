@@ -14,7 +14,10 @@ import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription,
 } from "@/components/ui/dialog";
 import { toast } from "sonner";
-import { ArrowLeft, Plus, MessageSquare, Loader2, AlertCircle, CheckSquare, X, UserPlus, Tag } from "lucide-react";
+import { ArrowLeft, Plus, MessageSquare, Loader2, AlertCircle, CheckSquare, X, UserPlus, Tag, CalendarClock } from "lucide-react";
+import {
+  DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { useRealtimeSubscription } from "@/hooks/useRealtimeSubscription";
 import { EmployeePicker } from "@/components/EmployeePicker";
 import { ProjectMemberSelector } from "@/components/ProjectMemberSelector";
@@ -68,6 +71,14 @@ const TaskBoard = () => {
   const [checklistItems, setChecklistItems] = useState<any[]>([]);
   const [newChecklistItem, setNewChecklistItem] = useState("");
   const [checklistCounts, setChecklistCounts] = useState<Record<string, { done: number; total: number }>>({});
+  // Trello's description is a collapsed "Add a more detailed description..."
+  // box until clicked, then becomes a textarea with its own Save/Cancel.
+  const [editingDescription, setEditingDescription] = useState(false);
+  const [descriptionDraft, setDescriptionDraft] = useState("");
+  const labelsTriggerRef = useRef<HTMLButtonElement>(null);
+  const datesWrapperRef = useRef<HTMLDivElement>(null);
+  const membersWrapperRef = useRef<HTMLDivElement>(null);
+  const checklistInputRef = useRef<HTMLInputElement>(null);
 
   const [createOpen, setCreateOpen] = useState(false);
   const [createColId, setCreateColId] = useState<string | null>(null);
@@ -429,6 +440,7 @@ const TaskBoard = () => {
 
   const openTask = async (t: KanbanTask) => {
     setActiveTask(t);
+    setEditingDescription(false);
     openTaskIdRef.current = t.id;
     const [{ data }, { data: checklist }] = await Promise.all([
       supabase.from("task_comments").select("*").eq("task_id", t.id).order("created_at"),
@@ -834,37 +846,73 @@ const TaskBoard = () => {
                     value={activeTask.title}
                     onChange={(e) => setActiveTask({ ...activeTask, title: e.target.value })}
                     onBlur={(e) => updateTask({ title: e.target.value })}
-                    className="border-0 text-lg font-semibold"
+                    className="border-0 shadow-none px-1 -ml-1 text-lg font-semibold focus-visible:ring-1 focus-visible:ring-primary/40 focus-visible:bg-accent/50"
                   />
                 </DialogTitle>
               </DialogHeader>
+              {/* Trello's row of quick-add shortcuts under the title: a "+ Add"
+                  menu (delegates to the same controls below it) followed by
+                  direct Labels / Dates / Checklist / Members buttons. */}
               <div className="flex items-center gap-2 flex-wrap -mt-1">
-                <TaskDatesPopover
-                  startDate={activeTask.start_date || null}
-                  dueDate={activeTask.due_date || null}
-                  recurring={activeTask.recurring || null}
-                  reminder={activeTask.reminder || null}
-                  onSave={(patch) => updateTask(patch)}
-                />
-                <EmployeePicker
-                  value={activeTask.assignee_id}
-                  onChange={(id) => updateTask({ assignee_id: id })}
-                  placeholder="Members"
-                  overrideEmployees={allAssignableProfiles}
-                  className="w-auto h-auto py-1.5"
-                />
+                <DropdownMenu>
+                  <DropdownMenuTrigger asChild>
+                    <Button variant="outline" size="sm" className="h-auto py-1.5">
+                      <Plus className="h-4 w-4 mr-1.5" /> Add
+                    </Button>
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent align="start">
+                    <DropdownMenuItem onClick={() => labelsTriggerRef.current?.click()}>
+                      <Tag className="h-3.5 w-3.5 mr-2" /> Labels
+                    </DropdownMenuItem>
+                    <DropdownMenuItem onClick={() => datesWrapperRef.current?.querySelector("button")?.click()}>
+                      <CalendarClock className="h-3.5 w-3.5 mr-2" /> Dates
+                    </DropdownMenuItem>
+                    <DropdownMenuItem onClick={() => { checklistInputRef.current?.scrollIntoView({ behavior: "smooth", block: "center" }); checklistInputRef.current?.focus(); }}>
+                      <CheckSquare className="h-3.5 w-3.5 mr-2" /> Checklist
+                    </DropdownMenuItem>
+                    <DropdownMenuItem onClick={() => membersWrapperRef.current?.querySelector("button")?.click()}>
+                      <UserPlus className="h-3.5 w-3.5 mr-2" /> Members
+                    </DropdownMenuItem>
+                  </DropdownMenuContent>
+                </DropdownMenu>
                 {boardId && (
                   <TaskLabelsPopover
                     boardId={boardId}
                     selectedIds={activeTask.labels || []}
                     onToggle={(labelId) => toggleTaskLabel(activeTask, labelId)}
                     trigger={
-                      <Button variant="outline" size="sm" className="h-auto py-1.5">
+                      <Button ref={labelsTriggerRef} variant="outline" size="sm" className="h-auto py-1.5">
                         <Tag className="h-4 w-4 mr-1.5" /> Labels
                       </Button>
                     }
                   />
                 )}
+                <div ref={datesWrapperRef}>
+                  <TaskDatesPopover
+                    startDate={activeTask.start_date || null}
+                    dueDate={activeTask.due_date || null}
+                    recurring={activeTask.recurring || null}
+                    reminder={activeTask.reminder || null}
+                    onSave={(patch) => updateTask(patch)}
+                  />
+                </div>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="h-auto py-1.5"
+                  onClick={() => { checklistInputRef.current?.scrollIntoView({ behavior: "smooth", block: "center" }); checklistInputRef.current?.focus(); }}
+                >
+                  <CheckSquare className="h-4 w-4 mr-1.5" /> Checklist
+                </Button>
+                <div ref={membersWrapperRef}>
+                  <EmployeePicker
+                    value={activeTask.assignee_id}
+                    onChange={(id) => updateTask({ assignee_id: id })}
+                    placeholder="Members"
+                    overrideEmployees={allAssignableProfiles}
+                    className="w-auto h-auto py-1.5"
+                  />
+                </div>
               </div>
               {(activeTask.labels?.length || 0) > 0 && (
                 <div className="flex flex-wrap gap-1.5">
@@ -887,12 +935,39 @@ const TaskBoard = () => {
                 <div className="col-span-2 space-y-3">
                   <div>
                     <Label>Description</Label>
-                    <Textarea
-                      value={activeTask.description || ""}
-                      onChange={(e) => setActiveTask({ ...activeTask, description: e.target.value })}
-                      onBlur={(e) => updateTask({ description: e.target.value })}
-                      rows={5}
-                    />
+                    {editingDescription ? (
+                      <div className="space-y-2 mt-1">
+                        <Textarea
+                          autoFocus
+                          value={descriptionDraft}
+                          onChange={(e) => setDescriptionDraft(e.target.value)}
+                          rows={5}
+                        />
+                        <div className="flex gap-2">
+                          <Button
+                            size="sm"
+                            onClick={() => { updateTask({ description: descriptionDraft }); setEditingDescription(false); }}
+                          >
+                            Save
+                          </Button>
+                          <Button size="sm" variant="ghost" onClick={() => setEditingDescription(false)}>
+                            Cancel
+                          </Button>
+                        </div>
+                      </div>
+                    ) : (
+                      <button
+                        type="button"
+                        onClick={() => { setDescriptionDraft(activeTask.description || ""); setEditingDescription(true); }}
+                        className={cn(
+                          "w-full min-h-[64px] mt-1 rounded-md border border-input bg-muted/40 hover:bg-muted/60 transition-colors",
+                          "text-left text-sm px-3 py-2 whitespace-pre-wrap break-words",
+                          !activeTask.description && "text-muted-foreground",
+                        )}
+                      >
+                        {activeTask.description || "Add a more detailed description..."}
+                      </button>
+                    )}
                   </div>
                   <div>
                     <Label className="flex items-center gap-1">
@@ -926,6 +1001,7 @@ const TaskBoard = () => {
                     </div>
                     <div className="flex gap-2">
                       <Input
+                        ref={checklistInputRef}
                         value={newChecklistItem}
                         onChange={(e) => setNewChecklistItem(e.target.value)}
                         placeholder="Add checklist item..."
