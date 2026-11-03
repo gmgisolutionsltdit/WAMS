@@ -10,6 +10,7 @@ import { classifyDay, netRequiredHours, weekendDaysFor, type WorkSchedule } from
 import { evaluateArrival, type OfficeTime } from "@/lib/officeTime";
 import { mergeDailySessions, type AttendanceSession } from "@/lib/attendance";
 import { salaryBreakdown, perMinuteRate, computeFinalSalary, fmtBDT } from "@/lib/payrollAdjustments";
+import { dedupeLatestManualOT } from "@/lib/payroll";
 
 type Schedule = WorkSchedule & OfficeTime & { company_wing?: string | null; base_salary?: number | null };
 
@@ -50,7 +51,7 @@ export const PayrollAdjustments = ({ isAdmin }: { isAdmin: boolean }) => {
     setLoading(true);
     try {
       const [{ data: prof }, { data: attRows }, { data: holidayRows }, { data: leaveRows },
-        { data: dueAdjRows }, { data: recoveryRows }, { data: otRows }] = await Promise.all([
+        { data: dueAdjRows }, { data: recoveryRows }, { data: otRows }, { data: manualOtRows }] = await Promise.all([
         supabase.from("profiles").select("id, base_salary, office_start_time, late_grace_minutes, standard_daily_hours, unpaid_break_minutes, working_days, company_wing").eq("id", targetUserId).maybeSingle(),
         supabase.from("attendance_logs").select("id, user_id, date, clock_in, clock_out, break_minutes, late_minutes, penalty_minutes, penalty_reviewed")
           .eq("user_id", targetUserId).gte("date", monthStartISO).lte("date", monthEndISO),
@@ -60,11 +61,14 @@ export const PayrollAdjustments = ({ isAdmin }: { isAdmin: boolean }) => {
           .eq("user_id", targetUserId).eq("month", monthStartISO).order("created_at", { ascending: false }),
         supabase.from("expense_recovery_actions").select("id, action_type, amount")
           .eq("user_id", targetUserId).eq("month", monthStartISO).order("created_at", { ascending: false }),
-        // OT Payment is based on approved overtime requests only (same
-        // "Approved Overtime" figure Reports > Performance History shows) -
-        // not actual worked overtime from attendance.
+        // OT Payment is based on approved overtime requests plus approved
+        // manual time entries (same two sources "Approved Overtime" on
+        // Reports > Performance History adds together) - not actual worked
+        // overtime from attendance.
         supabase.from("overtime_requests").select("requested_hours")
           .eq("user_id", targetUserId).in("status", ["approved", "modified"]).gte("date", monthStartISO).lte("date", monthEndISO),
+        supabase.from("manual_time_requests").select("date, overtime_hours, created_at")
+          .eq("user_id", targetUserId).eq("status", "approved").gte("date", monthStartISO).lte("date", monthEndISO),
       ]);
 
       const sched = (prof as Schedule) || null;
@@ -110,8 +114,14 @@ export const PayrollAdjustments = ({ isAdmin }: { isAdmin: boolean }) => {
             dueMinutesWithPenalty += Math.round((requiredWithPenalty - worked) * 60);
           }
         });
+        const latestManualOT = dedupeLatestManualOT(
+          (manualOtRows || []) as { date: string; overtime_hours: number; created_at: string }[],
+          (r) => r.date,
+        );
         const approvedOTMinutes = ((otRows || []) as { requested_hours: number }[])
-          .reduce((sum, r) => sum + Math.round(Number(r.requested_hours || 0) * 60), 0);
+          .reduce((sum, r) => sum + Math.round(Number(r.requested_hours || 0) * 60), 0)
+          + Array.from(latestManualOT.values())
+            .reduce((sum, r) => sum + Math.round(Number(r.overtime_hours || 0) * 60), 0);
         setReportTotals({ approvedOTMinutes, dueMinutes: dueMinutesWithPenalty });
       } else {
         setReportTotals({ approvedOTMinutes: 0, dueMinutes: 0 });
@@ -137,8 +147,9 @@ export const PayrollAdjustments = ({ isAdmin }: { isAdmin: boolean }) => {
   );
 
   // OT Payment is calculated from this month's Approved Overtime (approved
-  // overtime_requests hours only, same figure Reports > Performance History
-  // shows), at the plain per-minute rate; Due Time still comes straight from
+  // overtime_requests plus approved manual time entries, same figure Reports
+  // > Performance History shows), at the plain per-minute rate; Due Time
+  // still comes straight from
   // actual attendance, including the late-arrival penalty — for both admin
   // and employee/manager views. Same formula computeMonthlySalaryRows uses
   // for the Monthly Salary Summary table, so the Salary Summary cards here

@@ -51,7 +51,36 @@ export function fmtMoney(amount: number, currency = "BDT") {
   return `${symbol}${formatted}`;
 }
 
-/** Sum approved overtime_requests hours (modified_by uses requested_hours which already reflects modifications) for a user/month. */
+/**
+ * Collapse approved manual_time_requests rows to one per `${user_id}|${date}`
+ * key, keeping only the most recently created one — a corrected entry stays
+ * approved alongside the original it replaced, so summing every row would
+ * double-count superseded OT. created_at (immutable) is used rather than
+ * updated_at for the same reason Reports > Performance Summary does: an
+ * archive/unarchive bumps updated_at via the table's trigger, which could
+ * otherwise make an older, already-superseded correction look newest.
+ */
+export function dedupeLatestManualOT<T extends { overtime_hours: number | null; created_at: string }>(
+  rows: T[],
+  keyOf: (row: T) => string,
+): Map<string, T> {
+  const latest = new Map<string, T>();
+  rows.forEach((row) => {
+    const key = keyOf(row);
+    const existing = latest.get(key);
+    if (!existing || row.created_at > existing.created_at) latest.set(key, row);
+  });
+  return latest;
+}
+
+/**
+ * Sum approved overtime for a user/month: overtime_requests (modified_by
+ * uses requested_hours, which already reflects modifications) plus approved
+ * manual time entries, which carry their own overtime_hours and never get a
+ * separate overtime_requests row — same two sources Reports > Performance
+ * Summary's "Approved Overtime" adds together, so payroll's OT payment
+ * matches what that figure shows instead of silently excluding manual OT.
+ */
 export async function fetchApprovedOTHours(
   userId: string,
   year: number,
@@ -59,15 +88,28 @@ export async function fetchApprovedOTHours(
 ): Promise<number> {
   const start = new Date(year, month - 1, 1).toISOString().slice(0, 10);
   const end = new Date(year, month, 1).toISOString().slice(0, 10);
-  const { data, error } = await supabase
-    .from("overtime_requests")
-    .select("requested_hours, status, date")
-    .eq("user_id", userId)
-    .in("status", ["approved", "modified"])
-    .gte("date", start)
-    .lt("date", end);
-  if (error) throw error;
-  return (data || []).reduce((sum, r) => sum + Number(r.requested_hours || 0), 0);
+  const [{ data: otRows, error: otErr }, { data: manualRows, error: manualErr }] = await Promise.all([
+    supabase
+      .from("overtime_requests")
+      .select("requested_hours, status, date")
+      .eq("user_id", userId)
+      .in("status", ["approved", "modified"])
+      .gte("date", start)
+      .lt("date", end),
+    supabase
+      .from("manual_time_requests")
+      .select("overtime_hours, status, date, created_at")
+      .eq("user_id", userId)
+      .eq("status", "approved")
+      .gte("date", start)
+      .lt("date", end),
+  ]);
+  if (otErr) throw otErr;
+  if (manualErr) throw manualErr;
+  const otHours = (otRows || []).reduce((sum, r) => sum + Number(r.requested_hours || 0), 0);
+  const latestManual = dedupeLatestManualOT(manualRows || [], (r) => r.date);
+  const manualHours = Array.from(latestManual.values()).reduce((sum, r) => sum + Number(r.overtime_hours || 0), 0);
+  return otHours + manualHours;
 }
 
 export async function fetchIncentivesTotal(

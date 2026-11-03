@@ -12,6 +12,7 @@ import { classifyDay, netRequiredHours, weekendDaysFor, type WorkSchedule } from
 import { evaluateArrival, type OfficeTime } from "@/lib/officeTime";
 import { mergeDailySessions, type AttendanceSession } from "@/lib/attendance";
 import { salaryBreakdown, perMinuteRate, computeFinalSalary } from "@/lib/payrollAdjustments";
+import { dedupeLatestManualOT } from "@/lib/payroll";
 
 type Schedule = WorkSchedule & OfficeTime & { company_wing?: string | null };
 
@@ -56,7 +57,7 @@ export const computeMonthlySalaryRows = async (
   const rangeEnd = format(new Date(ey, em, 0), "yyyy-MM-dd");
 
   const monthDates = sortedMonths.map((m) => `${m}-01`);
-  const [{ data: profiles }, { data: attRows }, { data: holidayRows }, { data: leaveRows }, { data: recoveryRows }, { data: loanActionRows }, { data: settlementRows }, { data: otRows }] = await Promise.all([
+  const [{ data: profiles }, { data: attRows }, { data: holidayRows }, { data: leaveRows }, { data: recoveryRows }, { data: loanActionRows }, { data: settlementRows }, { data: otRows }, { data: manualOtRows }] = await Promise.all([
     supabase.from("profiles").select("id, full_name, email, base_salary, office_start_time, late_grace_minutes, standard_daily_hours, unpaid_break_minutes, working_days, company_wing").in("id", targetIds),
     supabase.from("attendance_logs").select("id, user_id, date, clock_in, clock_out, break_minutes, late_minutes, penalty_minutes, penalty_reviewed").in("user_id", targetIds).gte("date", rangeStart).lte("date", rangeEnd),
     supabase.from("holidays").select("holiday_date, name, wing"),
@@ -64,10 +65,12 @@ export const computeMonthlySalaryRows = async (
     supabase.from("expense_recovery_actions").select("user_id, amount, action_type, month").in("user_id", targetIds).in("month", monthDates),
     supabase.from("personal_advance_actions").select("user_id, amount, action_type, month").in("user_id", targetIds).eq("action_type", "payroll_deduction").in("month", monthDates),
     supabase.from("payroll_settlements").select("user_id, month, net_hours_paid").in("user_id", targetIds).in("month", monthDates),
-    // OT Payment is based on approved overtime requests only (same "Approved
-    // Overtime" figure Reports > Performance History shows) - not actual
-    // worked overtime from attendance.
+    // OT Payment is based on approved overtime requests plus approved manual
+    // time entries (same two sources "Approved Overtime" on Reports >
+    // Performance History adds together) - not actual worked overtime from
+    // attendance.
     supabase.from("overtime_requests").select("user_id, date, requested_hours").in("user_id", targetIds).in("status", ["approved", "modified"]).gte("date", rangeStart).lte("date", rangeEnd),
+    supabase.from("manual_time_requests").select("user_id, date, overtime_hours, created_at").in("user_id", targetIds).eq("status", "approved").gte("date", rangeStart).lte("date", rangeEnd),
   ]);
 
   type ProfileRow = Schedule & { id: string; full_name: string | null; email: string | null; base_salary: number | null };
@@ -91,6 +94,14 @@ export const computeMonthlySalaryRows = async (
   ((otRows || []) as { user_id: string; date: string; requested_hours: number }[]).forEach((r) => {
     const key = `${r.user_id}|${r.date.slice(0, 7)}`;
     approvedOTMinutes.set(key, (approvedOTMinutes.get(key) || 0) + Math.round(Number(r.requested_hours || 0) * 60));
+  });
+  const latestManualOT = dedupeLatestManualOT(
+    (manualOtRows || []) as { user_id: string; date: string; overtime_hours: number; created_at: string }[],
+    (r) => `${r.user_id}|${r.date}`,
+  );
+  latestManualOT.forEach((r) => {
+    const key = `${r.user_id}|${r.date.slice(0, 7)}`;
+    approvedOTMinutes.set(key, (approvedOTMinutes.get(key) || 0) + Math.round(Number(r.overtime_hours || 0) * 60));
   });
 
   // Mirrors PayrollAdjustments.tsx's own fetchAll exactly (Due including the
