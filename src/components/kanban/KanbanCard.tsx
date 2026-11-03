@@ -41,11 +41,13 @@ export type Profile = {
   photo_url: string | null;
 };
 
-const PRIORITY_STYLES: Record<string, { bg: string; ring: string; label: string }> = {
-  low: { bg: "bg-slate-500/10 text-slate-600 dark:text-slate-300", ring: "ring-slate-400/30", label: "Low" },
-  medium: { bg: "bg-blue-500/10 text-blue-600 dark:text-blue-300", ring: "ring-blue-400/30", label: "Medium" },
-  high: { bg: "bg-orange-500/10 text-orange-600 dark:text-orange-300", ring: "ring-orange-400/40", label: "High" },
-  urgent: { bg: "bg-red-500/10 text-red-600 dark:text-red-300", ring: "ring-red-400/50", label: "Urgent" },
+// Flat, Trello-plain priority chips — a plain gray background for everything
+// but Urgent (which stays legible as a warning), no glow rings or gradients.
+const PRIORITY_STYLES: Record<string, { bg: string; label: string }> = {
+  low: { bg: "bg-muted text-muted-foreground", label: "Low" },
+  medium: { bg: "bg-muted text-muted-foreground", label: "Medium" },
+  high: { bg: "bg-muted text-muted-foreground", label: "High" },
+  urgent: { bg: "bg-red-100 text-red-700 dark:bg-red-950 dark:text-red-300", label: "Urgent" },
 };
 
 interface Props {
@@ -123,12 +125,9 @@ export function KanbanCard({
       }}
       className={cn(
         "group cursor-grab active:cursor-grabbing select-none text-left",
-        "bg-card/70 backdrop-blur-md border border-border/60 rounded-xl p-3",
-        "shadow-sm transition-all duration-200",
-        task.completed_at
-          ? "opacity-60 saturate-50 hover:opacity-90"
-          : "hover:shadow-md hover:border-primary/40 hover:-translate-y-0.5",
-        isOverlay && "rotate-2 scale-105 shadow-2xl ring-2 ring-primary/40 cursor-grabbing",
+        "bg-card border border-border rounded-lg p-2.5 shadow-sm transition-shadow",
+        task.completed_at ? "opacity-60 hover:opacity-90" : "hover:shadow-md",
+        isOverlay && "shadow-xl cursor-grabbing",
       )}
     >
       {task.labels && task.labels.length > 0 && (
@@ -145,13 +144,7 @@ export function KanbanCard({
         {task.ticket_key && (
           <span className="text-[10px] font-mono text-muted-foreground tracking-wide">{task.ticket_key}</span>
         )}
-        <span
-          className={cn(
-            "text-[10px] font-medium px-1.5 py-0.5 rounded-full ring-1",
-            priority.bg,
-            priority.ring,
-          )}
-        >
+        <span className={cn("text-[10px] font-medium px-1.5 py-0.5 rounded-full", priority.bg)}>
           {priority.label}
         </span>
         {!isOverlay && canManageCard && (onCopy || onMove || onToggleLabel || onArchive) && (

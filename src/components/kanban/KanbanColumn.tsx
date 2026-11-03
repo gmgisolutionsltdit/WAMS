@@ -49,13 +49,6 @@ interface Props {
   checklistCounts?: Record<string, { done: number; total: number }>;
 }
 
-const COLUMN_ACCENT: Record<string, string> = {
-  todo: "from-slate-500/30 to-slate-500/0",
-  in_progress: "from-blue-500/30 to-blue-500/0",
-  in_review: "from-purple-500/30 to-purple-500/0",
-  done: "from-emerald-500/30 to-emerald-500/0",
-};
-
 export function KanbanColumn({
   column,
   tasks,
@@ -98,8 +91,6 @@ export function KanbanColumn({
     transform: CSS.Transform.toString(transform),
     transition,
   };
-
-  const accent = COLUMN_ACCENT[column.status] || "from-primary/30 to-primary/0";
 
   const [editingName, setEditingName] = useState(false);
   const [nameDraft, setNameDraft] = useState(column.name);
@@ -194,22 +185,17 @@ export function KanbanColumn({
       ref={setNodeRef}
       style={style}
       className={cn(
-        "min-w-[300px] w-[300px] max-h-full flex flex-col rounded-2xl",
-        "bg-muted/30 backdrop-blur-sm border border-border/60",
-        "transition-all duration-200",
-        isOver && "ring-2 ring-primary/50 bg-primary/5 scale-[1.01]",
+        "min-w-[272px] w-[272px] max-h-full flex flex-col rounded-xl",
+        "bg-muted/60",
+        isOver && "ring-2 ring-primary/40",
         isDragging && "opacity-40",
       )}
     >
-      {/* Header with subtle accent — also the column's drag handle */}
+      {/* Plain header, no gradient/accent — also the column's drag handle */}
       <div
         {...attributes}
         {...(canDrag ? listeners : {})}
-        className={cn(
-          "relative rounded-t-2xl px-3 py-2.5 bg-gradient-to-b",
-          canDrag && "cursor-grab active:cursor-grabbing",
-          accent,
-        )}
+        className={cn("px-3 pt-2.5 pb-1.5", canDrag && "cursor-grab active:cursor-grabbing")}
       >
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-2 min-w-0 flex-1">
@@ -229,14 +215,14 @@ export function KanbanColumn({
               />
             ) : (
               <span
-                className={cn("font-semibold text-sm truncate", canRename && "cursor-text hover:bg-background/40 rounded px-1 -mx-1")}
+                className={cn("font-semibold text-sm truncate", canRename && "cursor-text hover:bg-black/5 rounded px-1 -mx-1")}
                 onClick={(e) => { if (canRename) { e.stopPropagation(); startEditingName(); } }}
                 onPointerDown={(e) => canRename && e.stopPropagation()}
               >
                 {column.name}
               </span>
             )}
-            <span className="text-xs px-1.5 py-0.5 rounded-md bg-background/60 text-muted-foreground font-medium shrink-0">
+            <span className="text-xs text-muted-foreground font-medium shrink-0">
               {tasks.length}
             </span>
           </div>
