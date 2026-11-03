@@ -13,7 +13,7 @@ import { toast } from "sonner";
 import { format } from "date-fns";
 import type { ReactNode } from "react";
 import { notifyManagersAndAdmins } from "@/lib/notifications";
-import { computeDailyTotals } from "@/lib/workSchedule";
+import { classifyDay, computeDailyTotals, weekendDaysFor } from "@/lib/workSchedule";
 import { DEFAULT_OFFICE_END, DEFAULT_OFFICE_START, humanMinutes, timeToMinutes } from "@/lib/officeTime";
 import { hmToHours, hmToMinutes, hoursToHM, minutesToHM } from "@/lib/time";
 import { HourMinuteInput } from "@/components/HourMinuteInput";
@@ -83,13 +83,19 @@ export const ManualTimeEntryDialog = ({ onSubmitted, trigger, initial, supersede
   const [saving, setSaving] = useState(false);
   const [form, setForm] = useState<FormState>({ ...defaultForm, ...initial });
   const [officeWindow, setOfficeWindow] = useState({ start: DEFAULT_OFFICE_START, end: DEFAULT_OFFICE_END });
+  // Weekend days (per this employee's own schedule) and the holiday
+  // calendar, so a manual entry on a non-working day can suggest the whole
+  // worked span as overtime — same rule Attendance/Reports/OT approval
+  // already use, instead of measuring it against a shift that never existed.
+  const [workingDays, setWorkingDays] = useState<number[] | null>(null);
+  const [holidayMap, setHolidayMap] = useState<Map<string, string>>(new Map());
 
   useEffect(() => {
     if (!user) return;
     (async () => {
       const { data } = await supabase
         .from("profiles")
-        .select("office_start_time, office_end_time, standard_daily_hours, unpaid_break_minutes")
+        .select("office_start_time, office_end_time, standard_daily_hours, unpaid_break_minutes, working_days, company_wing")
         .eq("id", user.id)
         .maybeSingle();
       if (data) {
@@ -97,6 +103,13 @@ export const ManualTimeEntryDialog = ({ onSubmitted, trigger, initial, supersede
           start: data.office_start_time?.slice(0, 5) || DEFAULT_OFFICE_START,
           end: data.office_end_time?.slice(0, 5) || DEFAULT_OFFICE_END,
         });
+        setWorkingDays((data.working_days as number[] | null) || null);
+        const { data: holidays } = await supabase.from("holidays").select("holiday_date, name, wing");
+        const map = new Map<string, string>();
+        (holidays || [])
+          .filter((h) => h.wing === null || h.wing === data.company_wing)
+          .forEach((h) => map.set(h.holiday_date, h.name));
+        setHolidayMap(map);
         // An edit prefill already carries the real figures for that day; the
         // schedule defaults would otherwise clobber them on mount.
         if (isEdit) return;
@@ -127,11 +140,14 @@ export const ManualTimeEntryDialog = ({ onSubmitted, trigger, initial, supersede
     const outT = new Date(`${form.date}T${form.clock_out}:00`);
     const breakMins = Math.max(0, parseFloat(form.break_minutes) || 0);
     const dueHours = Math.max(0, parseFloat(form.due_hours) || 0);
+    // A weekend or holiday has no shift to measure against — every worked
+    // hour is overtime, same rule Attendance/Reports/OT approval apply.
+    const nonWorking = classifyDay(form.date, holidayMap, weekendDaysFor({ working_days: workingDays })).nonWorking;
     const totals = computeDailyTotals({
       clockIn: inT,
       clockOut: outT,
       breakMinutes: breakMins,
-      schedule: dueHours > 0 ? { standard_daily_hours: dueHours } : null,
+      schedule: !nonWorking && dueHours > 0 ? { standard_daily_hours: dueHours } : null,
       // The break minutes typed here are the actual break taken, not an
       // estimate — a manual entry should never pad a short break up to the
       // scheduled hour and dock the employee for time they did work.
@@ -148,7 +164,7 @@ export const ManualTimeEntryDialog = ({ onSubmitted, trigger, initial, supersede
       autoOt: totals.overtimeHours,
       ot,
     };
-  }, [form]);
+  }, [form, holidayMap, workingDays]);
 
   const gmgiTime = Math.max(0, parseFloat(form.gmgi_time) || 0);
   const gmTime = Math.max(0, parseFloat(form.gm_time) || 0);
