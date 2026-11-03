@@ -22,6 +22,7 @@ import { BoardMenu } from "@/components/tasks/BoardMenu";
 import { TaskDatesPopover } from "@/components/tasks/TaskDatesPopover";
 import { TaskLabelsPopover } from "@/components/tasks/TaskLabelsPopover";
 import { MoveCardDialog } from "@/components/tasks/MoveCardDialog";
+import { CopyCardDialog } from "@/components/tasks/CopyCardDialog";
 import type { TaskLabel } from "@/lib/taskLabels";
 import { useBoardAssignableProfiles } from "@/hooks/useBoardAssignableProfiles";
 import {
@@ -513,43 +514,9 @@ const TaskBoard = () => {
     toast.success("Card archived");
   };
 
-  // Trello's card-menu "Copy card" — a fresh card in the same column, right
-  // below the original, with its own ticket number (not a clone of
-  // comments/checklist/attachments, same as Trello's own quick copy).
-  const copyTask = async (task: KanbanTask) => {
-    const colTasks = tasksByColumn[task.column_id || ""] || [];
-    const insertPos = task.position + 1;
-    // Shift the source's own later siblings down one to open up insertPos,
-    // same as inserting a brand-new card at a specific spot.
-    const toShift = colTasks.filter((t) => t.position >= insertPos);
-    if (toShift.length) {
-      const shiftResults = await Promise.all(
-        toShift.map((t) => supabase.from("tasks").update({ position: t.position + 1 }).eq("id", t.id)),
-      );
-      const shiftErr = shiftResults.find((r) => r.error);
-      if (shiftErr?.error) { toast.error(shiftErr.error.message); return; }
-    }
-    const ticketKey = `${project?.key}-${taskCounter + 1}`;
-    const { error } = await supabase.from("tasks").insert({
-      project_id: projectId!,
-      board_id: boardId,
-      column_id: task.column_id,
-      ticket_key: ticketKey,
-      title: `${task.title} (copy)`,
-      description: task.description,
-      status: task.status as Database["public"]["Enums"]["task_status"],
-      priority: task.priority as Database["public"]["Enums"]["task_priority"],
-      assignee_id: task.assignee_id,
-      due_date: task.due_date,
-      labels: task.labels,
-      reporter_id: user!.id,
-      position: insertPos,
-    });
-    if (error) { toast.error(error.message); return; }
-    setTaskCounter((c) => c + 1);
-    toast.success("Card copied");
-    fetchAll();
-  };
+  // Opens the Trello-style "Copy card" dialog (Name, Keep labels, Board →
+  // List → Position); the dialog itself performs the insert once confirmed.
+  const [copyDialogTask, setCopyDialogTask] = useState<KanbanTask | null>(null);
 
   // Opens the Trello-style "Move card" dialog (Board → List → Position);
   // the dialog itself performs the update once the user confirms.
@@ -752,7 +719,7 @@ const TaskBoard = () => {
                   onRenameColumn={renameColumn}
                   onToggleComplete={toggleComplete}
                   onArchiveTask={archiveTask}
-                  onCopyTask={copyTask}
+                  onCopyTask={setCopyDialogTask}
                   onMoveTask={setMoveDialogTask}
                   boardId={boardId || undefined}
                   boardLabels={boardLabels}
@@ -1019,13 +986,22 @@ const TaskBoard = () => {
       </Dialog>
 
       {projectId && boardId && (
-        <MoveCardDialog
-          task={moveDialogTask}
-          currentProjectId={projectId}
-          currentTaskBoardId={boardId}
-          onClose={() => setMoveDialogTask(null)}
-          onMoved={fetchAll}
-        />
+        <>
+          <MoveCardDialog
+            task={moveDialogTask}
+            currentProjectId={projectId}
+            currentTaskBoardId={boardId}
+            onClose={() => setMoveDialogTask(null)}
+            onMoved={fetchAll}
+          />
+          <CopyCardDialog
+            task={copyDialogTask}
+            currentProjectId={projectId}
+            currentTaskBoardId={boardId}
+            onClose={() => setCopyDialogTask(null)}
+            onCopied={fetchAll}
+          />
+        </>
       )}
     </div>
   );
