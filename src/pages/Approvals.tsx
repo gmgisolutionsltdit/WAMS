@@ -16,6 +16,7 @@ import { useRealtimeSubscription } from "@/hooks/useRealtimeSubscription";
 import { notifyEmployee } from "@/lib/notifications";
 import { applyOTFulfillment } from "@/lib/otFulfillment";
 import { humanMinutes } from "@/lib/officeTime";
+import { classifyDay, netRequiredHours, weekendDaysFor, type WorkSchedule } from "@/lib/workSchedule";
 import AttachmentThumbnails from "@/components/AttachmentThumbnails";
 
 /** RLS blocks a disallowed update/delete without an error — it just matches 0 rows,
@@ -52,6 +53,11 @@ const Approvals = () => {
   const [names, setNames] = useState<Record<string, string>>({});
   const [notes, setNotes] = useState<Record<string, string>>({});
   const [manualOT, setManualOT] = useState<Record<string, string>>({});
+  // Recomputed fresh here (not the stale overtime_hours the request was
+  // submitted with) so a pending request filed before a schedule/holiday
+  // correction still suggests the right figure — same rule classifyDay
+  // applies everywhere else (Attendance, Reports, OT approval).
+  const [manualSuggestedOT, setManualSuggestedOT] = useState<Record<string, number>>({});
 
   const [editOpen, setEditOpen] = useState(false);
   const [editReq, setEditReq] = useState<any>(null);
@@ -107,6 +113,32 @@ const Approvals = () => {
       const map: Record<string, string> = {};
       (profs || []).forEach((p: any) => { map[p.id] = p.full_name || p.email || "Unknown"; });
       setNames(map);
+    }
+
+    if ((manualReqs || []).length) {
+      const manualUserIds = Array.from(new Set((manualReqs || []).map((r: { user_id: string }) => r.user_id)));
+      const [{ data: schedules }, { data: holidays }] = await Promise.all([
+        supabase.from("profiles")
+          .select("id, working_days, company_wing, standard_daily_hours, unpaid_break_minutes")
+          .in("id", manualUserIds),
+        supabase.from("holidays").select("holiday_date, name, wing"),
+      ]);
+      type ScheduleRow = WorkSchedule & { id: string; company_wing: string | null };
+      const scheduleMap = new Map((schedules || []).map((s: ScheduleRow) => [s.id, s]));
+      const suggested: Record<string, number> = {};
+      (manualReqs || []).forEach((r: { id: string; user_id: string; date: string; total_hours: number }) => {
+        const schedule = scheduleMap.get(r.user_id);
+        const holidayMap = new Map<string, string>();
+        (holidays || [])
+          .filter((h: { wing: string | null }) => h.wing === null || h.wing === schedule?.company_wing)
+          .forEach((h: { holiday_date: string; name: string }) => holidayMap.set(h.holiday_date, h.name));
+        const nonWorking = classifyDay(r.date, holidayMap, weekendDaysFor(schedule)).nonWorking;
+        const total = Number(r.total_hours) || 0;
+        suggested[r.id] = nonWorking ? total : Math.max(0, total - netRequiredHours(schedule));
+      });
+      setManualSuggestedOT(suggested);
+    } else {
+      setManualSuggestedOT({});
     }
 
     const now = new Date();
@@ -496,7 +528,7 @@ const Approvals = () => {
                           type="number"
                           step="0.5"
                           min="0"
-                          placeholder={Number(req.overtime_hours).toFixed(2)}
+                          placeholder={(manualSuggestedOT[req.id] ?? Number(req.overtime_hours)).toFixed(2)}
                           value={manualOT[req.id] ?? ""}
                           onChange={(e) => setManualOT((m) => ({ ...m, [req.id]: e.target.value }))}
                           className="h-8 w-24 font-mono"
