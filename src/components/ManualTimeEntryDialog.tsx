@@ -13,7 +13,7 @@ import { toast } from "sonner";
 import { format } from "date-fns";
 import type { ReactNode } from "react";
 import { notifyManagersAndAdmins } from "@/lib/notifications";
-import { computeDailyTotals } from "@/lib/workSchedule";
+import { classifyDay, computeDailyTotals, weekendDaysFor } from "@/lib/workSchedule";
 import { DEFAULT_OFFICE_END, DEFAULT_OFFICE_START, humanMinutes, timeToMinutes } from "@/lib/officeTime";
 import { hmToHours, hmToMinutes, hoursToHM, minutesToHM } from "@/lib/time";
 import { HourMinuteInput } from "@/components/HourMinuteInput";
@@ -83,6 +83,12 @@ export const ManualTimeEntryDialog = ({ onSubmitted, trigger, initial, supersede
   const [saving, setSaving] = useState(false);
   const [form, setForm] = useState<FormState>({ ...defaultForm, ...initial });
   const [officeWindow, setOfficeWindow] = useState({ start: DEFAULT_OFFICE_START, end: DEFAULT_OFFICE_END });
+  // Weekend days (per this employee's own schedule) and the holiday
+  // calendar, so a manual entry on a non-working day can suggest the whole
+  // worked span as overtime — same rule Attendance/Reports/OT approval
+  // already use, instead of measuring it against a shift that never existed.
+  const [workingDays, setWorkingDays] = useState<number[] | null>(null);
+  const [holidayMap, setHolidayMap] = useState<Map<string, string>>(new Map());
 
   useEffect(() => {
     if (!user) return;
@@ -109,6 +115,29 @@ export const ManualTimeEntryDialog = ({ onSubmitted, trigger, initial, supersede
     })();
   }, [user]);
 
+  // Weekend/holiday classification must follow whichever employee this entry
+  // is actually for — an admin filing on someone else's behalf (Employee
+  // Email) needs *their* working days and holiday wing, not the admin's own,
+  // or the OT suggestion can be classified against the wrong schedule.
+  useEffect(() => {
+    if (!user) return;
+    const targetEmail = isAdmin ? form.employee_email.trim() : "";
+    const timer = setTimeout(async () => {
+      const { data } = targetEmail
+        ? await supabase.from("profiles").select("working_days, company_wing").eq("email", targetEmail).maybeSingle()
+        : await supabase.from("profiles").select("working_days, company_wing").eq("id", user.id).maybeSingle();
+      setWorkingDays((data?.working_days as number[] | null) || null);
+      const wing = data?.company_wing ?? null;
+      const { data: holidays } = await supabase.from("holidays").select("holiday_date, name, wing");
+      const map = new Map<string, string>();
+      (holidays || [])
+        .filter((h) => h.wing === null || h.wing === wing)
+        .forEach((h) => map.set(h.holiday_date, h.name));
+      setHolidayMap(map);
+    }, targetEmail ? 400 : 0);
+    return () => clearTimeout(timer);
+  }, [user, isAdmin, form.employee_email]);
+
   // Remaining office time is settled directly from this entry's clock-in and
   // clock-out — the portion of this employee's own office window (set on the
   // Employees page) that this manual entry does not cover.
@@ -127,6 +156,9 @@ export const ManualTimeEntryDialog = ({ onSubmitted, trigger, initial, supersede
     const outT = new Date(`${form.date}T${form.clock_out}:00`);
     const breakMins = Math.max(0, parseFloat(form.break_minutes) || 0);
     const dueHours = Math.max(0, parseFloat(form.due_hours) || 0);
+    // A weekend or holiday has no shift to measure against — every worked
+    // hour is overtime, same rule Attendance/Reports/OT approval apply.
+    const nonWorking = classifyDay(form.date, holidayMap, weekendDaysFor({ working_days: workingDays })).nonWorking;
     const totals = computeDailyTotals({
       clockIn: inT,
       clockOut: outT,
@@ -137,18 +169,24 @@ export const ManualTimeEntryDialog = ({ onSubmitted, trigger, initial, supersede
       // scheduled hour and dock the employee for time they did work.
       useActualBreak: true,
     });
+    // On a weekend/holiday there's no shift to beat, so the net worked hours
+    // count as overtime in full — computeDailyTotals' `required` still
+    // assumes a schedule even with no `standard_daily_hours` set (it floors
+    // at the 8h/60m default rather than treating 0 as "no shift"), so this
+    // is applied here instead of trying to coax a zero out of it.
+    const autoOt = nonWorking ? totals.totalHours : totals.overtimeHours;
     const ot = form.overtime_hours.trim() !== ""
       ? parseFloat(form.overtime_hours) || 0
-      : totals.overtimeHours;
+      : autoOt;
     return {
       inT, outT,
       breakMins: totals.breakMinutes,
       dueHours,
       total: totals.totalHours,
-      autoOt: totals.overtimeHours,
+      autoOt,
       ot,
     };
-  }, [form]);
+  }, [form, holidayMap, workingDays]);
 
   const gmgiTime = Math.max(0, parseFloat(form.gmgi_time) || 0);
   const gmTime = Math.max(0, parseFloat(form.gm_time) || 0);
