@@ -65,7 +65,7 @@ export const PayrollAdjustments = ({ isAdmin }: { isAdmin: boolean }) => {
         // manual time entries (same two sources "Approved Overtime" on
         // Reports > Performance History adds together) - not actual worked
         // overtime from attendance.
-        supabase.from("overtime_requests").select("requested_hours")
+        supabase.from("overtime_requests").select("date, requested_hours")
           .eq("user_id", targetUserId).in("status", ["approved", "modified"]).gte("date", monthStartISO).lte("date", monthEndISO),
         supabase.from("manual_time_requests").select("date, overtime_hours, created_at")
           .eq("user_id", targetUserId).eq("status", "approved").gte("date", monthStartISO).lte("date", monthEndISO),
@@ -93,6 +93,12 @@ export const PayrollAdjustments = ({ isAdmin }: { isAdmin: boolean }) => {
         const weekend = weekendDaysFor(sched);
         const days = mergeDailySessions((attRows || []) as AttendanceSession[]);
         let dueMinutesWithPenalty = 0;
+        // Same gate Reports > Performance Summary applies: an approved
+        // request/correction only counts toward OT Payment if that date also
+        // has matching actual overtime — otherwise a stray or superseded
+        // approval (e.g. for a date with no real attendance session) would
+        // inflate what gets paid.
+        const otActualDates = new Set<string>();
         days.forEach((day) => {
           const dayKind = classifyDay(day.date, holidayMap, weekend);
           const onLeave = leaveSet.has(day.date);
@@ -113,14 +119,19 @@ export const PayrollAdjustments = ({ isAdmin }: { isAdmin: boolean }) => {
           if (!nonWorking && closed && worked < requiredWithPenalty) {
             dueMinutesWithPenalty += Math.round((requiredWithPenalty - worked) * 60);
           }
+
+          if (nonWorking && !onLeave && worked > 0) otActualDates.add(day.date);
+          else if (!nonWorking && closed && worked > requiredWithPenalty) otActualDates.add(day.date);
         });
         const latestManualOT = dedupeLatestManualOT(
           (manualOtRows || []) as { date: string; overtime_hours: number; created_at: string }[],
           (r) => r.date,
         );
-        const approvedOTMinutes = ((otRows || []) as { requested_hours: number }[])
+        const approvedOTMinutes = ((otRows || []) as { date: string; requested_hours: number }[])
+          .filter((r) => otActualDates.has(r.date))
           .reduce((sum, r) => sum + Math.round(Number(r.requested_hours || 0) * 60), 0)
           + Array.from(latestManualOT.values())
+            .filter((r) => otActualDates.has(r.date))
             .reduce((sum, r) => sum + Math.round(Number(r.overtime_hours || 0) * 60), 0);
         setReportTotals({ approvedOTMinutes, dueMinutes: dueMinutesWithPenalty });
       } else {

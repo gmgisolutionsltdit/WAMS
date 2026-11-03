@@ -90,23 +90,14 @@ export const computeMonthlySalaryRows = async (
   const totals = new Map<string, { dueMinutes: number }>();
   targetIds.forEach((id) => sortedMonths.forEach((m) => totals.set(`${id}|${m}`, { dueMinutes: 0 })));
 
-  const approvedOTMinutes = new Map<string, number>();
-  ((otRows || []) as { user_id: string; date: string; requested_hours: number }[]).forEach((r) => {
-    const key = `${r.user_id}|${r.date.slice(0, 7)}`;
-    approvedOTMinutes.set(key, (approvedOTMinutes.get(key) || 0) + Math.round(Number(r.requested_hours || 0) * 60));
-  });
-  const latestManualOT = dedupeLatestManualOT(
-    (manualOtRows || []) as { user_id: string; date: string; overtime_hours: number; created_at: string }[],
-    (r) => `${r.user_id}|${r.date}`,
-  );
-  latestManualOT.forEach((r) => {
-    const key = `${r.user_id}|${r.date.slice(0, 7)}`;
-    approvedOTMinutes.set(key, (approvedOTMinutes.get(key) || 0) + Math.round(Number(r.overtime_hours || 0) * 60));
-  });
-
   // Mirrors PayrollAdjustments.tsx's own fetchAll exactly (Due including the
   // late-arrival penalty), just grouped by month instead of computed for one
-  // fixed month at a time.
+  // fixed month at a time. Also builds otActualDateKeys — same gate Reports >
+  // Performance Summary applies before counting a day's approved OT: an
+  // approved request/correction with no matching actual overtime that day
+  // (e.g. a stray approval left over from a correction, or one for a date
+  // with no real attendance session) must not inflate what gets paid.
+  const otActualDateKeys = new Set<string>(); // `${user_id}|${date}`
   const days = mergeDailySessions((attRows || []) as AttendanceSession[]);
   days.forEach((day) => {
     const userId = day.userId as string;
@@ -135,6 +126,25 @@ export const computeMonthlySalaryRows = async (
     if (!nonWorking && closed && worked < requiredWithPenalty) {
       t.dueMinutes += Math.round((requiredWithPenalty - worked) * 60);
     }
+
+    if (nonWorking && !onLeave && worked > 0) otActualDateKeys.add(`${userId}|${day.date}`);
+    else if (!nonWorking && closed && worked > requiredWithPenalty) otActualDateKeys.add(`${userId}|${day.date}`);
+  });
+
+  const approvedOTMinutes = new Map<string, number>();
+  ((otRows || []) as { user_id: string; date: string; requested_hours: number }[]).forEach((r) => {
+    if (!otActualDateKeys.has(`${r.user_id}|${r.date}`)) return;
+    const key = `${r.user_id}|${r.date.slice(0, 7)}`;
+    approvedOTMinutes.set(key, (approvedOTMinutes.get(key) || 0) + Math.round(Number(r.requested_hours || 0) * 60));
+  });
+  const latestManualOT = dedupeLatestManualOT(
+    (manualOtRows || []) as { user_id: string; date: string; overtime_hours: number; created_at: string }[],
+    (r) => `${r.user_id}|${r.date}`,
+  );
+  latestManualOT.forEach((r) => {
+    if (!otActualDateKeys.has(`${r.user_id}|${r.date}`)) return;
+    const key = `${r.user_id}|${r.date.slice(0, 7)}`;
+    approvedOTMinutes.set(key, (approvedOTMinutes.get(key) || 0) + Math.round(Number(r.overtime_hours || 0) * 60));
   });
 
   const recoveryTotals = new Map<string, number>();
