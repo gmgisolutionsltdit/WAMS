@@ -95,7 +95,7 @@ export const ManualTimeEntryDialog = ({ onSubmitted, trigger, initial, supersede
     (async () => {
       const { data } = await supabase
         .from("profiles")
-        .select("office_start_time, office_end_time, standard_daily_hours, unpaid_break_minutes, working_days, company_wing")
+        .select("office_start_time, office_end_time, standard_daily_hours, unpaid_break_minutes")
         .eq("id", user.id)
         .maybeSingle();
       if (data) {
@@ -103,13 +103,6 @@ export const ManualTimeEntryDialog = ({ onSubmitted, trigger, initial, supersede
           start: data.office_start_time?.slice(0, 5) || DEFAULT_OFFICE_START,
           end: data.office_end_time?.slice(0, 5) || DEFAULT_OFFICE_END,
         });
-        setWorkingDays((data.working_days as number[] | null) || null);
-        const { data: holidays } = await supabase.from("holidays").select("holiday_date, name, wing");
-        const map = new Map<string, string>();
-        (holidays || [])
-          .filter((h) => h.wing === null || h.wing === data.company_wing)
-          .forEach((h) => map.set(h.holiday_date, h.name));
-        setHolidayMap(map);
         // An edit prefill already carries the real figures for that day; the
         // schedule defaults would otherwise clobber them on mount.
         if (isEdit) return;
@@ -121,6 +114,29 @@ export const ManualTimeEntryDialog = ({ onSubmitted, trigger, initial, supersede
       }
     })();
   }, [user]);
+
+  // Weekend/holiday classification must follow whichever employee this entry
+  // is actually for — an admin filing on someone else's behalf (Employee
+  // Email) needs *their* working days and holiday wing, not the admin's own,
+  // or the OT suggestion can be classified against the wrong schedule.
+  useEffect(() => {
+    if (!user) return;
+    const targetEmail = isAdmin ? form.employee_email.trim() : "";
+    const timer = setTimeout(async () => {
+      const { data } = targetEmail
+        ? await supabase.from("profiles").select("working_days, company_wing").eq("email", targetEmail).maybeSingle()
+        : await supabase.from("profiles").select("working_days, company_wing").eq("id", user.id).maybeSingle();
+      setWorkingDays((data?.working_days as number[] | null) || null);
+      const wing = data?.company_wing ?? null;
+      const { data: holidays } = await supabase.from("holidays").select("holiday_date, name, wing");
+      const map = new Map<string, string>();
+      (holidays || [])
+        .filter((h) => h.wing === null || h.wing === wing)
+        .forEach((h) => map.set(h.holiday_date, h.name));
+      setHolidayMap(map);
+    }, targetEmail ? 400 : 0);
+    return () => clearTimeout(timer);
+  }, [user, isAdmin, form.employee_email]);
 
   // Remaining office time is settled directly from this entry's clock-in and
   // clock-out — the portion of this employee's own office window (set on the
@@ -147,21 +163,27 @@ export const ManualTimeEntryDialog = ({ onSubmitted, trigger, initial, supersede
       clockIn: inT,
       clockOut: outT,
       breakMinutes: breakMins,
-      schedule: !nonWorking && dueHours > 0 ? { standard_daily_hours: dueHours } : null,
+      schedule: dueHours > 0 ? { standard_daily_hours: dueHours } : null,
       // The break minutes typed here are the actual break taken, not an
       // estimate — a manual entry should never pad a short break up to the
       // scheduled hour and dock the employee for time they did work.
       useActualBreak: true,
     });
+    // On a weekend/holiday there's no shift to beat, so the net worked hours
+    // count as overtime in full — computeDailyTotals' `required` still
+    // assumes a schedule even with no `standard_daily_hours` set (it floors
+    // at the 8h/60m default rather than treating 0 as "no shift"), so this
+    // is applied here instead of trying to coax a zero out of it.
+    const autoOt = nonWorking ? totals.totalHours : totals.overtimeHours;
     const ot = form.overtime_hours.trim() !== ""
       ? parseFloat(form.overtime_hours) || 0
-      : totals.overtimeHours;
+      : autoOt;
     return {
       inT, outT,
       breakMins: totals.breakMinutes,
       dueHours,
       total: totals.totalHours,
-      autoOt: totals.overtimeHours,
+      autoOt,
       ot,
     };
   }, [form, holidayMap, workingDays]);
