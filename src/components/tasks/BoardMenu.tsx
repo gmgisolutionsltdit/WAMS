@@ -2,17 +2,19 @@ import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { toast } from "sonner";
 import {
-  MoreHorizontal, X, UserPlus, Info, Lock, Star, Archive, ArchiveRestore, Loader2,
+  MoreHorizontal, X, UserPlus, Info, Lock, Star, Archive, ArchiveRestore, Loader2, ChevronLeft,
 } from "lucide-react";
 import { isBoardStarred, toggleStarredBoard } from "@/lib/boardPrefs";
 import { cn } from "@/lib/utils";
 
 type ArchivedTask = { id: string; ticket_key: string | null; title: string };
+type ArchivedColumn = { id: string; name: string };
 
 type Visibility = "private" | "workspace" | "public";
 
@@ -31,13 +33,15 @@ type Project = { id: string; description: string | null; visibility: Visibility 
 // items (Power-Ups, Custom Fields, Stickers, templates) and ones with no
 // WAMS equivalent (per-card archive, board-level Watch, Copy board,
 // email-to-board, abuse reports) are left out rather than shown unwired.
-export const BoardMenu = ({ project, canEdit, onOpenMembers, onProjectUpdated, onTaskRestored }: {
+export const BoardMenu = ({ project, canEdit, onOpenMembers, onProjectUpdated, onTaskRestored, onColumnRestored }: {
   project: Project;
   canEdit: boolean;
   onOpenMembers: () => void;
   onProjectUpdated: (patch: Partial<Project>) => void;
   // Called after an archived card is restored, so the board can refetch it.
   onTaskRestored?: () => void;
+  // Called after an archived list is restored or deleted, so it reappears.
+  onColumnRestored?: () => void;
 }) => {
   const navigate = useNavigate();
   const [open, setOpen] = useState(false);
@@ -46,21 +50,39 @@ export const BoardMenu = ({ project, canEdit, onOpenMembers, onProjectUpdated, o
   const [starred, setStarred] = useState(() => isBoardStarred(project.id));
   const [saving, setSaving] = useState(false);
   const [archivedTasks, setArchivedTasks] = useState<ArchivedTask[]>([]);
+  const [archivedColumns, setArchivedColumns] = useState<ArchivedColumn[]>([]);
   const [archivedLoading, setArchivedLoading] = useState(false);
+  const [archivedTab, setArchivedTab] = useState<"cards" | "lists">("cards");
+  const [archivedSearch, setArchivedSearch] = useState("");
   const [restoringId, setRestoringId] = useState<string | null>(null);
 
   const close = () => { setOpen(false); setPanel("menu"); };
 
   const openArchived = async () => {
     setPanel("archived");
+    setArchivedTab("cards");
+    setArchivedSearch("");
     setArchivedLoading(true);
-    const { data } = await supabase
+    const { data: tasks } = await supabase
       .from("tasks")
       .select("id, ticket_key, title")
       .eq("project_id", project.id)
       .eq("archived", true)
       .order("updated_at", { ascending: false });
-    setArchivedTasks((data || []) as ArchivedTask[]);
+    setArchivedTasks((tasks || []) as ArchivedTask[]);
+
+    const { data: board } = await supabase.from("task_boards").select("id").eq("project_id", project.id).maybeSingle();
+    if (board) {
+      const { data: cols } = await supabase
+        .from("task_columns")
+        .select("id, name")
+        .eq("board_id", board.id)
+        .eq("archived", true)
+        .order("position");
+      setArchivedColumns((cols || []) as ArchivedColumn[]);
+    } else {
+      setArchivedColumns([]);
+    }
     setArchivedLoading(false);
   };
 
@@ -76,6 +98,38 @@ export const BoardMenu = ({ project, canEdit, onOpenMembers, onProjectUpdated, o
     setArchivedTasks((prev) => prev.filter((t) => t.id !== taskId));
     onTaskRestored?.();
     toast.success("Card restored");
+  };
+
+  const deleteTask = async (taskId: string) => {
+    if (!confirm("Delete this card permanently?")) return;
+    setRestoringId(taskId);
+    const { error } = await supabase.from("tasks").delete().eq("id", taskId);
+    setRestoringId(null);
+    if (error) { toast.error(error.message); return; }
+    setArchivedTasks((prev) => prev.filter((t) => t.id !== taskId));
+    toast.success("Card deleted");
+  };
+
+  const restoreColumn = async (colId: string) => {
+    setRestoringId(colId);
+    const { data, error } = await supabase.from("task_columns").update({ archived: false }).eq("id", colId).select("id");
+    setRestoringId(null);
+    if (error) { toast.error(error.message); return; }
+    if (!data || data.length === 0) { toast.error("You don't have permission to restore this list."); return; }
+    setArchivedColumns((prev) => prev.filter((c) => c.id !== colId));
+    onColumnRestored?.();
+    toast.success("List restored");
+  };
+
+  const deleteColumnPermanently = async (colId: string) => {
+    if (!confirm("Delete this list permanently? Any cards left in it will be unassigned from a list.")) return;
+    setRestoringId(colId);
+    const { error } = await supabase.from("task_columns").delete().eq("id", colId);
+    setRestoringId(null);
+    if (error) { toast.error(error.message); return; }
+    setArchivedColumns((prev) => prev.filter((c) => c.id !== colId));
+    onColumnRestored?.();
+    toast.success("List deleted");
   };
 
   const saveDescription = async () => {
@@ -116,7 +170,16 @@ export const BoardMenu = ({ project, canEdit, onOpenMembers, onProjectUpdated, o
       </PopoverTrigger>
       <PopoverContent align="end" className="w-72 p-0">
         <div className="flex items-center justify-between px-3 py-2 border-b">
-          <span className="text-sm font-medium">Menu</span>
+          <div className="flex items-center gap-1">
+            {panel !== "menu" && (
+              <Button variant="ghost" size="icon" className="h-6 w-6" onClick={() => setPanel("menu")} aria-label="Back">
+                <ChevronLeft className="h-4 w-4" />
+              </Button>
+            )}
+            <span className="text-sm font-medium">
+              {panel === "archived" ? "Archived items" : panel === "about" ? "About" : panel === "visibility" ? "Visibility" : "Menu"}
+            </span>
+          </div>
           <Button variant="ghost" size="icon" className="h-6 w-6" onClick={close} aria-label="Close">
             <X className="h-4 w-4" />
           </Button>
@@ -164,7 +227,7 @@ export const BoardMenu = ({ project, canEdit, onOpenMembers, onProjectUpdated, o
               onClick={openArchived}
               className="w-full flex items-center gap-2 px-3 py-2 text-sm hover:bg-accent text-left"
             >
-              <ArchiveRestore className="h-4 w-4 text-muted-foreground" /> Archived cards
+              <ArchiveRestore className="h-4 w-4 text-muted-foreground" /> Archived items
             </button>
             {canEdit && (
               <>
@@ -199,35 +262,114 @@ export const BoardMenu = ({ project, canEdit, onOpenMembers, onProjectUpdated, o
         )}
 
         {panel === "archived" && (
-          <div className="p-2">
+          <div className="p-2 space-y-2">
+            <div className="flex gap-1.5">
+              <Input
+                placeholder="Search"
+                value={archivedSearch}
+                onChange={(e) => setArchivedSearch(e.target.value)}
+                className="h-8 flex-1"
+              />
+              <div className="flex rounded-md border overflow-hidden shrink-0">
+                <button
+                  type="button"
+                  onClick={() => setArchivedTab("cards")}
+                  className={cn("px-2.5 text-xs font-medium", archivedTab === "cards" ? "bg-accent" : "hover:bg-accent/50")}
+                >
+                  Cards
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setArchivedTab("lists")}
+                  className={cn("px-2.5 text-xs font-medium border-l", archivedTab === "lists" ? "bg-accent" : "hover:bg-accent/50")}
+                >
+                  Lists
+                </button>
+              </div>
+            </div>
+
             {archivedLoading ? (
               <div className="flex items-center justify-center py-6 text-sm text-muted-foreground">
                 <Loader2 className="h-4 w-4 mr-2 animate-spin" /> Loading…
               </div>
-            ) : archivedTasks.length === 0 ? (
-              <p className="px-1 py-4 text-sm text-muted-foreground text-center">No archived cards</p>
-            ) : (
-              <div className="max-h-64 overflow-y-auto space-y-1">
-                {archivedTasks.map((t) => (
-                  <div key={t.id} className="flex items-center gap-2 px-1 py-1.5 rounded hover:bg-accent">
-                    <span className="flex-1 min-w-0 text-sm truncate">
-                      {t.ticket_key && <span className="text-xs font-mono text-muted-foreground mr-1.5">{t.ticket_key}</span>}
-                      {t.title}
-                    </span>
-                    <Button
-                      size="sm"
-                      variant="ghost"
-                      className="h-7 shrink-0"
-                      disabled={restoringId === t.id}
-                      onClick={() => restoreTask(t.id)}
-                    >
-                      Restore
-                    </Button>
+            ) : archivedTab === "cards" ? (
+              (() => {
+                const filtered = archivedTasks.filter((t) =>
+                  t.title.toLowerCase().includes(archivedSearch.trim().toLowerCase()),
+                );
+                if (filtered.length === 0) {
+                  return <p className="px-1 py-4 text-sm text-muted-foreground text-center">No archived cards</p>;
+                }
+                return (
+                  <div className="max-h-64 overflow-y-auto space-y-2">
+                    {filtered.map((t) => (
+                      <div key={t.id} className="px-1 py-1.5 rounded hover:bg-accent">
+                        <p className="text-sm truncate">
+                          {t.ticket_key && <span className="text-xs font-mono text-muted-foreground mr-1.5">{t.ticket_key}</span>}
+                          {t.title}
+                        </p>
+                        <div className="flex items-center gap-2 mt-0.5 text-xs">
+                          <button
+                            type="button"
+                            disabled={restoringId === t.id}
+                            onClick={() => restoreTask(t.id)}
+                            className="text-primary hover:underline disabled:opacity-50"
+                          >
+                            Restore
+                          </button>
+                          <span className="text-muted-foreground">·</span>
+                          <button
+                            type="button"
+                            disabled={restoringId === t.id}
+                            onClick={() => deleteTask(t.id)}
+                            className="text-destructive hover:underline disabled:opacity-50"
+                          >
+                            Delete
+                          </button>
+                        </div>
+                      </div>
+                    ))}
                   </div>
-                ))}
-              </div>
+                );
+              })()
+            ) : (
+              (() => {
+                const filtered = archivedColumns.filter((c) =>
+                  c.name.toLowerCase().includes(archivedSearch.trim().toLowerCase()),
+                );
+                if (filtered.length === 0) {
+                  return <p className="px-1 py-4 text-sm text-muted-foreground text-center">No archived lists</p>;
+                }
+                return (
+                  <div className="max-h-64 overflow-y-auto space-y-2">
+                    {filtered.map((c) => (
+                      <div key={c.id} className="px-1 py-1.5 rounded hover:bg-accent">
+                        <p className="text-sm truncate">{c.name}</p>
+                        <div className="flex items-center gap-2 mt-0.5 text-xs">
+                          <button
+                            type="button"
+                            disabled={restoringId === c.id}
+                            onClick={() => restoreColumn(c.id)}
+                            className="text-primary hover:underline disabled:opacity-50"
+                          >
+                            Restore
+                          </button>
+                          <span className="text-muted-foreground">·</span>
+                          <button
+                            type="button"
+                            disabled={restoringId === c.id}
+                            onClick={() => deleteColumnPermanently(c.id)}
+                            className="text-destructive hover:underline disabled:opacity-50"
+                          >
+                            Delete
+                          </button>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                );
+              })()
             )}
-            <Button size="sm" variant="ghost" className="mt-1" onClick={() => setPanel("menu")}>Back</Button>
           </div>
         )}
 

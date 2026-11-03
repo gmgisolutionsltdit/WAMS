@@ -4,7 +4,7 @@ import { CSS } from "@dnd-kit/utilities";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
-import { Plus, MoreVertical, Trash2, X } from "lucide-react";
+import { Plus, MoreVertical, Trash2, X, Archive } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { KanbanCard, KanbanTask, Profile } from "./KanbanCard";
 import type { TaskLabel } from "@/lib/taskLabels";
@@ -29,6 +29,7 @@ interface Props {
   onQuickCreateTask: (columnId: string, title: string, atIndex?: number) => Promise<boolean>;
   onOpenTask: (task: KanbanTask) => void;
   onDeleteColumn?: (columnId: string) => void;
+  onArchiveColumn?: (columnId: string) => void;
   onRenameColumn?: (columnId: string, name: string) => void;
   onToggleComplete?: (task: KanbanTask) => void;
   onArchiveTask?: (task: KanbanTask) => void;
@@ -62,6 +63,7 @@ export function KanbanColumn({
   onQuickCreateTask,
   onOpenTask,
   onDeleteColumn,
+  onArchiveColumn,
   onRenameColumn,
   onToggleComplete,
   onArchiveTask,
@@ -238,7 +240,7 @@ export function KanbanColumn({
               {tasks.length}
             </span>
           </div>
-          {canDelete && onDeleteColumn && (
+          {canDelete && (onDeleteColumn || onArchiveColumn) && (
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
                 <Button size="icon" variant="ghost" className="h-7 w-7 shrink-0" onPointerDown={(e) => e.stopPropagation()}>
@@ -246,12 +248,19 @@ export function KanbanColumn({
                 </Button>
               </DropdownMenuTrigger>
               <DropdownMenuContent align="end">
-                <DropdownMenuItem
-                  onClick={() => onDeleteColumn(column.id)}
-                  className="text-destructive"
-                >
-                  <Trash2 className="h-3.5 w-3.5 mr-2" /> Delete column
-                </DropdownMenuItem>
+                {onArchiveColumn && (
+                  <DropdownMenuItem onClick={() => onArchiveColumn(column.id)}>
+                    <Archive className="h-3.5 w-3.5 mr-2" /> Archive this list
+                  </DropdownMenuItem>
+                )}
+                {onDeleteColumn && (
+                  <DropdownMenuItem
+                    onClick={() => onDeleteColumn(column.id)}
+                    className="text-destructive"
+                  >
+                    <Trash2 className="h-3.5 w-3.5 mr-2" /> Delete column
+                  </DropdownMenuItem>
+                )}
               </DropdownMenuContent>
             </DropdownMenu>
           )}

@@ -152,7 +152,7 @@ const TaskBoard = () => {
       setBoardId(bId);
 
       const [{ data: cols }, { data: tks }, { count: totalCount }] = await Promise.all([
-        supabase.from("task_columns").select("*").eq("board_id", bId).order("position"),
+        supabase.from("task_columns").select("*").eq("board_id", bId).eq("archived", false).order("position"),
         supabase.from("tasks").select("*").eq("project_id", projectId).eq("archived", false).order("position"),
         // Ticket keys must stay unique even once a task is archived (it keeps
         // its key), so count all tasks here, not just the active ones above.
@@ -547,6 +547,16 @@ const TaskBoard = () => {
     toast.success("Column deleted");
   };
 
+  // Trello's "Archive this list" — hides the list (and its cards stay put,
+  // just no longer shown on the board) without deleting anything, same
+  // soft-archive approach as archiveTask above.
+  const archiveColumn = async (colId: string) => {
+    setColumns((prev) => prev.filter((c) => c.id !== colId));
+    const { error } = await supabase.from("task_columns").update({ archived: true }).eq("id", colId);
+    if (error) { toast.error(error.message); fetchAll(); return; }
+    toast.success("List archived");
+  };
+
   const renameColumn = async (colId: string, name: string) => {
     const trimmed = name.trim();
     if (!trimmed) return;
@@ -675,6 +685,7 @@ const TaskBoard = () => {
             onOpenMembers={() => setMembersOpen(true)}
             onProjectUpdated={(patch) => setProject((p) => ({ ...p, ...patch }))}
             onTaskRestored={fetchAll}
+            onColumnRestored={fetchAll}
           />
         </div>
       </div>
@@ -716,6 +727,7 @@ const TaskBoard = () => {
                   onQuickCreateTask={quickCreateTask}
                   onOpenTask={openTask}
                   onDeleteColumn={deleteColumn}
+                  onArchiveColumn={archiveColumn}
                   onRenameColumn={renameColumn}
                   onToggleComplete={toggleComplete}
                   onArchiveTask={archiveTask}

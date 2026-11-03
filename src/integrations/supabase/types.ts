@@ -2273,6 +2273,7 @@ export type Database = {
       }
       task_columns: {
         Row: {
+          archived: boolean
           board_id: string
           created_at: string
           id: string
@@ -2282,6 +2283,7 @@ export type Database = {
           wip_limit: number | null
         }
         Insert: {
+          archived?: boolean
           board_id: string
           created_at?: string
           id?: string
@@ -2291,6 +2293,7 @@ export type Database = {
           wip_limit?: number | null
         }
         Update: {
+          archived?: boolean
           board_id?: string
           created_at?: string
           id?: string
