@@ -1,7 +1,18 @@
+import { useState } from "react";
 import { useSortable } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
-import { Calendar as CalendarIcon, AlertTriangle, MessageSquare, CheckSquare, CheckCircle2, Circle, Archive } from "lucide-react";
+import {
+  Calendar as CalendarIcon, AlertTriangle, MessageSquare, CheckSquare, CheckCircle2, Circle, Archive,
+  MoreHorizontal, Copy, ArrowRightLeft, Sparkles, Tag,
+} from "lucide-react";
+import {
+  DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger,
+  DropdownMenuSub, DropdownMenuSubTrigger, DropdownMenuSubContent, DropdownMenuSeparator,
+} from "@/components/ui/dropdown-menu";
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Button } from "@/components/ui/button";
+import { LABEL_COLORS, labelClassName } from "@/lib/taskLabels";
 import { cn } from "@/lib/utils";
 
 export type KanbanTask = {
@@ -20,6 +31,7 @@ export type KanbanTask = {
   position: number;
   completed_at?: string | null;
   archived?: boolean;
+  labels?: string[] | null;
 };
 
 export type Profile = {
@@ -48,6 +60,13 @@ interface Props {
   commentCount?: number;
   checklistTotal?: number;
   checklistDone?: number;
+  /** Card-menu actions (Trello's hover ⋯ menu) — omitted entirely when the
+   * viewer can't edit the board, same gating as archive/complete. */
+  onCopy?: () => void;
+  otherColumns?: { id: string; name: string }[];
+  onMove?: (columnId: string) => void;
+  onUpdateLabels?: (labels: string[]) => void;
+  canManageCard?: boolean;
 }
 
 export function KanbanCard({
@@ -62,7 +81,13 @@ export function KanbanCard({
   commentCount = 0,
   checklistTotal = 0,
   checklistDone = 0,
+  onCopy,
+  otherColumns = [],
+  onMove,
+  onUpdateLabels,
+  canManageCard = true,
 }: Props) {
+  const [labelsOpen, setLabelsOpen] = useState(false);
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
     id: task.id,
     data: { type: "task", task },
@@ -98,19 +123,77 @@ export function KanbanCard({
         isOverlay && "rotate-2 scale-105 shadow-2xl ring-2 ring-primary/40 cursor-grabbing",
       )}
     >
+      {task.labels && task.labels.length > 0 && (
+        <div className="flex gap-1 mb-1.5">
+          {task.labels.map((key) => (
+            <span key={key} className={cn("h-1.5 w-6 rounded-full", labelClassName(key))} />
+          ))}
+        </div>
+      )}
+
       <div className="flex items-center justify-between mb-1.5">
         {task.ticket_key && (
           <span className="text-[10px] font-mono text-muted-foreground tracking-wide">{task.ticket_key}</span>
         )}
         <span
           className={cn(
-            "ml-auto text-[10px] font-medium px-1.5 py-0.5 rounded-full ring-1",
+            "text-[10px] font-medium px-1.5 py-0.5 rounded-full ring-1",
             priority.bg,
             priority.ring,
           )}
         >
           {priority.label}
         </span>
+        {!isOverlay && canManageCard && (onCopy || onMove || onUpdateLabels || onArchive) && (
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <button
+                type="button"
+                onClick={(e) => e.stopPropagation()}
+                onPointerDown={(e) => e.stopPropagation()}
+                className="shrink-0 ml-1 p-0.5 rounded hover:bg-muted text-muted-foreground opacity-0 group-hover:opacity-100 focus-visible:opacity-100 transition-opacity"
+                aria-label="Card menu"
+              >
+                <MoreHorizontal className="h-3.5 w-3.5" />
+              </button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end" onClick={(e) => e.stopPropagation()} onPointerDown={(e) => e.stopPropagation()}>
+              {onCopy && (
+                <DropdownMenuItem onClick={onCopy}>
+                  <Copy className="h-3.5 w-3.5 mr-2" /> Copy card
+                </DropdownMenuItem>
+              )}
+              {onMove && (
+                <DropdownMenuSub>
+                  <DropdownMenuSubTrigger disabled={otherColumns.length === 0}>
+                    <ArrowRightLeft className="h-3.5 w-3.5 mr-2" /> Move
+                  </DropdownMenuSubTrigger>
+                  <DropdownMenuSubContent>
+                    {otherColumns.map((c) => (
+                      <DropdownMenuItem key={c.id} onClick={() => onMove(c.id)}>{c.name}</DropdownMenuItem>
+                    ))}
+                  </DropdownMenuSubContent>
+                </DropdownMenuSub>
+              )}
+              <DropdownMenuItem disabled>
+                <Sparkles className="h-3.5 w-3.5 mr-2" /> Mirror <span className="ml-auto text-[10px] text-muted-foreground">Coming soon</span>
+              </DropdownMenuItem>
+              {onUpdateLabels && (
+                <DropdownMenuItem onClick={() => setLabelsOpen(true)}>
+                  <Tag className="h-3.5 w-3.5 mr-2" /> Edit labels
+                </DropdownMenuItem>
+              )}
+              {onArchive && (
+                <>
+                  <DropdownMenuSeparator />
+                  <DropdownMenuItem onClick={onArchive} className="text-destructive focus:text-destructive">
+                    <Archive className="h-3.5 w-3.5 mr-2" /> Archive
+                  </DropdownMenuItem>
+                </>
+              )}
+            </DropdownMenuContent>
+          </DropdownMenu>
+        )}
       </div>
 
       <div className="flex items-start gap-1.5 mb-2">
@@ -201,6 +284,40 @@ export function KanbanCard({
           <div className="h-6 w-6 rounded-full border border-dashed border-muted-foreground/30" />
         )}
       </div>
+
+      {onUpdateLabels && (
+        <Dialog open={labelsOpen} onOpenChange={setLabelsOpen}>
+          <DialogContent className="max-w-xs" onClick={(e) => e.stopPropagation()} onPointerDown={(e) => e.stopPropagation()}>
+            <DialogHeader><DialogTitle className="text-sm">Labels</DialogTitle></DialogHeader>
+            <div className="space-y-1.5">
+              {LABEL_COLORS.map((c) => {
+                const active = (task.labels || []).includes(c.key);
+                return (
+                  <button
+                    key={c.key}
+                    type="button"
+                    onClick={() => {
+                      const next = active
+                        ? (task.labels || []).filter((l) => l !== c.key)
+                        : [...(task.labels || []), c.key];
+                      onUpdateLabels(next);
+                    }}
+                    className={cn(
+                      "w-full flex items-center gap-2 h-9 rounded-md px-3 text-sm text-white transition-opacity",
+                      c.className,
+                      !active && "opacity-60 hover:opacity-80",
+                    )}
+                  >
+                    <span className="flex-1 text-left">{c.name}</span>
+                    {active && <CheckCircle2 className="h-4 w-4" />}
+                  </button>
+                );
+              })}
+            </div>
+            <Button variant="outline" size="sm" onClick={() => setLabelsOpen(false)}>Done</Button>
+          </DialogContent>
+        </Dialog>
+      )}
     </div>
   );
 }

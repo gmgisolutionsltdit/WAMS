@@ -492,6 +492,49 @@ const TaskBoard = () => {
     toast.success("Card archived");
   };
 
+  // Trello's card-menu "Copy card" — a fresh card in the same column, right
+  // below the original, with its own ticket number (not a clone of
+  // comments/checklist/attachments, same as Trello's own quick copy).
+  const copyTask = async (task: KanbanTask) => {
+    const colTasks = tasksByColumn[task.column_id || ""] || [];
+    const insertPos = Math.max(-1, ...colTasks.map((t) => t.position)) + 1;
+    const ticketKey = `${project?.key}-${taskCounter + 1}`;
+    const { error } = await supabase.from("tasks").insert({
+      project_id: projectId!,
+      board_id: boardId,
+      column_id: task.column_id,
+      ticket_key: ticketKey,
+      title: `${task.title} (copy)`,
+      description: task.description,
+      status: task.status as Database["public"]["Enums"]["task_status"],
+      priority: task.priority as Database["public"]["Enums"]["task_priority"],
+      assignee_id: task.assignee_id,
+      due_date: task.due_date,
+      labels: task.labels,
+      reporter_id: user!.id,
+      position: insertPos,
+    });
+    if (error) { toast.error(error.message); return; }
+    setTaskCounter((c) => c + 1);
+    toast.success("Card copied");
+    fetchAll();
+  };
+
+  const moveTask = async (task: KanbanTask, columnId: string) => {
+    const col = columns.find((c) => c.id === columnId);
+    if (!col) return;
+    setTasks((prev) => prev.map((t) => (t.id === task.id ? { ...t, column_id: columnId, status: col.status } : t)));
+    const { error } = await supabase.from("tasks").update({ column_id: columnId, status: col.status as Database["public"]["Enums"]["task_status"] }).eq("id", task.id);
+    if (error) { toast.error(error.message); fetchAll(); return; }
+    toast.success(`Moved to ${col.name}`);
+  };
+
+  const updateTaskLabels = async (task: KanbanTask, labels: string[]) => {
+    setTasks((prev) => prev.map((t) => (t.id === task.id ? { ...t, labels } : t)));
+    const { error } = await supabase.from("tasks").update({ labels }).eq("id", task.id);
+    if (error) { toast.error(error.message); fetchAll(); }
+  };
+
   /* ---------- Column CRUD ---------- */
   const addColumn = async () => {
     if (!newColName.trim() || !boardId) return;
@@ -681,6 +724,7 @@ const TaskBoard = () => {
                 <KanbanColumn
                   key={col.id}
                   column={col}
+                  allColumns={columns}
                   tasks={tasksByColumn[col.id] || []}
                   profiles={profiles}
                   onQuickCreateTask={quickCreateTask}
@@ -689,6 +733,9 @@ const TaskBoard = () => {
                   onRenameColumn={renameColumn}
                   onToggleComplete={toggleComplete}
                   onArchiveTask={archiveTask}
+                  onCopyTask={copyTask}
+                  onMoveTask={moveTask}
+                  onUpdateTaskLabels={updateTaskLabels}
                   canDelete={isOwnerOrAdmin}
                   canDrag={canEditBoard}
                   canEditBoard={canEditBoard}
@@ -777,7 +824,7 @@ const TaskBoard = () => {
 
       {/* Task Detail Dialog */}
       <Dialog open={!!activeTask} onOpenChange={(o) => { if (!o) { setActiveTask(null); openTaskIdRef.current = null; } }}>
-        <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
+        <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto top-8 translate-y-0">
           {activeTask && (
             <>
               <DialogHeader>

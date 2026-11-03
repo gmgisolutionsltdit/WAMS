@@ -23,6 +23,7 @@ export type KanbanColumnData = {
 
 interface Props {
   column: KanbanColumnData;
+  allColumns: KanbanColumnData[];
   tasks: KanbanTask[];
   profiles: Profile[];
   onQuickCreateTask: (columnId: string, title: string, atIndex?: number) => Promise<boolean>;
@@ -31,6 +32,9 @@ interface Props {
   onRenameColumn?: (columnId: string, name: string) => void;
   onToggleComplete?: (task: KanbanTask) => void;
   onArchiveTask?: (task: KanbanTask) => void;
+  onCopyTask?: (task: KanbanTask) => void;
+  onMoveTask?: (task: KanbanTask, columnId: string) => void;
+  onUpdateTaskLabels?: (task: KanbanTask, labels: string[]) => void;
   canDelete?: boolean;
   canDrag?: boolean;
   // Board-level edit access (member/admin/workspace visibility). A task's
@@ -51,6 +55,7 @@ const COLUMN_ACCENT: Record<string, string> = {
 
 export function KanbanColumn({
   column,
+  allColumns,
   tasks,
   profiles,
   onQuickCreateTask,
@@ -59,6 +64,9 @@ export function KanbanColumn({
   onRenameColumn,
   onToggleComplete,
   onArchiveTask,
+  onCopyTask,
+  onMoveTask,
+  onUpdateTaskLabels,
   canDelete,
   canDrag = true,
   canEditBoard,
@@ -263,6 +271,11 @@ export function KanbanColumn({
                 canArchive={!!canEditBoard || t.assignee_id === currentUserId}
                 checklistTotal={checklistCounts?.[t.id]?.total || 0}
                 checklistDone={checklistCounts?.[t.id]?.done || 0}
+                canManageCard={!!canEditBoard || t.assignee_id === currentUserId}
+                onCopy={onCopyTask ? () => onCopyTask(t) : undefined}
+                otherColumns={allColumns.filter((c) => c.id !== column.id)}
+                onMove={onMoveTask ? (columnId) => onMoveTask(t, columnId) : undefined}
+                onUpdateLabels={onUpdateTaskLabels ? (labels) => onUpdateTaskLabels(t, labels) : undefined}
               />
             </div>
           ))}

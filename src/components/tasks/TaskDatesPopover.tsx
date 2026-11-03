@@ -7,10 +7,12 @@ import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { CalendarClock } from "lucide-react";
+import { cn } from "@/lib/utils";
 
 const RECURRING_OPTIONS = [
-  { value: "none", label: "Doesn't repeat" },
+  { value: "none", label: "Never" },
   { value: "daily", label: "Daily" },
+  { value: "weekdays", label: "Monday to Friday" },
   { value: "weekly", label: "Weekly" },
   { value: "monthly", label: "Monthly" },
 ];
@@ -18,11 +20,39 @@ const RECURRING_OPTIONS = [
 const REMINDER_OPTIONS = [
   { value: "none", label: "None" },
   { value: "at_time", label: "At time of due date" },
+  { value: "5_min_before", label: "5 minutes before" },
   { value: "10_min_before", label: "10 minutes before" },
+  { value: "15_min_before", label: "15 minutes before" },
   { value: "1_hour_before", label: "1 hour before" },
+  { value: "2_hours_before", label: "2 hours before" },
+  { value: "3_hours_before", label: "3 hours before" },
+  { value: "4_hours_before", label: "4 hours before" },
+  { value: "5_hours_before", label: "5 hours before" },
   { value: "1_day_before", label: "1 day before" },
   { value: "2_days_before", label: "2 days before" },
+  { value: "1_week_before", label: "1 week before" },
+  { value: "2_weeks_before", label: "2 weeks before" },
 ];
+
+const DAY_LETTERS = ["S", "M", "T", "W", "T", "F", "S"];
+
+const ordinal = (n: number) => {
+  const rem100 = n % 100;
+  if (rem100 >= 11 && rem100 <= 13) return `${n}th`;
+  switch (n % 10) {
+    case 1: return `${n}st`;
+    case 2: return `${n}nd`;
+    case 3: return `${n}rd`;
+    default: return `${n}th`;
+  }
+};
+
+/** "weekly:2" -> 2 (Tuesday); bare "weekly" -> null (no day chosen yet). */
+const parseWeeklyDay = (recurring: string | null): number | null => {
+  if (!recurring?.startsWith("weekly:")) return null;
+  const n = Number(recurring.slice(7));
+  return Number.isInteger(n) && n >= 0 && n <= 6 ? n : null;
+};
 
 const splitDateTime = (iso: string | null) => {
   if (!iso) return { date: "", time: "" };
@@ -55,7 +85,9 @@ export const TaskDatesPopover = ({ startDate, dueDate, recurring, reminder, onSa
   const dueSplit = splitDateTime(dueDate);
   const [dueDateDraft, setDueDateDraft] = useState(dueSplit.date);
   const [dueTimeDraft, setDueTimeDraft] = useState(dueSplit.time || "17:00");
-  const [recurringDraft, setRecurringDraft] = useState(recurring || "none");
+  const recurringKind = recurring?.startsWith("weekly") ? "weekly" : (recurring || "none");
+  const [recurringDraft, setRecurringDraft] = useState(recurringKind);
+  const [weeklyDay, setWeeklyDay] = useState(() => parseWeeklyDay(recurring) ?? new Date(dueDate || Date.now()).getDay());
   const [reminderDraft, setReminderDraft] = useState(reminder || "none");
 
   const openChange = (o: boolean) => {
@@ -66,17 +98,19 @@ export const TaskDatesPopover = ({ startDate, dueDate, recurring, reminder, onSa
       const s = splitDateTime(dueDate);
       setDueDateDraft(s.date);
       setDueTimeDraft(s.time || "17:00");
-      setRecurringDraft(recurring || "none");
+      setRecurringDraft(recurring?.startsWith("weekly") ? "weekly" : (recurring || "none"));
+      setWeeklyDay(parseWeeklyDay(recurring) ?? new Date(dueDate || Date.now()).getDay());
       setReminderDraft(reminder || "none");
     }
     setOpen(o);
   };
 
   const save = () => {
+    const recurringValue = recurringDraft === "weekly" ? `weekly:${weeklyDay}` : recurringDraft;
     onSave({
       start_date: useStart && startDraft ? startDraft : null,
       due_date: useDue ? joinDateTime(dueDateDraft, dueTimeDraft) : null,
-      recurring: useDue && recurringDraft !== "none" ? recurringDraft : null,
+      recurring: useDue && recurringDraft !== "none" ? recurringValue : null,
       reminder: useDue && reminderDraft !== "none" ? reminderDraft : null,
     });
     setOpen(false);
@@ -149,9 +183,36 @@ export const TaskDatesPopover = ({ startDate, dueDate, recurring, reminder, onSa
           <Select value={recurringDraft} onValueChange={setRecurringDraft} disabled={!useDue}>
             <SelectTrigger className="h-8"><SelectValue /></SelectTrigger>
             <SelectContent>
-              {RECURRING_OPTIONS.map((o) => <SelectItem key={o.value} value={o.value}>{o.label}</SelectItem>)}
+              {RECURRING_OPTIONS.map((o) => (
+                <SelectItem key={o.value} value={o.value}>
+                  {o.value === "monthly" && dueDateDraft
+                    ? `Monthly on the ${ordinal(new Date(`${dueDateDraft}T00:00:00`).getDate())}`
+                    : o.label}
+                </SelectItem>
+              ))}
             </SelectContent>
           </Select>
+          {recurringDraft === "weekly" && useDue && (
+            <div className="flex gap-1 pt-1">
+              {DAY_LETTERS.map((letter, i) => (
+                <button
+                  key={i}
+                  type="button"
+                  onClick={() => setWeeklyDay(i)}
+                  className={cn(
+                    "h-7 w-7 rounded-full text-xs font-medium border transition-colors",
+                    weeklyDay === i
+                      ? "bg-primary text-primary-foreground border-primary"
+                      : "bg-background text-muted-foreground border-border hover:bg-muted",
+                  )}
+                  aria-label={`Repeat on ${letter}`}
+                  aria-pressed={weeklyDay === i}
+                >
+                  {letter}
+                </button>
+              ))}
+            </div>
+          )}
         </div>
 
         <div className="space-y-1">
