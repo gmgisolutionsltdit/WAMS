@@ -13,7 +13,7 @@ import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { WORK_FROM_OPTIONS, DEFAULT_WORK_FROM } from "@/lib/workFrom";
 import { format } from "date-fns";
-import { ChevronDown, ChevronRight } from "lucide-react";
+import { ChevronDown, ChevronRight, ChevronLeft } from "lucide-react";
 import { useRealtimeSubscription } from "@/hooks/useRealtimeSubscription";
 import { fmtHMS, fmtClock, hmToHours, hoursToHM } from "@/lib/time";
 import { mergeDailySessions, sessionWorkedSeconds, type AttendanceSession } from "@/lib/attendance";
@@ -29,11 +29,13 @@ import { toast } from "sonner";
 import { notifyManagersAndAdmins } from "@/lib/notifications";
 
 const localToday = () => format(new Date(), "yyyy-MM-dd");
+const HISTORY_PAGE_SIZE = 15;
 
 const Attendance = () => {
   const { user, role } = useAuth();
   const [logs, setLogs] = useState<AttendanceSession[]>([]);
   const [expanded, setExpanded] = useState<Record<string, boolean>>({});
+  const [historyPage, setHistoryPage] = useState(1);
   // This employee's own office hours / work schedule (Employees page). Every
   // lateness, due-time, overtime and non-working-day decision below is made
   // against it, so two people on different shifts are judged separately.
@@ -301,7 +303,9 @@ const Attendance = () => {
   useRealtimeSubscription("leave_requests", fetchData, "attendance-page-leave");
 
   const days = mergeDailySessions(logs).sort((a, b) => b.date.localeCompare(a.date));
-
+  const historyPageCount = Math.max(1, Math.ceil(days.length / HISTORY_PAGE_SIZE));
+  const currentHistoryPage = Math.min(historyPage, historyPageCount);
+  const pagedDays = days.slice((currentHistoryPage - 1) * HISTORY_PAGE_SIZE, currentHistoryPage * HISTORY_PAGE_SIZE);
 
   return (
     <div className="space-y-6">
@@ -469,7 +473,7 @@ const Attendance = () => {
             <TableBody>
               {days.length === 0 ? (
                 <TableRow><TableCell colSpan={15} className="text-center text-muted-foreground">No attendance records</TableCell></TableRow>
-              ) : days.map((day) => {
+              ) : pagedDays.map((day) => {
                 const worked = day.workedSeconds;
                 const closed = !day.open && !!day.lastOut;
                 // A row recorded by the current clock-in flow (or since
@@ -711,6 +715,18 @@ const Attendance = () => {
             </TableBody>
           </Table>
         </div>
+
+        {days.length > HISTORY_PAGE_SIZE && (
+          <div className="flex items-center justify-center gap-3 pt-3">
+            <Button variant="outline" size="sm" disabled={currentHistoryPage <= 1} onClick={() => setHistoryPage(currentHistoryPage - 1)}>
+              <ChevronLeft className="h-4 w-4 mr-1" /> Previous
+            </Button>
+            <span className="text-sm text-muted-foreground whitespace-nowrap">Page {currentHistoryPage} of {historyPageCount}</span>
+            <Button variant="outline" size="sm" disabled={currentHistoryPage >= historyPageCount} onClick={() => setHistoryPage(currentHistoryPage + 1)}>
+              Next <ChevronRight className="h-4 w-4 ml-1" />
+            </Button>
+          </div>
+        )}
       </CardContent>
       </Card>
     </div>
