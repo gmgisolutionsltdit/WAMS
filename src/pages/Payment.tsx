@@ -1738,7 +1738,7 @@ function ExpenseClaimsTab() {
 
   const fetchCategories = async () => {
     const { data } = await supabase.from("expense_types").select("name, entry_type").order("created_at", { ascending: true });
-    if (data && data.length > 0) setExpenseTypes(data as ExpenseType[]);
+    if (data) setExpenseTypes(data as ExpenseType[]);
   };
 
   // Admin-only — RLS ("Admins add expense types") already blocks anyone
