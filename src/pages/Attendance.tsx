@@ -731,6 +731,21 @@ const Attendance = () => {
             </TableBody>
           </Table>
         </div>
+
+        <div className="flex items-center justify-center gap-1 sm:gap-2 pt-3">
+          <Button variant="outline" size="icon" className="h-8 w-8" onClick={() => setHistoryMonth((m) => addMonths(m, -1))}>
+            <ChevronLeft className="h-4 w-4" />
+          </Button>
+          <div className="min-w-[110px] text-center text-sm font-medium tabular-nums">
+            {format(historyMonth, "MMMM yyyy")}
+          </div>
+          <Button variant="outline" size="icon" className="h-8 w-8" onClick={() => setHistoryMonth((m) => addMonths(m, 1))}>
+            <ChevronRight className="h-4 w-4" />
+          </Button>
+          <Button variant="ghost" size="sm" className="h-8" onClick={() => setHistoryMonth(startOfMonth(new Date()))}>
+            Today
+          </Button>
+        </div>
       </CardContent>
       </Card>
     </div>
