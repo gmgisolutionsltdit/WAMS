@@ -1719,6 +1719,9 @@ function ExpenseClaimsTab() {
     amount: "", claim_date: format(new Date(), "yyyy-MM-dd"), description: "", receipt_url: "",
   });
   const [uploading, setUploading] = useState(false);
+  const [addingCategory, setAddingCategory] = useState(false);
+  const [newCategoryName, setNewCategoryName] = useState("");
+  const [savingCategory, setSavingCategory] = useState(false);
   const [employees, setEmployees] = useState<{ id: string; full_name: string | null; email: string | null }[]>([]);
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const [filterMonth, setFilterMonth] = useState("");
@@ -1736,6 +1739,24 @@ function ExpenseClaimsTab() {
   const fetchCategories = async () => {
     const { data } = await supabase.from("expense_types").select("name, entry_type").order("created_at", { ascending: true });
     if (data && data.length > 0) setExpenseTypes(data as ExpenseType[]);
+  };
+
+  // Admin-only — RLS ("Admins add expense types") already blocks anyone
+  // else's insert, this just keeps the control out of a regular employee's
+  // way. One row per name/entry_type pair; both "expense" and "advance"
+  // share the same visible category list (allCategories), so either works.
+  const addCategory = async () => {
+    const name = newCategoryName.trim();
+    if (!name) { toast.error("Category name required"); return; }
+    setSavingCategory(true);
+    const { error } = await supabase.from("expense_types").insert({ name, entry_type: "expense" });
+    setSavingCategory(false);
+    if (error) { toast.error(error.message); return; }
+    toast.success("Category added");
+    setNewCategoryName("");
+    setAddingCategory(false);
+    await fetchCategories();
+    setForm((f) => ({ ...f, category: name }));
   };
 
   useEffect(() => {
@@ -1875,20 +1896,46 @@ function ExpenseClaimsTab() {
           <h1 className="text-2xl font-display font-bold">Expense Claims</h1>
           <p className="text-sm text-muted-foreground">Submit and track reimbursement requests.</p>
         </div>
-        <Dialog open={open} onOpenChange={setOpen}>
+        <Dialog open={open} onOpenChange={(o) => { setOpen(o); if (!o) { setAddingCategory(false); setNewCategoryName(""); } }}>
           <DialogTrigger asChild><Button><Plus className="h-4 w-4 mr-1" />New Claim</Button></DialogTrigger>
           <DialogContent>
             <DialogHeader><DialogTitle>Submit Expense Claim</DialogTitle></DialogHeader>
             <div className="space-y-3">
-              <div><Label>Category</Label>
-                <Select value={form.category} onValueChange={(v)=>setForm({...form, category: v})}>
-                  <SelectTrigger><SelectValue /></SelectTrigger>
-                  <SelectContent>
-                    {allCategories.length === 0 ? (
-                      <SelectItem value="none" disabled>No categories yet</SelectItem>
-                    ) : allCategories.map(c => <SelectItem key={c} value={c}>{c}</SelectItem>)}
-                  </SelectContent>
-                </Select>
+              <div>
+                <div className="flex items-center justify-between">
+                  <Label>Category</Label>
+                  {isAdmin && !addingCategory && (
+                    <button
+                      type="button"
+                      onClick={() => setAddingCategory(true)}
+                      className="text-xs text-primary hover:underline"
+                    >
+                      + Add Category
+                    </button>
+                  )}
+                </div>
+                {addingCategory ? (
+                  <div className="flex gap-2">
+                    <Input
+                      autoFocus
+                      placeholder="New category name"
+                      value={newCategoryName}
+                      onChange={(e) => setNewCategoryName(e.target.value)}
+                      onKeyDown={(e) => e.key === "Enter" && addCategory()}
+                    />
+                    <Button size="sm" onClick={addCategory} disabled={savingCategory}>Add</Button>
+                    <Button size="sm" variant="ghost" onClick={() => { setAddingCategory(false); setNewCategoryName(""); }}>Cancel</Button>
+                  </div>
+                ) : (
+                  <Select value={form.category} onValueChange={(v)=>setForm({...form, category: v})}>
+                    <SelectTrigger><SelectValue /></SelectTrigger>
+                    <SelectContent>
+                      {allCategories.length === 0 ? (
+                        <SelectItem value="none" disabled>No categories yet</SelectItem>
+                      ) : allCategories.map(c => <SelectItem key={c} value={c}>{c}</SelectItem>)}
+                    </SelectContent>
+                  </Select>
+                )}
               </div>
               {form.category === "Other" && (
                 <div><Label>Other</Label>
