@@ -17,7 +17,7 @@ import {
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
-import { Plus, Check, X, FileText, AlertTriangle, Loader2, Trash2, Download } from "lucide-react";
+import { Plus, Check, X, FileText, AlertTriangle, Loader2, Trash2, Download, Settings2 } from "lucide-react";
 import { toast } from "sonner";
 import { format } from "date-fns";
 import { notifyManagersAndAdmins, notifyEmployee } from "@/lib/notifications";
@@ -1915,43 +1915,57 @@ function ExpenseClaimsTab() {
             <DialogHeader><DialogTitle>Submit Expense Claim</DialogTitle></DialogHeader>
             <div className="space-y-3">
               <div>
-                <div className="flex items-center justify-between">
+                <div className="flex items-center justify-between gap-2">
                   <Label>Category</Label>
                   {isAdmin && (
-                    <button
+                    <Button
                       type="button"
+                      variant={addingCategory ? "secondary" : "outline"}
+                      size="sm"
+                      className="h-7 px-2 text-xs shrink-0"
                       onClick={() => setAddingCategory((v) => !v)}
-                      className="text-xs text-primary hover:underline"
                     >
-                      {addingCategory ? "Done" : "Manage Categories"}
-                    </button>
+                      {addingCategory ? (
+                        <><X className="h-3.5 w-3.5 mr-1" />Done</>
+                      ) : (
+                        <><Settings2 className="h-3.5 w-3.5 mr-1" />Manage</>
+                      )}
+                    </Button>
                   )}
                 </div>
                 {addingCategory ? (
-                  <div className="space-y-2 rounded-md border p-2">
+                  <div className="mt-1.5 space-y-1 rounded-md border bg-muted/30 p-2">
                     {allCategories.length === 0 ? (
-                      <p className="text-xs text-muted-foreground">No categories yet</p>
-                    ) : allCategories.map((c) => (
-                      <div key={c} className="flex items-center justify-between text-sm">
-                        <span>{c}</span>
-                        <button
-                          type="button"
-                          onClick={() => deleteCategory(c)}
-                          className="text-xs text-destructive hover:underline"
-                        >
-                          Delete
-                        </button>
+                      <p className="px-1 py-1 text-xs text-muted-foreground">No categories yet</p>
+                    ) : (
+                      <div className="max-h-40 space-y-0.5 overflow-y-auto">
+                        {allCategories.map((c) => (
+                          <div key={c} className="flex items-center justify-between gap-2 rounded-sm px-1 py-1 text-sm hover:bg-muted/60">
+                            <span className="truncate">{c}</span>
+                            <button
+                              type="button"
+                              onClick={() => deleteCategory(c)}
+                              className="shrink-0 rounded p-1 text-muted-foreground hover:bg-destructive/10 hover:text-destructive"
+                              aria-label={`Delete ${c}`}
+                            >
+                              <Trash2 className="h-3.5 w-3.5" />
+                            </button>
+                          </div>
+                        ))}
                       </div>
-                    ))}
-                    <div className="flex gap-2 pt-1">
+                    )}
+                    <div className="flex flex-col gap-2 pt-1 sm:flex-row">
                       <Input
                         autoFocus
                         placeholder="New category name"
                         value={newCategoryName}
                         onChange={(e) => setNewCategoryName(e.target.value)}
                         onKeyDown={(e) => e.key === "Enter" && addCategory()}
+                        className="h-8 text-sm"
                       />
-                      <Button size="sm" onClick={addCategory} disabled={savingCategory}>Add</Button>
+                      <Button size="sm" className="h-8 sm:w-auto" onClick={addCategory} disabled={savingCategory}>
+                        {savingCategory ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : "Add"}
+                      </Button>
                     </div>
                   </div>
                 ) : (
