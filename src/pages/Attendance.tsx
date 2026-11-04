@@ -12,7 +12,7 @@ import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { WORK_FROM_OPTIONS, DEFAULT_WORK_FROM } from "@/lib/workFrom";
-import { format } from "date-fns";
+import { format, addMonths, startOfMonth } from "date-fns";
 import { ChevronDown, ChevronRight, ChevronLeft } from "lucide-react";
 import { useRealtimeSubscription } from "@/hooks/useRealtimeSubscription";
 import { fmtHMS, fmtClock, hmToHours, hoursToHM } from "@/lib/time";
@@ -29,13 +29,12 @@ import { toast } from "sonner";
 import { notifyManagersAndAdmins } from "@/lib/notifications";
 
 const localToday = () => format(new Date(), "yyyy-MM-dd");
-const HISTORY_PAGE_SIZE = 15;
 
 const Attendance = () => {
   const { user, role } = useAuth();
   const [logs, setLogs] = useState<AttendanceSession[]>([]);
   const [expanded, setExpanded] = useState<Record<string, boolean>>({});
-  const [historyPage, setHistoryPage] = useState(1);
+  const [historyMonth, setHistoryMonth] = useState(() => startOfMonth(new Date()));
   // This employee's own office hours / work schedule (Employees page). Every
   // lateness, due-time, overtime and non-working-day decision below is made
   // against it, so two people on different shifts are judged separately.
@@ -303,9 +302,8 @@ const Attendance = () => {
   useRealtimeSubscription("leave_requests", fetchData, "attendance-page-leave");
 
   const days = mergeDailySessions(logs).sort((a, b) => b.date.localeCompare(a.date));
-  const historyPageCount = Math.max(1, Math.ceil(days.length / HISTORY_PAGE_SIZE));
-  const currentHistoryPage = Math.min(historyPage, historyPageCount);
-  const pagedDays = days.slice((currentHistoryPage - 1) * HISTORY_PAGE_SIZE, currentHistoryPage * HISTORY_PAGE_SIZE);
+  const historyMonthKey = format(historyMonth, "yyyy-MM");
+  const pagedDays = days.filter((d) => d.date.slice(0, 7) === historyMonthKey);
 
   return (
     <div className="space-y-6">
@@ -442,11 +440,27 @@ const Attendance = () => {
       </Dialog>
 
       <Card>
-      <CardHeader>
-        <CardTitle className="text-green-600">My Attendance History</CardTitle>
-        <p className="text-xs text-muted-foreground">
-          Multiple punches on the same day are merged into one record — expand a row to see each session.
-        </p>
+      <CardHeader className="flex flex-row items-center justify-between gap-2 flex-wrap">
+        <div>
+          <CardTitle className="text-green-600">My Attendance History</CardTitle>
+          <p className="text-xs text-muted-foreground">
+            Multiple punches on the same day are merged into one record — expand a row to see each session.
+          </p>
+        </div>
+        <div className="flex items-center gap-1 sm:gap-2">
+          <Button variant="outline" size="icon" className="h-8 w-8" onClick={() => setHistoryMonth((m) => addMonths(m, -1))}>
+            <ChevronLeft className="h-4 w-4" />
+          </Button>
+          <div className="min-w-[110px] text-center text-sm font-medium tabular-nums">
+            {format(historyMonth, "MMMM yyyy")}
+          </div>
+          <Button variant="outline" size="icon" className="h-8 w-8" onClick={() => setHistoryMonth((m) => addMonths(m, 1))}>
+            <ChevronRight className="h-4 w-4" />
+          </Button>
+          <Button variant="ghost" size="sm" className="h-8" onClick={() => setHistoryMonth(startOfMonth(new Date()))}>
+            Today
+          </Button>
+        </div>
       </CardHeader>
       <CardContent>
         <div className="overflow-x-auto">
@@ -473,6 +487,8 @@ const Attendance = () => {
             <TableBody>
               {days.length === 0 ? (
                 <TableRow><TableCell colSpan={15} className="text-center text-muted-foreground">No attendance records</TableCell></TableRow>
+              ) : pagedDays.length === 0 ? (
+                <TableRow><TableCell colSpan={15} className="text-center text-muted-foreground">No attendance records for {format(historyMonth, "MMMM yyyy")}</TableCell></TableRow>
               ) : pagedDays.map((day) => {
                 const worked = day.workedSeconds;
                 const closed = !day.open && !!day.lastOut;
@@ -715,18 +731,6 @@ const Attendance = () => {
             </TableBody>
           </Table>
         </div>
-
-        {days.length > HISTORY_PAGE_SIZE && (
-          <div className="flex items-center justify-center gap-3 pt-3">
-            <Button variant="outline" size="sm" disabled={currentHistoryPage <= 1} onClick={() => setHistoryPage(currentHistoryPage - 1)}>
-              <ChevronLeft className="h-4 w-4 mr-1" /> Previous
-            </Button>
-            <span className="text-sm text-muted-foreground whitespace-nowrap">Page {currentHistoryPage} of {historyPageCount}</span>
-            <Button variant="outline" size="sm" disabled={currentHistoryPage >= historyPageCount} onClick={() => setHistoryPage(currentHistoryPage + 1)}>
-              Next <ChevronRight className="h-4 w-4 ml-1" />
-            </Button>
-          </div>
-        )}
       </CardContent>
       </Card>
     </div>
