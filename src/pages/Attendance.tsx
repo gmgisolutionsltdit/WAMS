@@ -440,27 +440,11 @@ const Attendance = () => {
       </Dialog>
 
       <Card>
-      <CardHeader className="flex flex-row items-center justify-between gap-2 flex-wrap">
-        <div>
-          <CardTitle className="text-green-600">My Attendance History</CardTitle>
-          <p className="text-xs text-muted-foreground">
-            Multiple punches on the same day are merged into one record — expand a row to see each session.
-          </p>
-        </div>
-        <div className="flex items-center gap-1 sm:gap-2">
-          <Button variant="outline" size="icon" className="h-8 w-8" onClick={() => setHistoryMonth((m) => addMonths(m, -1))}>
-            <ChevronLeft className="h-4 w-4" />
-          </Button>
-          <div className="min-w-[110px] text-center text-sm font-medium tabular-nums">
-            {format(historyMonth, "MMMM yyyy")}
-          </div>
-          <Button variant="outline" size="icon" className="h-8 w-8" onClick={() => setHistoryMonth((m) => addMonths(m, 1))}>
-            <ChevronRight className="h-4 w-4" />
-          </Button>
-          <Button variant="ghost" size="sm" className="h-8" onClick={() => setHistoryMonth(startOfMonth(new Date()))}>
-            Today
-          </Button>
-        </div>
+      <CardHeader>
+        <CardTitle className="text-green-600">My Attendance History</CardTitle>
+        <p className="text-xs text-muted-foreground">
+          Multiple punches on the same day are merged into one record — expand a row to see each session.
+        </p>
       </CardHeader>
       <CardContent>
         <div className="overflow-x-auto">
