@@ -1738,7 +1738,7 @@ function ExpenseClaimsTab() {
 
   const fetchCategories = async () => {
     const { data } = await supabase.from("expense_types").select("name, entry_type").order("created_at", { ascending: true });
-    if (data && data.length > 0) setExpenseTypes(data as ExpenseType[]);
+    if (data) setExpenseTypes(data as ExpenseType[]);
   };
 
   // Admin-only — RLS ("Admins add expense types") already blocks anyone
@@ -1757,6 +1757,19 @@ function ExpenseClaimsTab() {
     setAddingCategory(false);
     await fetchCategories();
     setForm((f) => ({ ...f, category: name }));
+  };
+
+  // Deletes every row for this category name (it may exist under both
+  // Expense and Advance entry types) — expense_claims.category is a plain
+  // text snapshot, not a foreign key, so past claims keep their category
+  // text unaffected.
+  const deleteCategory = async (name: string) => {
+    if (!window.confirm(`Delete category "${name}"? Past claims already using it keep showing it.`)) return;
+    const { error } = await supabase.from("expense_types").delete().eq("name", name);
+    if (error) { toast.error(error.message); return; }
+    toast.success("Category deleted");
+    await fetchCategories();
+    if (form.category === name) setForm((f) => ({ ...f, category: "" }));
   };
 
   useEffect(() => {
@@ -1904,27 +1917,42 @@ function ExpenseClaimsTab() {
               <div>
                 <div className="flex items-center justify-between">
                   <Label>Category</Label>
-                  {isAdmin && !addingCategory && (
+                  {isAdmin && (
                     <button
                       type="button"
-                      onClick={() => setAddingCategory(true)}
+                      onClick={() => setAddingCategory((v) => !v)}
                       className="text-xs text-primary hover:underline"
                     >
-                      + Add Category
+                      {addingCategory ? "Done" : "Manage Categories"}
                     </button>
                   )}
                 </div>
                 {addingCategory ? (
-                  <div className="flex gap-2">
-                    <Input
-                      autoFocus
-                      placeholder="New category name"
-                      value={newCategoryName}
-                      onChange={(e) => setNewCategoryName(e.target.value)}
-                      onKeyDown={(e) => e.key === "Enter" && addCategory()}
-                    />
-                    <Button size="sm" onClick={addCategory} disabled={savingCategory}>Add</Button>
-                    <Button size="sm" variant="ghost" onClick={() => { setAddingCategory(false); setNewCategoryName(""); }}>Cancel</Button>
+                  <div className="space-y-2 rounded-md border p-2">
+                    {allCategories.length === 0 ? (
+                      <p className="text-xs text-muted-foreground">No categories yet</p>
+                    ) : allCategories.map((c) => (
+                      <div key={c} className="flex items-center justify-between text-sm">
+                        <span>{c}</span>
+                        <button
+                          type="button"
+                          onClick={() => deleteCategory(c)}
+                          className="text-xs text-destructive hover:underline"
+                        >
+                          Delete
+                        </button>
+                      </div>
+                    ))}
+                    <div className="flex gap-2 pt-1">
+                      <Input
+                        autoFocus
+                        placeholder="New category name"
+                        value={newCategoryName}
+                        onChange={(e) => setNewCategoryName(e.target.value)}
+                        onKeyDown={(e) => e.key === "Enter" && addCategory()}
+                      />
+                      <Button size="sm" onClick={addCategory} disabled={savingCategory}>Add</Button>
+                    </div>
                   </div>
                 ) : (
                   <Select value={form.category} onValueChange={(v)=>setForm({...form, category: v})}>
