@@ -1310,14 +1310,16 @@ function MyPaymentsSummary() {
   };
 
   const loanDue = loan ? Math.min(Number(loan.monthly_deduction), Number(loan.remaining_balance)) : 0;
-  // Mirrors MyPaymentsTab's formula using the settlement's own saved
-  // Adjust Now flags (defaulting to checked when nothing's recorded yet) and
-  // its recorded paid amounts (falling back to the full outstanding balance
-  // before anything's been recorded) — so a partial amount the admin entered
-  // shows here too, not the full balance.
-  const netPayment = ((settlement ? settlement.net_hours_paid : true) ? finalSalaryNoExpense : grossSalary)
-    + ((settlement ? settlement.expense_paid : true) ? (settlement ? Number(settlement.expense_amount_paid) || 0 : expenseOutstanding) : 0)
-    - ((settlement ? settlement.loan_paid : true) ? (settlement ? Number(settlement.loan_amount_paid) || 0 : loanDue) : 0);
+  // Until the admin actually records this month (no settlement yet), Net
+  // Payment shows the base salary alone — no live Expense/Loan estimate
+  // folded in, matching the "Not recorded yet" badges shown for each card.
+  // Once recorded, it reflects exactly what was decided: each card's own
+  // Adjust Now flag and its recorded paid amount, same as MyPaymentsTab.
+  const netPayment = !settlement
+    ? finalSalaryNoExpense
+    : (settlement.net_hours_paid ? finalSalaryNoExpense : grossSalary)
+      + (settlement.expense_paid ? Number(settlement.expense_amount_paid) || 0 : 0)
+      - (settlement.loan_paid ? Number(settlement.loan_amount_paid) || 0 : 0);
 
   const downloadReceipt = () => {
     downloadPaymentReceiptPDF({
