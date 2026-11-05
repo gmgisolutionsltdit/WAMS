@@ -8,7 +8,7 @@ import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
-import { Clock, TimerOff, Timer, Gauge, Eye, CalendarClock } from "lucide-react";
+import { Clock, TimerOff, Timer, Gauge, Eye, CalendarClock, ChevronLeft, ChevronRight } from "lucide-react";
 import { format } from "date-fns";
 import { classifyDay, netRequiredHours, weekendDaysFor, type WorkSchedule } from "@/lib/workSchedule";
 import { evaluateArrival, humanMinutes, type OfficeTime } from "@/lib/officeTime";
@@ -97,6 +97,9 @@ const ReportsSummary = () => {
   const [monthlyRows, setMonthlyRows] = useState<MonthlySummary[]>([]);
   const [changedDays, setChangedDays] = useState<ChangedDay[]>([]);
   const [showChanged, setShowChanged] = useState(false);
+  const PAGE_SIZE = 15;
+  const [rowsPage, setRowsPage] = useState(1);
+  const [monthlyPage, setMonthlyPage] = useState(1);
 
   useEffect(() => {
     if (!isAdmin) return;
@@ -385,6 +388,8 @@ const ReportsSummary = () => {
         setRows(Array.from(byUser.values()).sort((a, b) => a.name.localeCompare(b.name)));
         setMonthlyRows(Array.from(byUserMonth.values()).sort((a, b) => b.month.localeCompare(a.month)));
         setChangedDays(changed.sort((a, b) => a.date.localeCompare(b.date)));
+        setRowsPage(1);
+        setMonthlyPage(1);
       }
     } finally {
       if (seq === fetchSeq.current) setLoading(false);
@@ -473,7 +478,7 @@ const ReportsSummary = () => {
                   <TableBody>
                     {rows.length === 0 ? (
                       <TableRow><TableCell colSpan={8} className="text-center text-muted-foreground">No records</TableCell></TableRow>
-                    ) : rows.map((r) => {
+                    ) : rows.slice((rowsPage - 1) * PAGE_SIZE, rowsPage * PAGE_SIZE).map((r) => {
                       const net = netHoursOf(r);
                       return (
                         <TableRow key={r.userId}>
@@ -496,6 +501,19 @@ const ReportsSummary = () => {
                   </TableBody>
                 </Table>
               </div>
+              {rows.length > PAGE_SIZE && (
+                <div className="flex items-center justify-center gap-2 pt-1">
+                  <Button variant="outline" size="icon" className="h-8 w-8" disabled={rowsPage <= 1} onClick={() => setRowsPage((p) => p - 1)}>
+                    <ChevronLeft className="h-4 w-4" />
+                  </Button>
+                  <span className="text-xs text-muted-foreground">
+                    Page {rowsPage} of {Math.ceil(rows.length / PAGE_SIZE)}
+                  </span>
+                  <Button variant="outline" size="icon" className="h-8 w-8" disabled={rowsPage >= Math.ceil(rows.length / PAGE_SIZE)} onClick={() => setRowsPage((p) => p + 1)}>
+                    <ChevronRight className="h-4 w-4" />
+                  </Button>
+                </div>
+              )}
 
               {changedDays.length > 0 && (
                 <div className="rounded-md border p-3 bg-muted/30">
@@ -615,7 +633,7 @@ const ReportsSummary = () => {
                 <TableBody>
                   {monthlyRows.length === 0 ? (
                     <TableRow><TableCell colSpan={12} className="text-center text-muted-foreground">No records</TableCell></TableRow>
-                  ) : monthlyRows.map((m) => {
+                  ) : monthlyRows.slice((monthlyPage - 1) * PAGE_SIZE, monthlyPage * PAGE_SIZE).map((m) => {
                     const net = netHoursOf(m);
                     return (
                       <TableRow key={m.month}>
@@ -641,6 +659,19 @@ const ReportsSummary = () => {
                   })}
                 </TableBody>
               </Table>
+              {monthlyRows.length > PAGE_SIZE && (
+                <div className="flex items-center justify-center gap-2 pt-3">
+                  <Button variant="outline" size="icon" className="h-8 w-8" disabled={monthlyPage <= 1} onClick={() => setMonthlyPage((p) => p - 1)}>
+                    <ChevronLeft className="h-4 w-4" />
+                  </Button>
+                  <span className="text-xs text-muted-foreground">
+                    Page {monthlyPage} of {Math.ceil(monthlyRows.length / PAGE_SIZE)}
+                  </span>
+                  <Button variant="outline" size="icon" className="h-8 w-8" disabled={monthlyPage >= Math.ceil(monthlyRows.length / PAGE_SIZE)} onClick={() => setMonthlyPage((p) => p + 1)}>
+                    <ChevronRight className="h-4 w-4" />
+                  </Button>
+                </div>
+              )}
             </div>
             </div>
           )}
