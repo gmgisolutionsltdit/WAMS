@@ -1067,7 +1067,7 @@ function MyPaymentsTab() {
                   <Checkbox checked={expensePaidNow} onCheckedChange={(v) => setExpensePaidNow(!!v)} />
                   Adjust Now (unchecked = carry to next month)
                 </label>
-                <Input type="number" value={expenseAmount} onChange={(e) => { setExpenseAmount(e.target.value); setExpenseAmountTouched(true); }} disabled={!expensePaidNow || expenseOutstanding === 0} />
+                <Input type="number" value={expenseAmount} onChange={(e) => { setExpenseAmount(e.target.value); setExpenseAmountTouched(true); }} disabled={!expensePaidNow} />
               </div>
               <div className="rounded-md border p-3 space-y-2">
                 <div className="text-sm font-medium">Loan Due</div>
