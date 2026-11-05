@@ -1143,6 +1143,7 @@ function MyPaymentsSummary() {
   const [finalSalaryNoExpense, setFinalSalaryNoExpense] = useState(0);
   const [loan, setLoan] = useState<{ monthly_deduction: number; remaining_balance: number } | null>(null);
   const [expenseOutstanding, setExpenseOutstanding] = useState(0);
+  const [expenseTotalPaid, setExpenseTotalPaid] = useState(0);
   const [settlement, setSettlement] = useState<PayrollSettlementRow | null>(null);
   const [employeeName, setEmployeeName] = useState("");
   const [teamPending, setTeamPending] = useState<PayrollSettlementRow[]>([]);
@@ -1188,8 +1189,17 @@ function MyPaymentsSummary() {
       // it's excluded here to avoid double-counting it).
       const expenseTotal = (claims || []).filter((c) => c.entry_type !== "advance").reduce((s, c) => s + Number(c.amount), 0);
       const advanceOutstanding = (claims || []).filter((c) => c.entry_type === "advance").reduce((s, c) => s + Math.max(0, Number(c.amount) - Number(c.recovered_amount || 0)), 0);
+      const advanceRecoveredSoFar = (claims || []).filter((c) => c.entry_type === "advance").reduce((s, c) => s + Number(c.recovered_amount || 0), 0);
       const priorPaid = (priorPaidRows || []).reduce((s, r) => s + Math.max(0, Number(r.expense_amount_paid)), 0);
       setExpenseOutstanding(expenseTotal - advanceOutstanding - priorPaid);
+      // What the "Paid" badge shows — the running total actually recovered
+      // or paid out to date, not just this one month's own recorded
+      // amount: every prior month's reimbursement payment, this month's
+      // own (if "Adjust Now" is checked), plus every advance recovery
+      // applied so far (tracked on the claims themselves, so it's already
+      // up to date regardless of any month's Adjust Now flag).
+      const thisMonthReimbursement = settlementRow?.expense_paid ? Math.max(0, Number(settlementRow.expense_amount_paid) || 0) : 0;
+      setExpenseTotalPaid(priorPaid + thisMonthReimbursement + advanceRecoveredSoFar);
 
       setLoading(false);
     })();
@@ -1327,7 +1337,7 @@ function MyPaymentsSummary() {
               <div className="rounded-md border p-3 space-y-2">
                 <div className="text-sm font-medium">Expense Balance</div>
                 <div className="text-lg font-semibold">{fmtBDT(expenseOutstanding)}</div>
-                <Badge variant="outline">{settlement ? `Paid ${fmtBDT(settlement.expense_amount_paid)}` : "Not recorded yet"}</Badge>
+                <Badge variant="outline">Paid {fmtBDT(expenseTotalPaid)}</Badge>
               </div>
               <div className="rounded-md border p-3 space-y-2">
                 <div className="text-sm font-medium">Loan Due</div>
