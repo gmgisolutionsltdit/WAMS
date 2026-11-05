@@ -854,10 +854,18 @@ function MyPaymentsTab() {
       // negative expense_amount_paid that was never actually applied to any
       // claim, so trusting it here would make re-saving the same figure a
       // silent no-op (delta 0) instead of backfilling the recovery once.
+      // Includes reversal rows (note "Reversed — payment history entry
+      // deleted", written when an earlier settlement for this month was
+      // deleted) — PaymentHistoryTable's reverseSettlementLedgers logs a
+      // reversal as a new row rather than deleting the original, so without
+      // summing both, a deleted-and-redone month would still count the
+      // original (already-reversed) amount as applied and silently skip
+      // re-applying the new recovery.
       const { data: priorRecoveryActions } = await supabase
         .from("expense_recovery_actions")
         .select("amount")
-        .eq("user_id", selectedUserId).eq("month", `${month}-01`).eq("note", "Recorded via My Payments");
+        .eq("user_id", selectedUserId).eq("month", `${month}-01`)
+        .in("note", ["Recorded via My Payments", "Reversed — payment history entry deleted"]);
       const recoveryAlready = (priorRecoveryActions || []).reduce((s, a) => s + Number(a.amount), 0);
       const recoveryDelta = recoveryNow - recoveryAlready;
       let advanceClaims: { id: string; amount: number; recovered_amount: number }[] = [];
