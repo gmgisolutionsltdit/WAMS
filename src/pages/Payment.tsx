@@ -773,12 +773,17 @@ function MyPaymentsTab() {
       setLoanAmountTouched(false);
 
       // All reimbursement claims to date minus all open advance claims to
-      // date (net of whatever's already been recovered), minus whatever was
-      // already paid out in an earlier month — so an unadjusted balance
-      // keeps carrying forward until it's actually settled.
+      // date (net of whatever's already been recovered), minus whatever
+      // reimbursement was already paid out in an earlier month — so an
+      // unadjusted balance keeps carrying forward until it's actually
+      // settled. Only the positive (reimbursement) portion of a past
+      // settlement's expense_amount_paid counts here — a negative portion
+      // is an advance recovery, already reflected in advanceOutstanding via
+      // the claim's own recovered_amount, so including it again here would
+      // double it.
       const expenseTotal = (claims || []).filter((c) => c.entry_type !== "advance").reduce((s, c) => s + Number(c.amount), 0);
       const advanceOutstanding = (claims || []).filter((c) => c.entry_type === "advance").reduce((s, c) => s + Math.max(0, Number(c.amount) - Number(c.recovered_amount || 0)), 0);
-      const priorPaid = (priorPaidRows || []).reduce((s, r) => s + Number(r.expense_amount_paid), 0);
+      const priorPaid = (priorPaidRows || []).reduce((s, r) => s + Math.max(0, Number(r.expense_amount_paid)), 0);
       const outstanding = expenseTotal - advanceOutstanding - priorPaid;
       setExpenseOutstanding(outstanding);
       // Always starts at 0 — the admin enters the amount to pay explicitly,
@@ -1177,11 +1182,13 @@ function MyPaymentsSummary() {
       setEmployeeName(profile?.full_name || profile?.email || "");
 
       // Mirrors the admin's My Payments tab: all claims to date minus all
-      // open advance claims to date, minus whatever was already paid out in
-      // an earlier month.
+      // open advance claims to date, minus whatever reimbursement was
+      // already paid out in an earlier month (a negative past amount is an
+      // advance recovery, already reflected via recovered_amount above, so
+      // it's excluded here to avoid double-counting it).
       const expenseTotal = (claims || []).filter((c) => c.entry_type !== "advance").reduce((s, c) => s + Number(c.amount), 0);
       const advanceOutstanding = (claims || []).filter((c) => c.entry_type === "advance").reduce((s, c) => s + Math.max(0, Number(c.amount) - Number(c.recovered_amount || 0)), 0);
-      const priorPaid = (priorPaidRows || []).reduce((s, r) => s + Number(r.expense_amount_paid), 0);
+      const priorPaid = (priorPaidRows || []).reduce((s, r) => s + Math.max(0, Number(r.expense_amount_paid)), 0);
       setExpenseOutstanding(expenseTotal - advanceOutstanding - priorPaid);
 
       setLoading(false);
