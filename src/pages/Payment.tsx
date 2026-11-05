@@ -1190,12 +1190,14 @@ function MyPaymentsSummary() {
     // open advance claims to date, minus whatever reimbursement was
     // already paid out in an earlier month (a negative past amount is an
     // advance recovery, already reflected via recovered_amount above, so
-    // it's excluded here to avoid double-counting it).
+    // it's excluded here to avoid double-counting it) — and, unlike the
+    // admin's own live decision view, also minus this month's own
+    // reimbursement once it's actually been recorded, so a settled month
+    // shows what's actually still left rather than the pre-payment figure.
     const expenseTotal = (claims || []).filter((c) => c.entry_type !== "advance").reduce((s, c) => s + Number(c.amount), 0);
     const advanceOutstanding = (claims || []).filter((c) => c.entry_type === "advance").reduce((s, c) => s + Math.max(0, Number(c.amount) - Number(c.recovered_amount || 0)), 0);
     const advanceRecoveredSoFar = (claims || []).filter((c) => c.entry_type === "advance").reduce((s, c) => s + Number(c.recovered_amount || 0), 0);
     const priorPaid = (priorPaidRows || []).reduce((s, r) => s + Math.max(0, Number(r.expense_amount_paid)), 0);
-    setExpenseOutstanding(expenseTotal - advanceOutstanding - priorPaid);
     // What the "Paid" badge shows — the running total actually recovered
     // or paid out to date, not just this one month's own recorded
     // amount: every prior month's reimbursement payment, this month's
@@ -1203,6 +1205,7 @@ function MyPaymentsSummary() {
     // applied so far (tracked on the claims themselves, so it's already
     // up to date regardless of any month's Adjust Now flag).
     const thisMonthReimbursement = settlementRow?.expense_paid ? Math.max(0, Number(settlementRow.expense_amount_paid) || 0) : 0;
+    setExpenseOutstanding(expenseTotal - advanceOutstanding - priorPaid - thisMonthReimbursement);
     setExpenseTotalPaid(priorPaid + thisMonthReimbursement + advanceRecoveredSoFar);
 
     setLoading(false);
