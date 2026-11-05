@@ -1151,59 +1151,64 @@ function MyPaymentsSummary() {
   const [rejectReason, setRejectReason] = useState("");
   const [acting, setActing] = useState(false);
 
-  useEffect(() => {
+  // Pulled out of the effect below so approving/rejecting this user's own
+  // settlement (which changes approval_status but not month/user.id, so the
+  // effect's own dependencies wouldn't re-trigger it) can re-run the same
+  // fetch immediately instead of leaving the cards showing stale numbers
+  // until the next manual reload.
+  const fetchSummary = async () => {
     if (!user?.id || !month) return;
     setLoading(true);
-    (async () => {
-      // Same month cutoff as the admin's My Payments tab: a claim/loan dated
-      // after the viewed month hasn't happened yet as of that month.
-      const monthStartISO = `${month}-01`;
-      const monthEndISO = format(new Date(Number(month.slice(0, 4)), Number(month.slice(5, 7)), 0), "yyyy-MM-dd");
-      const [rows, { data: loanRow }, { data: settlementRow }, { data: claims }, { data: profile }, { data: priorPaidRows }] = await Promise.all([
-        computeMonthlySalaryRows([user.id], [month]),
-        supabase.from("personal_advances").select("monthly_deduction, remaining_balance")
-          .eq("user_id", user.id).eq("status", "approved").gt("remaining_balance", 0)
-          .lte("created_at", `${monthEndISO}T23:59:59`)
-          .order("created_at", { ascending: true }).limit(1).maybeSingle(),
-        supabase.from("payroll_settlements").select("*").eq("user_id", user.id).eq("month", `${month}-01`).maybeSingle(),
-        // Every claim up to this month's end — matches the admin's My
-        // Payments tab, so an unadjusted balance keeps carrying forward
-        // until it's actually paid instead of resetting every month.
-        supabase.from("expense_claims").select("amount, entry_type, recovered_amount").eq("user_id", user.id).eq("status", "approved").lte("claim_date", monthEndISO),
-        supabase.from("profiles").select("full_name, email").eq("id", user.id).maybeSingle(),
-        supabase.from("payroll_settlements").select("expense_amount_paid").eq("user_id", user.id).eq("expense_paid", true).lt("month", monthStartISO),
-      ]);
+    // Same month cutoff as the admin's My Payments tab: a claim/loan dated
+    // after the viewed month hasn't happened yet as of that month.
+    const monthStartISO = `${month}-01`;
+    const monthEndISO = format(new Date(Number(month.slice(0, 4)), Number(month.slice(5, 7)), 0), "yyyy-MM-dd");
+    const [rows, { data: loanRow }, { data: settlementRow }, { data: claims }, { data: profile }, { data: priorPaidRows }] = await Promise.all([
+      computeMonthlySalaryRows([user.id], [month]),
+      supabase.from("personal_advances").select("monthly_deduction, remaining_balance")
+        .eq("user_id", user.id).eq("status", "approved").gt("remaining_balance", 0)
+        .lte("created_at", `${monthEndISO}T23:59:59`)
+        .order("created_at", { ascending: true }).limit(1).maybeSingle(),
+      supabase.from("payroll_settlements").select("*").eq("user_id", user.id).eq("month", `${month}-01`).maybeSingle(),
+      // Every claim up to this month's end — matches the admin's My
+      // Payments tab, so an unadjusted balance keeps carrying forward
+      // until it's actually paid instead of resetting every month.
+      supabase.from("expense_claims").select("amount, entry_type, recovered_amount").eq("user_id", user.id).eq("status", "approved").lte("claim_date", monthEndISO),
+      supabase.from("profiles").select("full_name, email").eq("id", user.id).maybeSingle(),
+      supabase.from("payroll_settlements").select("expense_amount_paid").eq("user_id", user.id).eq("expense_paid", true).lt("month", monthStartISO),
+    ]);
 
-      const row = rows[0];
-      setGrossSalary(row ? row.gross : 0);
-      setNetAdjustment(row ? row.netAdjustment : 0);
-      setFinalSalaryNoExpense(row ? row.final + row.recoveryTotal : 0);
-      setLoan(loanRow || null);
-      setSettlement(settlementRow || null);
-      setEmployeeName(profile?.full_name || profile?.email || "");
+    const row = rows[0];
+    setGrossSalary(row ? row.gross : 0);
+    setNetAdjustment(row ? row.netAdjustment : 0);
+    setFinalSalaryNoExpense(row ? row.final + row.recoveryTotal : 0);
+    setLoan(loanRow || null);
+    setSettlement(settlementRow || null);
+    setEmployeeName(profile?.full_name || profile?.email || "");
 
-      // Mirrors the admin's My Payments tab: all claims to date minus all
-      // open advance claims to date, minus whatever reimbursement was
-      // already paid out in an earlier month (a negative past amount is an
-      // advance recovery, already reflected via recovered_amount above, so
-      // it's excluded here to avoid double-counting it).
-      const expenseTotal = (claims || []).filter((c) => c.entry_type !== "advance").reduce((s, c) => s + Number(c.amount), 0);
-      const advanceOutstanding = (claims || []).filter((c) => c.entry_type === "advance").reduce((s, c) => s + Math.max(0, Number(c.amount) - Number(c.recovered_amount || 0)), 0);
-      const advanceRecoveredSoFar = (claims || []).filter((c) => c.entry_type === "advance").reduce((s, c) => s + Number(c.recovered_amount || 0), 0);
-      const priorPaid = (priorPaidRows || []).reduce((s, r) => s + Math.max(0, Number(r.expense_amount_paid)), 0);
-      setExpenseOutstanding(expenseTotal - advanceOutstanding - priorPaid);
-      // What the "Paid" badge shows — the running total actually recovered
-      // or paid out to date, not just this one month's own recorded
-      // amount: every prior month's reimbursement payment, this month's
-      // own (if "Adjust Now" is checked), plus every advance recovery
-      // applied so far (tracked on the claims themselves, so it's already
-      // up to date regardless of any month's Adjust Now flag).
-      const thisMonthReimbursement = settlementRow?.expense_paid ? Math.max(0, Number(settlementRow.expense_amount_paid) || 0) : 0;
-      setExpenseTotalPaid(priorPaid + thisMonthReimbursement + advanceRecoveredSoFar);
+    // Mirrors the admin's My Payments tab: all claims to date minus all
+    // open advance claims to date, minus whatever reimbursement was
+    // already paid out in an earlier month (a negative past amount is an
+    // advance recovery, already reflected via recovered_amount above, so
+    // it's excluded here to avoid double-counting it).
+    const expenseTotal = (claims || []).filter((c) => c.entry_type !== "advance").reduce((s, c) => s + Number(c.amount), 0);
+    const advanceOutstanding = (claims || []).filter((c) => c.entry_type === "advance").reduce((s, c) => s + Math.max(0, Number(c.amount) - Number(c.recovered_amount || 0)), 0);
+    const advanceRecoveredSoFar = (claims || []).filter((c) => c.entry_type === "advance").reduce((s, c) => s + Number(c.recovered_amount || 0), 0);
+    const priorPaid = (priorPaidRows || []).reduce((s, r) => s + Math.max(0, Number(r.expense_amount_paid)), 0);
+    setExpenseOutstanding(expenseTotal - advanceOutstanding - priorPaid);
+    // What the "Paid" badge shows — the running total actually recovered
+    // or paid out to date, not just this one month's own recorded
+    // amount: every prior month's reimbursement payment, this month's
+    // own (if "Adjust Now" is checked), plus every advance recovery
+    // applied so far (tracked on the claims themselves, so it's already
+    // up to date regardless of any month's Adjust Now flag).
+    const thisMonthReimbursement = settlementRow?.expense_paid ? Math.max(0, Number(settlementRow.expense_amount_paid) || 0) : 0;
+    setExpenseTotalPaid(priorPaid + thisMonthReimbursement + advanceRecoveredSoFar);
 
-      setLoading(false);
-    })();
-  }, [user?.id, month]);
+    setLoading(false);
+  };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  useEffect(() => { fetchSummary(); }, [user?.id, month]);
 
   // Team members' settlements awaiting this user's approval as their manager
   // (RLS only returns rows can_approve() allows — nothing extra shows up for
@@ -1241,7 +1246,7 @@ function MyPaymentsSummary() {
       { route: "/payment", type: "payroll_settlement_update" },
     );
     if (row.user_id === user.id) {
-      setSettlement((s) => (s ? { ...s, approval_status: "approved", approved_by: user.id, approved_at: new Date().toISOString() } : s));
+      await fetchSummary();
     }
     fetchTeamPending();
   };
@@ -1267,7 +1272,7 @@ function MyPaymentsSummary() {
     setRejectingId(null);
     setRejectReason("");
     if (row.user_id === user.id) {
-      setSettlement((s) => (s ? { ...s, approval_status: "rejected", rejection_reason: rejectReason.trim() } : s));
+      await fetchSummary();
     }
     fetchTeamPending();
   };
