@@ -528,26 +528,41 @@ function PaymentHistoryTable({
   // any step fails, so the settlement itself is never deleted out from
   // under a ledger reversal that didn't fully go through.
   const reverseSettlementLedgers = async (row: PayrollSettlementRow): Promise<boolean> => {
+    // Reads every action ever logged for this user+month under either note —
+    // the original "Recorded via My Payments" entries and any earlier
+    // "Reversed — ..." entries from a previous delete of this same month —
+    // and reverses only the net amount still outstanding per claim/loan.
+    // Reversing every individual "Recorded via My Payments" row unconditionally
+    // (the previous behavior) would re-reverse rounds a prior delete already
+    // reversed whenever this month had been recorded, deleted and re-recorded
+    // more than once, silently driving recovered_amount/remaining_balance
+    // further off than they should be.
     const { data: expenseActions, error: expenseActionsErr } = await supabase
       .from("expense_recovery_actions")
       .select("expense_claim_id, amount")
-      .eq("user_id", row.user_id).eq("month", row.month).eq("note", "Recorded via My Payments");
+      .eq("user_id", row.user_id).eq("month", row.month)
+      .in("note", ["Recorded via My Payments", "Reversed — payment history entry deleted"]);
     if (expenseActionsErr) { toast.error(expenseActionsErr.message); return false; }
-    for (const action of expenseActions || []) {
+    const netByClaim = new Map<string, number>();
+    (expenseActions || []).forEach((a) => {
+      netByClaim.set(a.expense_claim_id, (netByClaim.get(a.expense_claim_id) || 0) + Number(a.amount));
+    });
+    for (const [claimId, net] of netByClaim) {
+      if (net === 0) continue;
       const { data: claim, error: claimErr } = await supabase
         .from("expense_claims").select("amount, recovered_amount")
-        .eq("id", action.expense_claim_id).maybeSingle();
+        .eq("id", claimId).maybeSingle();
       if (claimErr) { toast.error(claimErr.message); return false; }
       if (!claim) continue;
-      const newRecovered = Math.max(0, Number(claim.recovered_amount || 0) - Number(action.amount));
+      const newRecovered = Math.max(0, Number(claim.recovered_amount || 0) - net);
       const { error: updErr } = await supabase.from("expense_claims").update({
         recovered_amount: newRecovered,
         recovery_status: newRecovered <= 0 ? "open" : newRecovered >= Number(claim.amount) ? "fully_recovered" : "partially_recovered",
-      }).eq("id", action.expense_claim_id);
+      }).eq("id", claimId);
       if (updErr) { toast.error(updErr.message); return false; }
       const { error: insErr } = await supabase.from("expense_recovery_actions").insert({
-        expense_claim_id: action.expense_claim_id, user_id: row.user_id, action_type: "specific_amount",
-        amount: -Number(action.amount), remaining_after: Number(claim.amount) - newRecovered,
+        expense_claim_id: claimId, user_id: row.user_id, action_type: "specific_amount",
+        amount: -net, remaining_after: Number(claim.amount) - newRecovered,
         month: row.month, admin_id: user!.id, note: "Reversed — payment history entry deleted",
       });
       if (insErr) { toast.error(insErr.message); return false; }
@@ -557,27 +572,33 @@ function PaymentHistoryTable({
       .from("personal_advance_actions")
       .select("personal_advance_id, amount")
       .eq("user_id", row.user_id).eq("month", row.month)
-      .eq("action_type", "payroll_deduction").eq("note", "Recorded via My Payments");
+      .eq("action_type", "payroll_deduction")
+      .in("note", ["Recorded via My Payments", "Reversed — payment history entry deleted"]);
     if (loanActionsErr) { toast.error(loanActionsErr.message); return false; }
-    for (const action of loanActions || []) {
+    const netByLoan = new Map<string, number>();
+    (loanActions || []).forEach((a) => {
+      netByLoan.set(a.personal_advance_id, (netByLoan.get(a.personal_advance_id) || 0) + Number(a.amount));
+    });
+    for (const [loanId, net] of netByLoan) {
+      if (net === 0) continue;
       const { data: loanRow, error: loanErr } = await supabase
         .from("personal_advances").select("remaining_balance, status")
-        .eq("id", action.personal_advance_id).maybeSingle();
+        .eq("id", loanId).maybeSingle();
       if (loanErr) { toast.error(loanErr.message); return false; }
       if (!loanRow) continue;
-      const newRemaining = Number(loanRow.remaining_balance || 0) + Number(action.amount);
+      const newRemaining = Number(loanRow.remaining_balance || 0) + net;
       const { error: updErr } = await supabase.from("personal_advances").update({
         remaining_balance: newRemaining,
         status: newRemaining > 0 && loanRow.status === "closed" ? "approved" : loanRow.status,
-      }).eq("id", action.personal_advance_id);
+      }).eq("id", loanId);
       // Most likely cause of failure here: reopening this loan to "approved"
       // would collide with the one-active-loan-per-employee unique index
       // because a newer loan is already active — surfaced as an error
       // rather than silently leaving the old loan closed with a wrong balance.
       if (updErr) { toast.error(updErr.message); return false; }
       const { error: insErr } = await supabase.from("personal_advance_actions").insert({
-        personal_advance_id: action.personal_advance_id, user_id: row.user_id, action_type: "payroll_deduction",
-        amount: -Number(action.amount), remaining_after: newRemaining,
+        personal_advance_id: loanId, user_id: row.user_id, action_type: "payroll_deduction",
+        amount: -net, remaining_after: newRemaining,
         month: row.month, created_by: user!.id, note: "Reversed — payment history entry deleted",
       });
       if (insErr) { toast.error(insErr.message); return false; }
