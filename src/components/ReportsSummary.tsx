@@ -502,15 +502,15 @@ const ReportsSummary = () => {
                 </Table>
               </div>
               {rows.length > PAGE_SIZE && (
-                <div className="flex items-center justify-center gap-2 pt-1">
-                  <Button variant="outline" size="icon" className="h-8 w-8" disabled={rowsPage <= 1} onClick={() => setRowsPage((p) => p - 1)}>
-                    <ChevronLeft className="h-4 w-4" />
+                <div className="flex items-center justify-center gap-3 pt-1">
+                  <Button variant="outline" size="sm" disabled={rowsPage <= 1} onClick={() => setRowsPage((p) => p - 1)}>
+                    <ChevronLeft className="h-4 w-4 mr-1" />Previous
                   </Button>
-                  <span className="text-xs text-muted-foreground">
+                  <span className="text-sm text-muted-foreground">
                     Page {rowsPage} of {Math.ceil(rows.length / PAGE_SIZE)}
                   </span>
-                  <Button variant="outline" size="icon" className="h-8 w-8" disabled={rowsPage >= Math.ceil(rows.length / PAGE_SIZE)} onClick={() => setRowsPage((p) => p + 1)}>
-                    <ChevronRight className="h-4 w-4" />
+                  <Button variant="outline" size="sm" disabled={rowsPage >= Math.ceil(rows.length / PAGE_SIZE)} onClick={() => setRowsPage((p) => p + 1)}>
+                    Next<ChevronRight className="h-4 w-4 ml-1" />
                   </Button>
                 </div>
               )}
@@ -660,15 +660,15 @@ const ReportsSummary = () => {
                 </TableBody>
               </Table>
               {monthlyRows.length > PAGE_SIZE && (
-                <div className="flex items-center justify-center gap-2 pt-3">
-                  <Button variant="outline" size="icon" className="h-8 w-8" disabled={monthlyPage <= 1} onClick={() => setMonthlyPage((p) => p - 1)}>
-                    <ChevronLeft className="h-4 w-4" />
+                <div className="flex items-center justify-center gap-3 pt-3">
+                  <Button variant="outline" size="sm" disabled={monthlyPage <= 1} onClick={() => setMonthlyPage((p) => p - 1)}>
+                    <ChevronLeft className="h-4 w-4 mr-1" />Previous
                   </Button>
-                  <span className="text-xs text-muted-foreground">
+                  <span className="text-sm text-muted-foreground">
                     Page {monthlyPage} of {Math.ceil(monthlyRows.length / PAGE_SIZE)}
                   </span>
-                  <Button variant="outline" size="icon" className="h-8 w-8" disabled={monthlyPage >= Math.ceil(monthlyRows.length / PAGE_SIZE)} onClick={() => setMonthlyPage((p) => p + 1)}>
-                    <ChevronRight className="h-4 w-4" />
+                  <Button variant="outline" size="sm" disabled={monthlyPage >= Math.ceil(monthlyRows.length / PAGE_SIZE)} onClick={() => setMonthlyPage((p) => p + 1)}>
+                    Next<ChevronRight className="h-4 w-4 ml-1" />
                   </Button>
                 </div>
               )}
