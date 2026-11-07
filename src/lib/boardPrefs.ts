@@ -55,3 +55,9 @@ const DEFAULT_BOARD_COLOR = "bg-indigo-100 group-hover:bg-indigo-200 transition-
     gets the same flat color now (kept as a function in case per-board
     colors come back as a user-chosen setting later). */
 export const colorForBoard = (_id: string): string => DEFAULT_BOARD_COLOR;
+
+// A list's own background on the board — same light-blue family as the
+// board tile color above, matching Trello (where a list's background tints
+// to the board's color), without the hover-darken variant a column isn't
+// rendered inside a `group` for.
+export const LIST_BACKGROUND_COLOR = "bg-indigo-100/70";

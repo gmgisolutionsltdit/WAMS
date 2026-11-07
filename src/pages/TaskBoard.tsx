@@ -116,6 +116,9 @@ const TaskBoard = () => {
       .maybeSingle();
     if (existing) return existing.id;
 
+    // No seeded columns — a freshly created board starts completely empty,
+    // same as Trello's own "+ Add a list" blank board, rather than
+    // pre-filled with a default To Do/In Progress/Done set.
     const { data: created, error } = await supabase
       .from("task_boards")
       .insert({ project_id: pjId, name: "Main Board", position: 0 })
@@ -125,12 +128,6 @@ const TaskBoard = () => {
       console.error("[TaskBoard] failed to create board:", error);
       return null;
     }
-    const { error: colErr } = await supabase.from("task_columns").insert([
-      { board_id: created.id, name: "To Do", status: "todo", position: 0 },
-      { board_id: created.id, name: "In Progress", status: "in_progress", position: 1 },
-      { board_id: created.id, name: "Completed", status: "done", position: 2 },
-    ]);
-    if (colErr) console.error("[TaskBoard] failed to seed columns:", colErr);
     return created.id;
   }, []);
 
