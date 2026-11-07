@@ -14,7 +14,7 @@ import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription,
 } from "@/components/ui/dialog";
 import { toast } from "sonner";
-import { ArrowLeft, Plus, MessageSquare, Loader2, AlertCircle, CheckSquare, X, UserPlus, Tag, CalendarClock } from "lucide-react";
+import { ArrowLeft, Plus, MessageSquare, Loader2, AlertCircle, CheckSquare, UserPlus, Tag, CalendarClock } from "lucide-react";
 import {
   DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
@@ -44,10 +44,15 @@ import { KanbanColumn, KanbanColumnData } from "@/components/kanban/KanbanColumn
 import { KanbanCard, KanbanTask, Profile } from "@/components/kanban/KanbanCard";
 import { KanbanEmptyState } from "@/components/kanban/KanbanEmptyState";
 import { BoardSearchCreate } from "@/components/tasks/BoardSearchCreate";
+import { AddChecklistPopover } from "@/components/tasks/AddChecklistPopover";
+import { TaskChecklist } from "@/components/tasks/TaskChecklist";
 import { cn } from "@/lib/utils";
 import { recordRecentBoard } from "@/lib/boardPrefs";
 
 const PRIORITIES = ["low", "medium", "high", "urgent"];
+
+type TaskChecklistRow = { id: string; task_id: string; title: string; position: number; created_by: string; created_at: string };
+type TaskChecklistItemRow = { id: string; task_id: string; checklist_id: string; text: string; done: boolean; position: number; created_by: string; created_at: string };
 
 const TaskBoard = () => {
   const { id: projectId } = useParams<{ id: string }>();
@@ -68,9 +73,10 @@ const TaskBoard = () => {
   const [draggingTask, setDraggingTask] = useState<KanbanTask | null>(null);
   const [comments, setComments] = useState<any[]>([]);
   const [newComment, setNewComment] = useState("");
-  const [checklistItems, setChecklistItems] = useState<any[]>([]);
-  const [newChecklistItem, setNewChecklistItem] = useState("");
+  const [checklists, setChecklists] = useState<TaskChecklistRow[]>([]);
+  const [checklistItems, setChecklistItems] = useState<TaskChecklistItemRow[]>([]);
   const [checklistCounts, setChecklistCounts] = useState<Record<string, { done: number; total: number }>>({});
+  const addChecklistTriggerRef = useRef<HTMLButtonElement>(null);
   // Trello's description is a collapsed "Add a more detailed description..."
   // box until clicked, then becomes a textarea with its own Save/Cancel.
   const [editingDescription, setEditingDescription] = useState(false);
@@ -78,7 +84,6 @@ const TaskBoard = () => {
   const labelsTriggerRef = useRef<HTMLButtonElement>(null);
   const datesWrapperRef = useRef<HTMLDivElement>(null);
   const membersWrapperRef = useRef<HTMLDivElement>(null);
-  const checklistInputRef = useRef<HTMLInputElement>(null);
 
   const [createOpen, setCreateOpen] = useState(false);
   const [createColId, setCreateColId] = useState<string | null>(null);
@@ -214,6 +219,7 @@ const TaskBoard = () => {
   useRealtimeSubscription("tasks", fetchAll, `tasks-${projectId}`);
   useRealtimeSubscription("task_columns", fetchAll, `cols-${projectId}`);
   useRealtimeSubscription("task_checklist_items", fetchAll, `checklist-${projectId}`);
+  useRealtimeSubscription("task_checklists", fetchAll, `checklists-${projectId}`);
 
   const [boardLabels, setBoardLabels] = useState<TaskLabel[]>([]);
   const fetchBoardLabels = useCallback(async () => {
@@ -442,16 +448,24 @@ const TaskBoard = () => {
     setActiveTask(t);
     setEditingDescription(false);
     openTaskIdRef.current = t.id;
-    const [{ data }, { data: checklist }] = await Promise.all([
+    const [{ data }, { data: cls }, { data: items }] = await Promise.all([
       supabase.from("task_comments").select("*").eq("task_id", t.id).order("created_at"),
+      supabase.from("task_checklists").select("*").eq("task_id", t.id).order("position"),
       supabase.from("task_checklist_items").select("*").eq("task_id", t.id).order("position"),
     ]);
     if (openTaskIdRef.current !== t.id) return;
     setComments(data || []);
-    setChecklistItems(checklist || []);
+    setChecklists(cls || []);
+    setChecklistItems(items || []);
   };
 
-  const refreshChecklist = async (taskId: string) => {
+  const refreshChecklists = async (taskId: string) => {
+    const { data } = await supabase.from("task_checklists").select("*").eq("task_id", taskId).order("position");
+    if (openTaskIdRef.current !== taskId) return;
+    setChecklists(data || []);
+  };
+
+  const refreshChecklistItems = async (taskId: string) => {
     const { data } = await supabase
       .from("task_checklist_items")
       .select("*")
@@ -461,29 +475,78 @@ const TaskBoard = () => {
     setChecklistItems(data || []);
   };
 
-  const addChecklistItem = async () => {
-    if (!activeTask || !newChecklistItem.trim()) return;
+  const itemsByChecklist = useMemo(() => {
+    const map: Record<string, TaskChecklistItemRow[]> = {};
+    checklistItems.forEach((it) => {
+      if (!map[it.checklist_id]) map[it.checklist_id] = [];
+      map[it.checklist_id].push(it);
+    });
+    return map;
+  }, [checklistItems]);
+
+  const addChecklist = async (title: string, copyFromId: string | null) => {
+    if (!activeTask) return;
+    const { data: created, error } = await supabase.from("task_checklists").insert({
+      task_id: activeTask.id,
+      title,
+      position: checklists.length,
+      created_by: user!.id,
+    }).select("id").single();
+    if (error || !created) { toast.error(error?.message || "Could not add checklist"); return; }
+    if (copyFromId) {
+      const sourceItems = checklistItems.filter((it) => it.checklist_id === copyFromId);
+      if (sourceItems.length > 0) {
+        const { error: copyErr } = await supabase.from("task_checklist_items").insert(
+          sourceItems.map((it, idx) => ({
+            task_id: activeTask.id,
+            checklist_id: created.id,
+            text: it.text,
+            position: idx,
+            created_by: user!.id,
+          })),
+        );
+        if (copyErr) toast.error(copyErr.message);
+      }
+    }
+    refreshChecklists(activeTask.id);
+    refreshChecklistItems(activeTask.id);
+  };
+
+  const renameChecklist = async (checklistId: string, title: string) => {
+    setChecklists((prev) => prev.map((c) => (c.id === checklistId ? { ...c, title } : c)));
+    const { error } = await supabase.from("task_checklists").update({ title }).eq("id", checklistId);
+    if (error) { toast.error(error.message); if (activeTask) refreshChecklists(activeTask.id); }
+  };
+
+  const deleteChecklist = async (checklistId: string) => {
+    const { error } = await supabase.from("task_checklists").delete().eq("id", checklistId);
+    if (error) { toast.error(error.message); return; }
+    if (activeTask) { refreshChecklists(activeTask.id); refreshChecklistItems(activeTask.id); }
+  };
+
+  const addChecklistItem = async (checklistId: string, text: string) => {
+    if (!activeTask) return;
     const { error } = await supabase.from("task_checklist_items").insert({
       task_id: activeTask.id,
-      text: newChecklistItem.trim(),
-      position: checklistItems.length,
+      checklist_id: checklistId,
+      text,
+      position: (itemsByChecklist[checklistId] || []).length,
       created_by: user!.id,
     });
     if (error) { toast.error(error.message); return; }
-    setNewChecklistItem("");
-    refreshChecklist(activeTask.id);
+    refreshChecklistItems(activeTask.id);
   };
 
   const toggleChecklistItem = async (itemId: string, done: boolean) => {
     const { error } = await supabase.from("task_checklist_items").update({ done }).eq("id", itemId);
     if (error) { toast.error(error.message); return; }
-    if (activeTask) refreshChecklist(activeTask.id);
+    if (activeTask) refreshChecklistItems(activeTask.id);
   };
 
   const deleteChecklistItem = async (itemId: string) => {
     const { error } = await supabase.from("task_checklist_items").delete().eq("id", itemId);
     if (error) { toast.error(error.message); return; }
-    if (activeTask) refreshChecklist(activeTask.id);
+    if (activeTask) refreshChecklistItems(activeTask.id);
   };
 
   const updateTask = async (patch: Partial<KanbanTask>) => {
@@ -867,7 +930,7 @@ const TaskBoard = () => {
                     <DropdownMenuItem onClick={() => datesWrapperRef.current?.querySelector("button")?.click()}>
                       <CalendarClock className="h-3.5 w-3.5 mr-2" /> Dates
                     </DropdownMenuItem>
-                    <DropdownMenuItem onClick={() => { checklistInputRef.current?.scrollIntoView({ behavior: "smooth", block: "center" }); checklistInputRef.current?.focus(); }}>
+                    <DropdownMenuItem onClick={() => addChecklistTriggerRef.current?.click()}>
                       <CheckSquare className="h-3.5 w-3.5 mr-2" /> Checklist
                     </DropdownMenuItem>
                     <DropdownMenuItem onClick={() => membersWrapperRef.current?.querySelector("button")?.click()}>
@@ -900,7 +963,7 @@ const TaskBoard = () => {
                   variant="outline"
                   size="sm"
                   className="h-auto py-1.5"
-                  onClick={() => { checklistInputRef.current?.scrollIntoView({ behavior: "smooth", block: "center" }); checklistInputRef.current?.focus(); }}
+                  onClick={() => addChecklistTriggerRef.current?.click()}
                 >
                   <CheckSquare className="h-4 w-4 mr-1.5" /> Checklist
                 </Button>
@@ -931,8 +994,33 @@ const TaskBoard = () => {
                   })}
                 </div>
               )}
-              <div className="grid grid-cols-3 gap-4">
-                <div className="col-span-2 space-y-3">
+              <div className="grid grid-cols-3 gap-3">
+                <div>
+                  <Label className="text-xs text-muted-foreground">Status</Label>
+                  <Select
+                    value={activeTask.column_id || ""}
+                    onValueChange={(v) => {
+                      const col = columns.find((c) => c.id === v);
+                      updateTask({ column_id: v, status: (col?.status || "todo") as any });
+                    }}
+                  >
+                    <SelectTrigger><SelectValue /></SelectTrigger>
+                    <SelectContent>{columns.map((c) => <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>)}</SelectContent>
+                  </Select>
+                </div>
+                <div>
+                  <Label className="text-xs text-muted-foreground">Priority</Label>
+                  <Select value={activeTask.priority} onValueChange={(v) => updateTask({ priority: v as any })}>
+                    <SelectTrigger><SelectValue /></SelectTrigger>
+                    <SelectContent>{PRIORITIES.map((p) => <SelectItem key={p} value={p}>{p}</SelectItem>)}</SelectContent>
+                  </Select>
+                </div>
+                <div className="text-xs text-muted-foreground pt-5">
+                  Reporter: {profileFor((activeTask as any).reporter_id)?.full_name || "—"}
+                </div>
+              </div>
+              <div className="grid grid-cols-5 gap-4">
+                <div className="col-span-3 space-y-4">
                   <div>
                     <Label>Description</Label>
                     {editingDescription ? (
@@ -969,102 +1057,61 @@ const TaskBoard = () => {
                       </button>
                     )}
                   </div>
-                  <div>
-                    <Label className="flex items-center gap-1">
-                      <CheckSquare className="h-3 w-3" /> Checklist
-                      {checklistItems.length > 0 && (
-                        <span className="text-xs text-muted-foreground font-normal">
-                          ({checklistItems.filter((i) => i.done).length}/{checklistItems.length})
-                        </span>
-                      )}
-                    </Label>
-                    <div className="space-y-1 my-2">
-                      {checklistItems.map((item) => (
-                        <div key={item.id} className="flex items-center gap-2 group">
-                          <input
-                            type="checkbox"
-                            checked={item.done}
-                            onChange={(e) => toggleChecklistItem(item.id, e.target.checked)}
-                            className="h-4 w-4"
-                          />
-                          <span className={cn("flex-1 text-sm", item.done && "line-through text-muted-foreground")}>
-                            {item.text}
-                          </span>
-                          <button
-                            onClick={() => deleteChecklistItem(item.id)}
-                            className="opacity-0 group-hover:opacity-100 text-muted-foreground hover:text-destructive"
-                          >
-                            <X className="h-3.5 w-3.5" />
-                          </button>
-                        </div>
-                      ))}
-                    </div>
-                    <div className="flex gap-2">
-                      <Input
-                        ref={checklistInputRef}
-                        value={newChecklistItem}
-                        onChange={(e) => setNewChecklistItem(e.target.value)}
-                        placeholder="Add checklist item..."
-                        onKeyDown={(e) => e.key === "Enter" && addChecklistItem()}
-                      />
-                      <Button size="sm" onClick={addChecklistItem}>Add</Button>
-                    </div>
-                  </div>
-                  <div>
-                    <Label className="flex items-center gap-1"><MessageSquare className="h-3 w-3" /> Comments</Label>
-                    <div className="space-y-2 max-h-60 overflow-y-auto my-2">
-                      {comments.map((c) => {
-                        const cp = profileFor(c.user_id);
-                        return (
-                          <div key={c.id} className="flex gap-2 text-sm">
-                            <Avatar className="h-6 w-6">
-                              <AvatarImage src={cp?.photo_url || undefined} />
-                              <AvatarFallback className="text-[10px]">{(cp?.full_name || "?").slice(0, 2)}</AvatarFallback>
-                            </Avatar>
-                            <div className="flex-1">
-                              <div className="text-xs text-muted-foreground">
-                                {cp?.full_name || cp?.email} · {new Date(c.created_at).toLocaleString()}
-                              </div>
-                              <div>{c.body}</div>
-                            </div>
-                          </div>
-                        );
-                      })}
-                    </div>
-                    <div className="flex gap-2">
-                      <Input
-                        value={newComment}
-                        onChange={(e) => setNewComment(e.target.value)}
-                        placeholder="Add a comment..."
-                        onKeyDown={(e) => e.key === "Enter" && addComment()}
-                      />
-                      <Button size="sm" onClick={addComment}>Post</Button>
-                    </div>
-                  </div>
+
+                  {checklists.map((cl) => (
+                    <TaskChecklist
+                      key={cl.id}
+                      id={cl.id}
+                      title={cl.title}
+                      items={itemsByChecklist[cl.id] || []}
+                      onRename={(title) => renameChecklist(cl.id, title)}
+                      onDelete={() => deleteChecklist(cl.id)}
+                      onToggleItem={toggleChecklistItem}
+                      onDeleteItem={deleteChecklistItem}
+                      onAddItem={(text) => addChecklistItem(cl.id, text)}
+                    />
+                  ))}
+                  <AddChecklistPopover
+                    nextDefaultTitle={checklists.length === 0 ? "Checklist" : `Checklist ${checklists.length + 1}`}
+                    existingChecklists={checklists.map((c) => ({ id: c.id, title: c.title }))}
+                    onAdd={addChecklist}
+                    trigger={
+                      <Button ref={addChecklistTriggerRef} variant="outline" size="sm" className="h-auto py-1.5">
+                        <CheckSquare className="h-4 w-4 mr-1.5" /> Add checklist
+                      </Button>
+                    }
+                  />
                 </div>
-                <div className="space-y-3">
-                  <div>
-                    <Label>Status</Label>
-                    <Select
-                      value={activeTask.column_id || ""}
-                      onValueChange={(v) => {
-                        const col = columns.find((c) => c.id === v);
-                        updateTask({ column_id: v, status: (col?.status || "todo") as any });
-                      }}
-                    >
-                      <SelectTrigger><SelectValue /></SelectTrigger>
-                      <SelectContent>{columns.map((c) => <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>)}</SelectContent>
-                    </Select>
+
+                <div className="col-span-2 space-y-2">
+                  <Label className="flex items-center gap-1"><MessageSquare className="h-3 w-3" /> Comments and activity</Label>
+                  <div className="flex gap-2">
+                    <Input
+                      value={newComment}
+                      onChange={(e) => setNewComment(e.target.value)}
+                      placeholder="Add a comment..."
+                      onKeyDown={(e) => e.key === "Enter" && addComment()}
+                    />
+                    <Button size="sm" onClick={addComment}>Post</Button>
                   </div>
-                  <div>
-                    <Label>Priority</Label>
-                    <Select value={activeTask.priority} onValueChange={(v) => updateTask({ priority: v as any })}>
-                      <SelectTrigger><SelectValue /></SelectTrigger>
-                      <SelectContent>{PRIORITIES.map((p) => <SelectItem key={p} value={p}>{p}</SelectItem>)}</SelectContent>
-                    </Select>
-                  </div>
-                  <div className="text-xs text-muted-foreground pt-2">
-                    Reporter: {profileFor((activeTask as any).reporter_id)?.full_name || "—"}
+                  <div className="space-y-2 max-h-[28rem] overflow-y-auto">
+                    {comments.map((c) => {
+                      const cp = profileFor(c.user_id);
+                      return (
+                        <div key={c.id} className="flex gap-2 text-sm">
+                          <Avatar className="h-6 w-6">
+                            <AvatarImage src={cp?.photo_url || undefined} />
+                            <AvatarFallback className="text-[10px]">{(cp?.full_name || "?").slice(0, 2)}</AvatarFallback>
+                          </Avatar>
+                          <div className="flex-1">
+                            <div className="text-xs text-muted-foreground">
+                              {cp?.full_name || cp?.email} · {new Date(c.created_at).toLocaleString()}
+                            </div>
+                            <div>{c.body}</div>
+                          </div>
+                        </div>
+                      );
+                    })}
                   </div>
                 </div>
               </div>
