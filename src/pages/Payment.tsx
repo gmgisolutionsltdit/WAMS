@@ -629,7 +629,7 @@ function PaymentHistoryTable({
   const netFor = (r: PayrollSettlementRow) =>
     (r.net_hours_paid ? Number(r.net_hours_amount) : 0)
     + (r.expense_paid ? Number(r.expense_amount_paid) : 0)
-    + (r.loan_paid ? Number(r.loan_amount_paid) : 0);
+    - (r.loan_paid ? Number(r.loan_amount_paid) : 0);
 
   const colCount = canDelete ? 7 : 6;
 
