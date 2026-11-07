@@ -8,6 +8,7 @@ import { Plus, MoreVertical, Trash2, X, Archive } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { KanbanCard, KanbanTask, Profile } from "./KanbanCard";
 import type { TaskLabel } from "@/lib/taskLabels";
+import { LIST_BACKGROUND_COLOR } from "@/lib/boardPrefs";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -186,7 +187,7 @@ export function KanbanColumn({
       style={style}
       className={cn(
         "min-w-[272px] w-[272px] max-h-full flex flex-col rounded-xl",
-        "bg-muted/60",
+        LIST_BACKGROUND_COLOR,
         isOver && "ring-2 ring-primary/40",
         isDragging && "opacity-40",
       )}
