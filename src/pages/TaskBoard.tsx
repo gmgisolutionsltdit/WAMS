@@ -959,14 +959,16 @@ const TaskBoard = () => {
                     onSave={(patch) => updateTask(patch)}
                   />
                 </div>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  className="h-auto py-1.5"
-                  onClick={() => addChecklistTriggerRef.current?.click()}
-                >
-                  <CheckSquare className="h-4 w-4 mr-1.5" /> Checklist
-                </Button>
+                <AddChecklistPopover
+                  nextDefaultTitle={checklists.length === 0 ? "Checklist" : `Checklist ${checklists.length + 1}`}
+                  existingChecklists={checklists.map((c) => ({ id: c.id, title: c.title }))}
+                  onAdd={addChecklist}
+                  trigger={
+                    <Button ref={addChecklistTriggerRef} variant="outline" size="sm" className="h-auto py-1.5">
+                      <CheckSquare className="h-4 w-4 mr-1.5" /> Checklist
+                    </Button>
+                  }
+                />
                 <div ref={membersWrapperRef}>
                   <EmployeePicker
                     value={activeTask.assignee_id}
@@ -1071,19 +1073,9 @@ const TaskBoard = () => {
                       onAddItem={(text) => addChecklistItem(cl.id, text)}
                     />
                   ))}
-                  <AddChecklistPopover
-                    nextDefaultTitle={checklists.length === 0 ? "Checklist" : `Checklist ${checklists.length + 1}`}
-                    existingChecklists={checklists.map((c) => ({ id: c.id, title: c.title }))}
-                    onAdd={addChecklist}
-                    trigger={
-                      <Button ref={addChecklistTriggerRef} variant="outline" size="sm" className="h-auto py-1.5">
-                        <CheckSquare className="h-4 w-4 mr-1.5" /> Add checklist
-                      </Button>
-                    }
-                  />
                 </div>
 
-                <div className="col-span-2 space-y-2">
+                <div className="col-span-2 space-y-2 md:border-l md:pl-4">
                   <Label className="flex items-center gap-1"><MessageSquare className="h-3 w-3" /> Comments and activity</Label>
                   <div className="flex gap-2">
                     <Input
