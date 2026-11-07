@@ -725,6 +725,7 @@ function MyPaymentsTab() {
   const [finalSalaryNoExpense, setFinalSalaryNoExpense] = useState(0);
   const [loan, setLoan] = useState<{ id: string; monthly_deduction: number; remaining_balance: number } | null>(null);
   const [expenseOutstanding, setExpenseOutstanding] = useState(0);
+  const [hasExpenseActivity, setHasExpenseActivity] = useState(false);
   const [existingSettlement, setExistingSettlement] = useState<any>(null);
 
   const [netHoursPaidNow, setNetHoursPaidNow] = useState(true);
@@ -809,6 +810,12 @@ function MyPaymentsTab() {
       const priorPaid = (priorPaidRows || []).reduce((s, r) => s + Math.max(0, Number(r.expense_amount_paid)), 0);
       const outstanding = expenseTotal - advanceOutstanding - priorPaid;
       setExpenseOutstanding(outstanding);
+      // Only show an Expense Balance figure once this employee actually has
+      // some expense/advance activity (a claim on record, or a reimbursement
+      // paid in a prior month) — otherwise there's nothing to carry forward
+      // and the card should read as "no expense" rather than a stray 0 or a
+      // balance left over from unrelated accounting.
+      setHasExpenseActivity((claims || []).length > 0 || (priorPaidRows || []).length > 0);
       // Always starts at 0 — the admin enters the amount to pay explicitly,
       // rather than it being prefilled (from either the live outstanding
       // figure or an existing settlement), so reopening a month never risks
@@ -1103,12 +1110,14 @@ function MyPaymentsTab() {
               </div>
               <div className="rounded-md border p-3 space-y-2">
                 <div className="text-sm font-medium">Expense Balance</div>
-                <div className="text-lg font-semibold">{fmtBDT(expenseOutstanding)}</div>
+                <div className="text-lg font-semibold">
+                  {hasExpenseActivity ? fmtBDT(expenseOutstanding) : "No expense"}
+                </div>
                 <label className="flex items-center gap-2 text-xs">
-                  <Checkbox checked={expensePaidNow} onCheckedChange={(v) => setExpensePaidNow(!!v)} />
+                  <Checkbox checked={expensePaidNow} onCheckedChange={(v) => setExpensePaidNow(!!v)} disabled={!hasExpenseActivity} />
                   Adjust Now (unchecked = carry to next month)
                 </label>
-                <Input type="number" value={expenseAmount} onChange={(e) => { setExpenseAmount(e.target.value); setExpenseAmountTouched(true); }} disabled={!expensePaidNow} />
+                <Input type="number" value={expenseAmount} onChange={(e) => { setExpenseAmount(e.target.value); setExpenseAmountTouched(true); }} disabled={!hasExpenseActivity || !expensePaidNow} />
               </div>
               <div className="rounded-md border p-3 space-y-2">
                 <div className="text-sm font-medium">Loan Due</div>
@@ -1175,6 +1184,7 @@ function MyPaymentsSummary() {
   const [loan, setLoan] = useState<{ monthly_deduction: number; remaining_balance: number } | null>(null);
   const [expenseOutstanding, setExpenseOutstanding] = useState(0);
   const [expenseTotalPaid, setExpenseTotalPaid] = useState(0);
+  const [hasExpenseActivity, setHasExpenseActivity] = useState(false);
   const [settlement, setSettlement] = useState<PayrollSettlementRow | null>(null);
   const [employeeName, setEmployeeName] = useState("");
   const [teamPending, setTeamPending] = useState<PayrollSettlementRow[]>([]);
@@ -1238,6 +1248,10 @@ function MyPaymentsSummary() {
     const thisMonthReimbursement = settlementRow?.expense_paid ? Math.max(0, Number(settlementRow.expense_amount_paid) || 0) : 0;
     setExpenseOutstanding(expenseTotal - advanceOutstanding - priorPaid - thisMonthReimbursement);
     setExpenseTotalPaid(priorPaid + thisMonthReimbursement + advanceRecoveredSoFar);
+    // Mirrors the admin's own "no expense activity" gate — only show a
+    // balance once this employee actually has a claim/advance on record or a
+    // past reimbursement, rather than a stray figure with nothing behind it.
+    setHasExpenseActivity((claims || []).length > 0 || (priorPaidRows || []).length > 0);
 
     setLoading(false);
   };
@@ -1383,8 +1397,10 @@ function MyPaymentsSummary() {
               </div>
               <div className="rounded-md border p-3 space-y-2">
                 <div className="text-sm font-medium">Expense Balance</div>
-                <div className="text-lg font-semibold">{fmtBDT(expenseOutstanding)}</div>
-                <Badge variant="outline">Paid {fmtBDT(expenseTotalPaid)}</Badge>
+                <div className="text-lg font-semibold">
+                  {hasExpenseActivity ? fmtBDT(expenseOutstanding) : "No expense"}
+                </div>
+                {hasExpenseActivity && <Badge variant="outline">Paid {fmtBDT(expenseTotalPaid)}</Badge>}
               </div>
               <div className="rounded-md border p-3 space-y-2">
                 <div className="text-sm font-medium">Loan Due</div>
