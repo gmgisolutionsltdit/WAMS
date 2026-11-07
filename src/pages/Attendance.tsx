@@ -511,16 +511,6 @@ const Attendance = () => {
                 // represents real hours worked just as much as a punch-card
                 // session, so both push a day into overtime the same way.
                 const otRegular = closed && worked > requiredSeconds ? worked - requiredSeconds : 0;
-                // Same gate Reports/Payroll's "Approved Overtime" figure uses
-                // (fetchApprovedOTHoursByUserMonth): an approved OT request or
-                // manual-time correction only counts if this date also has
-                // matching *actual* overtime — otherwise a stray or
-                // superseded approval (e.g. the attendance record was later
-                // corrected to show no overtime) would show here as approved
-                // OT but never be counted anywhere it's actually totaled,
-                // which looks like a bug rather than the intentional gate it
-                // is.
-                const otActualQualifies = !leaveName && (dayKind.nonWorking ? worked > 0 : (closed && worked > requiredSeconds));
                 const isOpen = !!expanded[day.key];
                 return (
                   <Fragment key={day.key}>
@@ -598,7 +588,7 @@ const Attendance = () => {
                           : <span className="text-muted-foreground font-mono text-xs">00:00:00</span>}
                       </TableCell>
                       <TableCell>
-                        {otActualQualifies && (approvedOTByDate[day.date] || 0) > 0
+                        {(approvedOTByDate[day.date] || 0) > 0
                           ? <Badge className="bg-lime-500 text-white border-lime-500 font-mono">{fmtHMS(approvedOTByDate[day.date] * 3600)}</Badge>
                           : <span className="text-muted-foreground font-mono text-xs">00:00:00</span>}
                       </TableCell>
