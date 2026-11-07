@@ -36,7 +36,6 @@ const BoardTile = ({ board, starred, onToggleStar, onOpen }: {
     </div>
     <div className="bg-card px-3 py-2">
       <p className="text-sm font-medium truncate">{board.name}</p>
-      <p className="text-xs text-muted-foreground truncate">{board.key}</p>
     </div>
   </div>
 );
