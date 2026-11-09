@@ -178,6 +178,7 @@ const Holidays = () => {
           <TableHeader>
             <TableRow>
               <TableHead>Date</TableHead>
+              <TableHead>Day</TableHead>
               <TableHead>Name</TableHead>
               <TableHead>Wing</TableHead>
               <TableHead>Actions</TableHead>
@@ -185,13 +186,18 @@ const Holidays = () => {
           </TableHeader>
           <TableBody>
             {holidays.length === 0 ? (
-              <TableRow><TableCell colSpan={4} className="text-center text-muted-foreground">No holidays declared</TableCell></TableRow>
+              <TableRow><TableCell colSpan={5} className="text-center text-muted-foreground">No holidays declared</TableCell></TableRow>
             ) : groupHolidays(holidays).map((g) => (
               <TableRow key={g.ids[0]}>
                 <TableCell>
                   {g.start_date === g.end_date
                     ? format(new Date(g.start_date), "EEE, MMM d, yyyy")
                     : `${format(new Date(g.start_date), "EEE, MMM d")} – ${format(new Date(g.end_date), "EEE, MMM d, yyyy")}`}
+                </TableCell>
+                <TableCell className="text-muted-foreground">
+                  {g.start_date === g.end_date
+                    ? format(new Date(g.start_date), "EEEE")
+                    : `${format(new Date(g.start_date), "EEEE")} – ${format(new Date(g.end_date), "EEEE")}`}
                 </TableCell>
                 <TableCell className="font-medium">{g.name}</TableCell>
                 <TableCell><Badge variant={g.wing ? "secondary" : "outline"}>{g.wing || "All"}</Badge></TableCell>
