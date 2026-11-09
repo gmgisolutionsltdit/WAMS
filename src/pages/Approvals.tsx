@@ -160,6 +160,10 @@ const Approvals = () => {
 
   const decideManual = async (req: any, status: "approved" | "rejected") => {
     if (!user) return;
+    if (status === "rejected" && !notes[req.id]?.trim()) {
+      toast.error("A note is required to reject a manual time entry.");
+      return;
+    }
     // The "Approve OT (h)" box shows the employee's auto-calculated figure only
     // as a greyed placeholder — it's a hint, not a value. An approver must type
     // into it to grant that OT; leaving it empty and approving means 0h, not a
@@ -537,7 +541,7 @@ const Approvals = () => {
                       <TableCell className="max-w-48 truncate">{req.task_note || req.reason || "—"}</TableCell>
                       <TableCell>
                         <Input
-                          placeholder="Optional note"
+                          placeholder="Required to reject"
                           value={notes[req.id] || ""}
                           onChange={(e) => setNotes((n) => ({ ...n, [req.id]: e.target.value }))}
                           className="h-8 w-40"
@@ -547,7 +551,12 @@ const Approvals = () => {
                         <Button size="sm" className="bg-lime-500 hover:bg-lime-600 text-white" onClick={() => decideManual(req, "approved")}>
                           <Check className="h-4 w-4 mr-1" /> Approve
                         </Button>
-                        <Button size="sm" className="bg-[#FF6347] hover:bg-[#E5533D] text-white" onClick={() => decideManual(req, "rejected")}>
+                        <Button
+                          size="sm"
+                          className="bg-[#FF6347] hover:bg-[#E5533D] text-white"
+                          disabled={!notes[req.id]?.trim()}
+                          onClick={() => decideManual(req, "rejected")}
+                        >
                           <X className="h-4 w-4 mr-1" /> Reject
                         </Button>
                       </TableCell>
