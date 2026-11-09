@@ -538,7 +538,26 @@ const Approvals = () => {
                           className="h-8 w-24 font-mono"
                         />
                       </TableCell>
-                      <TableCell className="max-w-48 truncate">{req.task_note || req.reason || "—"}</TableCell>
+                      <TableCell className="max-w-48">
+                        {req.gmgi_task || req.gm_task ? (
+                          <div className="text-xs space-y-0.5">
+                            {req.gmgi_task && (
+                              <div className="truncate">
+                                <span className="font-medium">GMGI:</span> {req.gmgi_task}
+                                {Number(req.gmgi_time) > 0 && ` (${Number(req.gmgi_time)}h)`}
+                              </div>
+                            )}
+                            {req.gm_task && (
+                              <div className="truncate">
+                                <span className="font-medium">GM:</span> {req.gm_task}
+                                {Number(req.gm_time) > 0 && ` (${Number(req.gm_time)}h)`}
+                              </div>
+                            )}
+                          </div>
+                        ) : (
+                          <span className="truncate block">{req.task_note || req.reason || "—"}</span>
+                        )}
+                      </TableCell>
                       <TableCell>
                         <Input
                           placeholder="Required to reject"
