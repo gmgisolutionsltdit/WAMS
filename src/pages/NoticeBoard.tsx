@@ -499,15 +499,21 @@ const NoticeBoard = () => {
             <>
               {pagedActivity.map((r) => (
                 <div key={`${r._kind}-${r.id}`} className="flex items-center justify-between gap-3 rounded-lg border p-3 text-sm">
-                  <div className="flex items-center gap-3 min-w-0">
+                  <div className="flex items-start gap-3 min-w-0">
                     {canActOnActivity(r) && (
                       <Checkbox
+                        className="mt-0.5"
                         checked={selectedActivity.has(activityKey(r))}
                         onCheckedChange={(c) => toggleSelectedActivity(activityKey(r), !!c)}
                         aria-label="Select entry"
                       />
                     )}
-                    <span className="truncate">{activityLine(r)}</span>
+                    <div className="min-w-0">
+                      <span className="truncate block">{activityLine(r)}</span>
+                      {r.status === "rejected" && r.approver_note && (
+                        <span className="text-xs text-muted-foreground block truncate">Reason: {r.approver_note}</span>
+                      )}
+                    </div>
                   </div>
                   <div className="flex items-center gap-2 shrink-0">
                     <Badge variant="secondary">{TYPE_LABELS[r._kind]}</Badge>
