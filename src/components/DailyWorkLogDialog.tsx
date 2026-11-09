@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
+import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import {
   Dialog,
@@ -31,9 +32,11 @@ const STATUS_OPTIONS = [
   "Waiting for dependent part done",
 ] as const;
 
-type TaskRow = { task: string; status: string };
+const PROJECT_OPTIONS = ["GM", "GMGI"] as const;
 
-const emptyRow = (): TaskRow => ({ task: "", status: "" });
+type TaskRow = { task: string; status: string; project: string; time: string };
+
+const emptyRow = (): TaskRow => ({ task: "", status: "", project: "", time: "" });
 
 interface DailyWorkLogDialogProps {
   /** Controlled open state. When omitted, the component manages its own state and renders a trigger button. */
@@ -89,8 +92,13 @@ const DailyWorkLogDialog = ({
 
     // Filter out completely empty rows; allow fully blank submission
     const cleanTasks = rows
-      .map((r) => ({ task: r.task.trim(), status: r.status.trim() }))
-      .filter((r) => r.task !== "" || r.status !== "");
+      .map((r) => ({
+        task: r.task.trim(),
+        status: r.status.trim(),
+        project: r.project.trim(),
+        time: r.time.trim(),
+      }))
+      .filter((r) => r.task !== "" || r.status !== "" || r.project !== "" || r.time !== "");
 
     const { error } = await supabase.from("daily_work_logs").insert({
       user_id: user.id,
@@ -133,38 +141,12 @@ const DailyWorkLogDialog = ({
           {rows.map((row, idx) => (
             <div
               key={idx}
-              className="grid gap-3 md:grid-cols-[1fr_220px_auto] items-start border rounded-md p-3"
+              className="space-y-3 border rounded-md p-3"
             >
-              <div className="space-y-2">
+              <div className="flex items-center justify-between">
                 <Label className="text-xs text-muted-foreground">
                   Task #{idx + 1}
                 </Label>
-                <Textarea
-                  placeholder="Describe the work item (optional)"
-                  value={row.task}
-                  onChange={(e) => updateRow(idx, { task: e.target.value })}
-                  rows={2}
-                />
-              </div>
-              <div className="space-y-2">
-                <Label className="text-xs text-muted-foreground">Status</Label>
-                <Select
-                  value={row.status || undefined}
-                  onValueChange={(v) => updateRow(idx, { status: v })}
-                >
-                  <SelectTrigger>
-                    <SelectValue placeholder="Select status" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {STATUS_OPTIONS.map((s) => (
-                      <SelectItem key={s} value={s}>
-                        {s}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-              <div className="flex md:pt-7">
                 <Button
                   type="button"
                   variant="ghost"
@@ -174,6 +156,63 @@ const DailyWorkLogDialog = ({
                 >
                   <Trash2 className="h-4 w-4 text-destructive" />
                 </Button>
+              </div>
+
+              <div className="space-y-2">
+                <Label className="text-xs text-muted-foreground">Project</Label>
+                <Select
+                  value={row.project || undefined}
+                  onValueChange={(v) => updateRow(idx, { project: v })}
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder="Select GM or GMGI" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {PROJECT_OPTIONS.map((p) => (
+                      <SelectItem key={p} value={p}>
+                        {p}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+
+              <div className="grid gap-3 md:grid-cols-[1fr_220px_160px] items-start">
+                <div className="space-y-2">
+                  <Label className="text-xs text-muted-foreground">Task</Label>
+                  <Textarea
+                    placeholder="Describe the work item (optional)"
+                    value={row.task}
+                    onChange={(e) => updateRow(idx, { task: e.target.value })}
+                    rows={2}
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label className="text-xs text-muted-foreground">Status</Label>
+                  <Select
+                    value={row.status || undefined}
+                    onValueChange={(v) => updateRow(idx, { status: v })}
+                  >
+                    <SelectTrigger>
+                      <SelectValue placeholder="Select status" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {STATUS_OPTIONS.map((s) => (
+                        <SelectItem key={s} value={s}>
+                          {s}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="space-y-2">
+                  <Label className="text-xs text-muted-foreground">Time</Label>
+                  <Input
+                    placeholder="e.g. 2h 30m"
+                    value={row.time}
+                    onChange={(e) => updateRow(idx, { time: e.target.value })}
+                  />
+                </div>
               </div>
             </div>
           ))}
