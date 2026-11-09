@@ -26,7 +26,7 @@ import { TaskDatesPopover } from "@/components/tasks/TaskDatesPopover";
 import { TaskLabelsPopover } from "@/components/tasks/TaskLabelsPopover";
 import { MoveCardDialog } from "@/components/tasks/MoveCardDialog";
 import { CopyCardDialog } from "@/components/tasks/CopyCardDialog";
-import type { TaskLabel } from "@/lib/taskLabels";
+import { DEFAULT_BOARD_LABEL_COLORS, type TaskLabel } from "@/lib/taskLabels";
 import { useBoardAssignableProfiles } from "@/hooks/useBoardAssignableProfiles";
 import {
   DndContext,
@@ -126,6 +126,12 @@ const TaskBoard = () => {
       console.error("[TaskBoard] failed to create board:", error);
       return null;
     }
+    // Seed the same 6 unnamed labels Trello starts every new board with,
+    // ready to rename/use immediately from the Labels popover.
+    const { error: labelErr } = await supabase.from("task_labels").insert(
+      DEFAULT_BOARD_LABEL_COLORS.map((color, i) => ({ board_id: created.id, name: "", color, position: i })),
+    );
+    if (labelErr) console.error("[TaskBoard] failed to seed labels:", labelErr);
     return created.id;
   }, []);
 
