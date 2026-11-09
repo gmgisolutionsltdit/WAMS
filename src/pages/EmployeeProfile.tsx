@@ -837,39 +837,46 @@ const EmployeeProfile = () => {
                         </Select>
                       </div>
                       <div>
-                        <div className="flex items-center justify-between">
-                          <Label className="text-xs">Designation</Label>
+                        <Label className="text-xs">Designation</Label>
+                        <div className="relative">
+                          {(() => {
+                            const designationOptions = wingDesignations.filter((d) => d.wing_id === overviewForm.wing_id);
+                            const showManage = isAdmin && overviewForm.wing_id;
+                            return designationOptions.length > 0 ? (
+                              <Select
+
+                                value={overviewForm.designation || ""}
+                                onValueChange={(v) => setOverviewForm((f) => ({ ...f, designation: v }))}
+                              >
+                                <SelectTrigger className={showManage ? "pr-16" : undefined}>
+                                  <SelectValue placeholder="Select designation" />
+                                </SelectTrigger>
+                                <SelectContent>
+                                  {designationOptions.map((d) => (
+                                    <SelectItem key={d.id} value={d.title}>{d.title}</SelectItem>
+                                  ))}
+                                </SelectContent>
+                              </Select>
+                            ) : (
+                              <Input
+                                className={showManage ? "pr-16" : undefined}
+                                value={overviewForm.designation}
+                                onChange={(e) => setOverviewForm((f) => ({ ...f, designation: e.target.value }))}
+                              />
+                            );
+                          })()}
                           {isAdmin && overviewForm.wing_id && (
                             <Button
                               type="button"
                               variant="link"
                               size="sm"
-                              className="h-auto p-0 text-xs"
+                              className="absolute right-2 top-1/2 -translate-y-1/2 h-auto p-0 text-xs"
                               onClick={() => setManageDesignationsOpen(true)}
                             >
                               Manage
                             </Button>
                           )}
                         </div>
-                        {(() => {
-                          const designationOptions = wingDesignations.filter((d) => d.wing_id === overviewForm.wing_id);
-                          return designationOptions.length > 0 ? (
-                            <Select
-
-                              value={overviewForm.designation || ""}
-                              onValueChange={(v) => setOverviewForm((f) => ({ ...f, designation: v }))}
-                            >
-                              <SelectTrigger><SelectValue placeholder="Select designation" /></SelectTrigger>
-                              <SelectContent>
-                                {designationOptions.map((d) => (
-                                  <SelectItem key={d.id} value={d.title}>{d.title}</SelectItem>
-                                ))}
-                              </SelectContent>
-                            </Select>
-                          ) : (
-                            <Input value={overviewForm.designation} onChange={(e) => setOverviewForm((f) => ({ ...f, designation: e.target.value }))} />
-                          );
-                        })()}
                       </div>
                     </div>
                   </div>
