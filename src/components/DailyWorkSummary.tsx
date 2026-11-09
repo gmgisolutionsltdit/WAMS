@@ -10,7 +10,7 @@ import { ClipboardList } from "lucide-react";
 import { mergeDailySessions, type MergedDay } from "@/lib/attendance";
 import { fmtHMS, fmtClock } from "@/lib/time";
 
-type Task = { task: string; status: string };
+type Task = { task: string; status: string; project?: string; time?: string };
 type WorkLog = { id: string; log_date: string; tasks: Task[] };
 type Attendance = {
   id: string;
@@ -197,6 +197,8 @@ const DailyWorkSummary = () => {
     firstEntryDate: string | null;
     task: string;
     status: string;
+    project: string;
+    time: string;
     forwarded: boolean;
   };
   const rows: FlatRow[] = [];
@@ -210,14 +212,15 @@ const DailyWorkSummary = () => {
       rows.push({
         key: `${g.date}-empty`, date: g.date, isToday: g.date === localToday(),
         clockIn, clockOut, totalHours, sessions,
-        firstEntryDate: null, task: "", status: "", forwarded: false,
+        firstEntryDate: null, task: "", status: "", project: "", time: "", forwarded: false,
       });
     } else {
       g.tasks.forEach((t, idx) => {
         rows.push({
           key: `${g.date}-${idx}`, date: g.date, isToday: g.date === localToday(),
           clockIn, clockOut, totalHours, sessions,
-          firstEntryDate: t.firstEntryDate, task: t.task, status: t.status, forwarded: t.forwarded,
+          firstEntryDate: t.firstEntryDate, task: t.task, status: t.status,
+          project: t.project ?? "", time: t.time ?? "", forwarded: t.forwarded,
         });
       });
     }
@@ -246,7 +249,9 @@ const DailyWorkSummary = () => {
                   <TableHead>Sessions</TableHead>
                   <TableHead>Total Hours</TableHead>
                   <TableHead>First Entry</TableHead>
+                  <TableHead>Project</TableHead>
                   <TableHead>Task</TableHead>
+                  <TableHead>Time</TableHead>
                   <TableHead>Status</TableHead>
                 </TableRow>
               </TableHeader>
@@ -269,8 +274,16 @@ const DailyWorkSummary = () => {
                           </>
                         : "—"}
                     </TableCell>
+                    <TableCell>
+                      {r.project
+                        ? <Badge variant="outline">{r.project}</Badge>
+                        : <span className="text-muted-foreground">—</span>}
+                    </TableCell>
                     <TableCell className="whitespace-pre-wrap">
                       {r.task || <span className="text-muted-foreground italic">No tasks logged</span>}
+                    </TableCell>
+                    <TableCell className="font-mono text-xs whitespace-nowrap">
+                      {r.time || "—"}
                     </TableCell>
                     <TableCell>
                       {r.status
