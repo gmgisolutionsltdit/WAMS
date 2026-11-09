@@ -237,6 +237,9 @@ const EmployeeProfile = () => {
   const [managers, setManagers] = useState<{ id: string; full_name: string | null; email: string | null }[]>([]);
   const [wings, setWings] = useState<WingRow[]>([]);
   const [wingDesignations, setWingDesignations] = useState<{ id: string; wing_id: string; title: string }[]>([]);
+  const [manageDesignationsOpen, setManageDesignationsOpen] = useState(false);
+  const [newDesignationTitle, setNewDesignationTitle] = useState("");
+  const [savingDesignation, setSavingDesignation] = useState(false);
   const [overviewForm, setOverviewForm] = useState({
     full_name: "", email: "", phone: "", department: "", designation: "",
     photo_url: "", wing_id: "", company_wing: "GMGI",
@@ -362,17 +365,24 @@ const EmployeeProfile = () => {
 
   useEffect(() => { fetchProfile(); }, [fetchProfile, reloadKey]);
 
+  const fetchDesignations = useCallback(async () => {
+    const { data: designationRows } = await supabase
+      .from("wing_designations")
+      .select("id, wing_id, title")
+      .order("position", { ascending: true });
+    setWingDesignations((designationRows || []) as { id: string; wing_id: string; title: string }[]);
+  }, []);
+
   // Data needed only for editing: managers/wings (Overview), projects (Projects & Tasks), leave types (Team).
   useEffect(() => {
     if (!canManageThisEmployee || !id) return;
     (async () => {
-      const [{ data: mgrs }, { data: wingRows }, { data: projectRows }, { data: memberRows }, { data: leaveTypeRows }, { data: designationRows }] = await Promise.all([
+      const [{ data: mgrs }, { data: wingRows }, { data: projectRows }, { data: memberRows }, { data: leaveTypeRows }] = await Promise.all([
         supabase.rpc("manager_candidates"),
         supabase.from("company_wings").select("id, name, code, active").order("name", { ascending: true }),
         supabase.from("projects").select("id, name, key").eq("archived", false).order("name", { ascending: true }),
         supabase.from("project_members").select("project_id").eq("user_id", id),
         supabase.from("leave_types").select("*").order("name"),
-        supabase.from("wing_designations").select("id, wing_id, title").order("position", { ascending: true }),
       ]);
       setManagers(mgrs || []);
       setWings((wingRows || []) as WingRow[]);
@@ -381,9 +391,31 @@ const EmployeeProfile = () => {
       setMemberProjectIds(ids);
       setSelectedProjectIds(ids);
       setLeaveTypes((leaveTypeRows || []) as LeaveType[]);
-      setWingDesignations((designationRows || []) as { id: string; wing_id: string; title: string }[]);
+      await fetchDesignations();
     })();
-  }, [canManageThisEmployee, id]);
+  }, [canManageThisEmployee, id, fetchDesignations]);
+
+  const addDesignation = async () => {
+    const title = newDesignationTitle.trim();
+    if (!title || !overviewForm.wing_id) return;
+    setSavingDesignation(true);
+    const nextPosition = wingDesignations.filter((d) => d.wing_id === overviewForm.wing_id).length;
+    const { error } = await supabase.from("wing_designations").insert({
+      wing_id: overviewForm.wing_id,
+      title,
+      position: nextPosition,
+    });
+    setSavingDesignation(false);
+    if (error) { toast.error(error.message); return; }
+    setNewDesignationTitle("");
+    await fetchDesignations();
+  };
+
+  const removeDesignation = async (designationId: string) => {
+    const { error } = await supabase.from("wing_designations").delete().eq("id", designationId);
+    if (error) { toast.error(error.message); return; }
+    await fetchDesignations();
+  };
 
   const activeWings = wings.filter((w) => w.active);
 
@@ -805,7 +837,20 @@ const EmployeeProfile = () => {
                         </Select>
                       </div>
                       <div>
-                        <Label className="text-xs">Designation</Label>
+                        <div className="flex items-center justify-between">
+                          <Label className="text-xs">Designation</Label>
+                          {isAdmin && overviewForm.wing_id && (
+                            <Button
+                              type="button"
+                              variant="link"
+                              size="sm"
+                              className="h-auto p-0 text-xs"
+                              onClick={() => setManageDesignationsOpen(true)}
+                            >
+                              Manage
+                            </Button>
+                          )}
+                        </div>
                         {(() => {
                           const designationOptions = wingDesignations.filter((d) => d.wing_id === overviewForm.wing_id);
                           return designationOptions.length > 0 ? (
@@ -1483,6 +1528,54 @@ const EmployeeProfile = () => {
                 </div>
               </Link>
             ))}
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Manage designations for the selected wing */}
+      <Dialog open={manageDesignationsOpen} onOpenChange={(v) => { setManageDesignationsOpen(v); if (!v) setNewDesignationTitle(""); }}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Manage Designations</DialogTitle>
+            <DialogDescription>
+              Add or remove designation options for {wings.find((w) => w.id === overviewForm.wing_id)?.name || "this wing"}.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-3">
+            <div className="space-y-1 max-h-60 overflow-y-auto">
+              {wingDesignations.filter((d) => d.wing_id === overviewForm.wing_id).length === 0 ? (
+                <p className="text-sm text-muted-foreground">No designations added yet.</p>
+              ) : (
+                wingDesignations
+                  .filter((d) => d.wing_id === overviewForm.wing_id)
+                  .map((d) => (
+                    <div key={d.id} className="flex items-center justify-between rounded-md border px-3 py-2">
+                      <span className="text-sm">{d.title}</span>
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="icon"
+                        className="h-7 w-7"
+                        onClick={() => removeDesignation(d.id)}
+                        aria-label={`Remove ${d.title}`}
+                      >
+                        <Trash2 className="h-4 w-4 text-destructive" />
+                      </Button>
+                    </div>
+                  ))
+              )}
+            </div>
+            <div className="flex gap-2">
+              <Input
+                placeholder="New designation title"
+                value={newDesignationTitle}
+                onChange={(e) => setNewDesignationTitle(e.target.value)}
+                onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); addDesignation(); } }}
+              />
+              <Button type="button" onClick={addDesignation} disabled={savingDesignation || !newDesignationTitle.trim()}>
+                Add
+              </Button>
+            </div>
           </div>
         </DialogContent>
       </Dialog>
