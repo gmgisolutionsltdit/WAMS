@@ -10,4 +10,9 @@ export const LABEL_PALETTE: string[] = [
 
 export const DEFAULT_LABEL_COLOR = LABEL_PALETTE[5];
 
+/** The 6 unnamed labels Trello seeds on every new board, in order. */
+export const DEFAULT_BOARD_LABEL_COLORS: string[] = [
+  "#4bce97", "#f5cd47", "#fea362", "#f87168", "#9f8fef", "#579dff",
+];
+
 export type TaskLabel = { id: string; board_id: string; name: string; color: string; position: number };
