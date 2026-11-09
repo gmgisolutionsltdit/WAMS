@@ -45,6 +45,7 @@ import { KanbanCard, KanbanTask, Profile } from "@/components/kanban/KanbanCard"
 import { KanbanEmptyState } from "@/components/kanban/KanbanEmptyState";
 import { BoardSearchCreate } from "@/components/tasks/BoardSearchCreate";
 import { AddChecklistPopover } from "@/components/tasks/AddChecklistPopover";
+import { AddListInline } from "@/components/tasks/AddListInline";
 import { TaskChecklist } from "@/components/tasks/TaskChecklist";
 import { cn } from "@/lib/utils";
 import { recordRecentBoard } from "@/lib/boardPrefs";
@@ -89,9 +90,6 @@ const TaskBoard = () => {
   const [createColId, setCreateColId] = useState<string | null>(null);
   const [taskCounter, setTaskCounter] = useState(0);
   const [form, setForm] = useState({ title: "", description: "", priority: "medium", assignee_id: "", due_date: "" });
-
-  const [addColOpen, setAddColOpen] = useState(false);
-  const [newColName, setNewColName] = useState("");
 
   const [membersOpen, setMembersOpen] = useState(false);
   const [editingTitle, setEditingTitle] = useState(false);
@@ -595,18 +593,15 @@ const TaskBoard = () => {
   const [moveDialogTask, setMoveDialogTask] = useState<KanbanTask | null>(null);
 
   /* ---------- Column CRUD ---------- */
-  const addColumn = async () => {
-    if (!newColName.trim() || !boardId) return;
+  const addColumn = async (name: string) => {
+    if (!name.trim() || !boardId) return;
     const { error } = await supabase.from("task_columns").insert({
       board_id: boardId,
-      name: newColName.trim(),
+      name: name.trim(),
       status: "todo",
       position: columns.length,
     });
     if (error) { toast.error(error.message); return; }
-    setNewColName("");
-    setAddColOpen(false);
-    toast.success("Column added");
   };
 
   const deleteColumn = async (colId: string) => {
@@ -737,9 +732,6 @@ const TaskBoard = () => {
           </div>
         </div>
         <div className="flex gap-2">
-          <Button variant="outline" size="sm" onClick={() => setAddColOpen(true)}>
-            <Plus className="h-4 w-4 mr-1" /> Column
-          </Button>
           <Button variant="outline" size="sm" onClick={() => setMembersOpen(true)}>
             <UserPlus className="mr-1 h-4 w-4" /> Share ({members.length})
           </Button>
@@ -769,67 +761,67 @@ const TaskBoard = () => {
         </div>
       )}
 
-      {columns.length === 0 ? (
-        <div className="rounded-2xl border border-dashed border-border/60 p-10 text-center text-sm text-muted-foreground shrink-0">
-          No columns yet. Click <span className="font-medium">+ Column</span> above to add one.
-        </div>
-      ) : (
-        <DndContext
-          sensors={sensors}
-          collisionDetection={closestCorners}
-          onDragStart={handleDragStart}
-          onDragOver={handleDragOver}
-          onDragEnd={handleDragEnd}
-        >
-          {/* flex-1 + min-h-0 lets this row fill the rest of the viewport
-              (instead of stopping wherever the cards end), so the
-              horizontal scrollbar sits at the bottom of the page like
-              Trello's board view. items-start keeps each column sized to
-              its own cards (not stretched to the row's full height) —
-              KanbanColumn caps itself at max-h-full and scrolls internally
-              once a column's own cards exceed that. */}
-          <SortableContext items={columns.map((c) => c.id)} strategy={horizontalListSortingStrategy}>
-            <div className="flex-1 min-h-0 flex items-start gap-3 overflow-x-auto pb-4 -mx-1 px-1">
-              {columns.map((col) => (
-                <KanbanColumn
-                  key={col.id}
-                  column={col}
-                  tasks={tasksByColumn[col.id] || []}
-                  profiles={profiles}
-                  onQuickCreateTask={quickCreateTask}
-                  onOpenTask={openTask}
-                  onDeleteColumn={deleteColumn}
-                  onArchiveColumn={archiveColumn}
-                  onRenameColumn={renameColumn}
-                  onToggleComplete={toggleComplete}
-                  onArchiveTask={archiveTask}
-                  onCopyTask={setCopyDialogTask}
-                  onMoveTask={setMoveDialogTask}
-                  boardId={boardId || undefined}
-                  boardLabels={boardLabels}
-                  onToggleTaskLabel={toggleTaskLabel}
-                  canDelete={isOwnerOrAdmin}
-                  canDrag={canEditBoard}
-                  canEditBoard={canEditBoard}
-                  currentUserId={user?.id}
-                  checklistCounts={checklistCounts}
-                />
-              ))}
-            </div>
-          </SortableContext>
-
-          <DragOverlay>
-            {draggingTask && (
-              <KanbanCard
-                task={draggingTask}
-                assignee={profileFor(draggingTask.assignee_id)}
-                onClick={() => {}}
-                isOverlay
+      <DndContext
+        sensors={sensors}
+        collisionDetection={closestCorners}
+        onDragStart={handleDragStart}
+        onDragOver={handleDragOver}
+        onDragEnd={handleDragEnd}
+      >
+        {/* flex-1 + min-h-0 lets this row fill the rest of the viewport
+            (instead of stopping wherever the cards end), so the
+            horizontal scrollbar sits at the bottom of the page like
+            Trello's board view. items-start keeps each column sized to
+            its own cards (not stretched to the row's full height) —
+            KanbanColumn caps itself at max-h-full and scrolls internally
+            once a column's own cards exceed that. */}
+        <SortableContext items={columns.map((c) => c.id)} strategy={horizontalListSortingStrategy}>
+          <div className="flex-1 min-h-0 flex items-start gap-3 overflow-x-auto pb-4 -mx-1 px-1">
+            {columns.map((col) => (
+              <KanbanColumn
+                key={col.id}
+                column={col}
+                tasks={tasksByColumn[col.id] || []}
+                profiles={profiles}
+                onQuickCreateTask={quickCreateTask}
+                onOpenTask={openTask}
+                onDeleteColumn={deleteColumn}
+                onArchiveColumn={archiveColumn}
+                onRenameColumn={renameColumn}
+                onToggleComplete={toggleComplete}
+                onArchiveTask={archiveTask}
+                onCopyTask={setCopyDialogTask}
+                onMoveTask={setMoveDialogTask}
+                boardId={boardId || undefined}
+                boardLabels={boardLabels}
+                onToggleTaskLabel={toggleTaskLabel}
+                canDelete={isOwnerOrAdmin}
+                canDrag={canEditBoard}
+                canEditBoard={canEditBoard}
+                currentUserId={user?.id}
+                checklistCounts={checklistCounts}
+              />
+            ))}
+            {canEditBoard && (
+              <AddListInline
+                label={columns.length === 0 ? "Add a list" : "Add another list"}
+                onAdd={addColumn}
               />
             )}
-          </DragOverlay>
-        </DndContext>
-      )}
+          </div>
+        </SortableContext>
+
+        <DragOverlay>
+          {draggingTask && (
+            <KanbanCard
+              task={draggingTask}
+              assignee={profileFor(draggingTask.assignee_id)}
+              onClick={() => {}}
+              isOverlay
+            />
+          )}
+        </DragOverlay>
+      </DndContext>
 
       {/* Create Task Dialog */}
       <Dialog open={createOpen} onOpenChange={setCreateOpen}>
@@ -871,26 +863,6 @@ const TaskBoard = () => {
             </div>
           </div>
           <DialogFooter><Button onClick={submitCreate}>Create</Button></DialogFooter>
-        </DialogContent>
-      </Dialog>
-
-      {/* Add Column Dialog */}
-      <Dialog open={addColOpen} onOpenChange={setAddColOpen}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>Add Column</DialogTitle>
-            <DialogDescription>Create a custom column for this board.</DialogDescription>
-          </DialogHeader>
-          <div>
-            <Label>Column name</Label>
-            <Input
-              value={newColName}
-              onChange={(e) => setNewColName(e.target.value)}
-              placeholder="e.g. In Review"
-              onKeyDown={(e) => e.key === "Enter" && addColumn()}
-            />
-          </div>
-          <DialogFooter><Button onClick={addColumn}>Add</Button></DialogFooter>
         </DialogContent>
       </Dialog>
 
