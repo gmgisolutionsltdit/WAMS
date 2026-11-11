@@ -550,6 +550,14 @@ const TaskBoard = () => {
     if (activeTask) refreshChecklistItems(activeTask.id);
   };
 
+  // Trello's "Convert to card": the item's text becomes a new card at the
+  // bottom of this task's own column, and the checklist item is removed.
+  const convertChecklistItemToCard = async (itemId: string, text: string) => {
+    if (!activeTask?.column_id) { toast.error("This task has no column to add the card to"); return; }
+    const ok = await quickCreateTask(activeTask.column_id, text);
+    if (ok) await deleteChecklistItem(itemId);
+  };
+
   const updateTask = async (patch: Partial<KanbanTask>) => {
     if (!activeTask) return;
     const { error } = await supabase.from("tasks").update(patch as any).eq("id", activeTask.id);
@@ -1045,6 +1053,7 @@ const TaskBoard = () => {
                       onDelete={() => deleteChecklist(cl.id)}
                       onToggleItem={toggleChecklistItem}
                       onDeleteItem={deleteChecklistItem}
+                      onConvertItem={convertChecklistItemToCard}
                       onAddItem={(text) => addChecklistItem(cl.id, text)}
                     />
                   ))}

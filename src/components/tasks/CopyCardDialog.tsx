@@ -57,7 +57,7 @@ export const CopyCardDialog = ({ task, currentProjectId, currentTaskBoardId, onC
       const tbId = boardRow?.id;
       if (!tbId) { setColumns([]); return; }
       setTaskBoardId(tbId);
-      const { data: cols } = await supabase.from("task_columns").select("id, name, status").eq("board_id", tbId).order("position");
+      const { data: cols } = await supabase.from("task_columns").select("id, name, status").eq("board_id", tbId).eq("archived", false).order("position");
       setColumns((cols || []) as ColumnOption[]);
       const defaultCol = boardId === currentProjectId ? task.column_id : cols?.[0]?.id;
       setColumnId(defaultCol || cols?.[0]?.id || "");
