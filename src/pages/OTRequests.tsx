@@ -84,9 +84,16 @@ const OTRequests = () => {
       .eq("user_id", user.id)
       .order("created_at", { ascending: false });
     setRequests(data || []);
-    const { data: pf } = await supabase.from("profiles").select("id, full_name, email");
+    // A plain employee's RLS doesn't let them read their manager's/admin's
+    // profile row directly — this RPC resolves decider names server-side,
+    // scoped to just the requests this caller filed or can approve, so
+    // "Modified by" / "Approved by" show a real name instead of falling
+    // back to "Manager".
+    const { data: deciderNames } = await supabase.rpc("my_request_decider_names");
     const map: Record<string, string> = {};
-    (pf || []).forEach((p: any) => { map[p.id] = p.full_name || p.email || "—"; });
+    (deciderNames || []).forEach((d: { user_id: string; full_name: string | null }) => {
+      map[d.user_id] = d.full_name || "—";
+    });
     setProfilesMap(map);
   }, [user]);
 
