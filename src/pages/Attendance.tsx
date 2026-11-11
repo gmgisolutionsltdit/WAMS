@@ -244,25 +244,17 @@ const Attendance = () => {
       gm_task: closeForm.gm_task.trim() || null,
       gmgi_time: gmgiTime,
       gm_time: gmTime,
-    }).eq("id", openSession.id).select("id");
+    }).eq("id", openSession.id).select("*");
     if (error) toast.error(error.message);
     else if (!data?.length) toast.error("Couldn't close this session — try refreshing the page.");
     else {
       toast.success(`Clocked out! Total: ${totals.totalHours}h`);
-      setLogs((prev) => prev.map((l) => (l.id === openSession.id
-        ? {
-            ...l,
-            clock_out: now.toISOString(),
-            total_hours: totals.totalHours,
-            overtime_hours: totals.overtimeHours,
-            break_start: null,
-            break_end: null,
-            gmgi_task: closeForm.gmgi_task.trim() || null,
-            gm_task: closeForm.gm_task.trim() || null,
-            gmgi_time: gmgiTime,
-            gm_time: gmTime,
-          }
-        : l)));
+      // Use the row Postgres actually stored, read straight back from the
+      // same UPDATE ... RETURNING, instead of re-assembling it from local
+      // form state — removes any chance of the on-screen value drifting
+      // from what's really in the database.
+      const saved = data[0];
+      setLogs((prev) => prev.map((l) => (l.id === openSession.id ? { ...l, ...saved } : l)));
       fetchData();
     }
     setStarting(false);
