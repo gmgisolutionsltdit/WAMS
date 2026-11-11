@@ -133,6 +133,14 @@ const Attendance = () => {
     else if (!data || data.length === 0) {
       toast.error("This session could not be deleted — ask an admin to remove it.");
     } else {
+      // If this session came from an approved manual time entry, its
+      // approved overtime (and the rest of the entry) is still sitting in
+      // manual_time_requests and would keep counting in Reports even though
+      // the session it produced is gone. Clean that up too so the two stay
+      // in sync — RLS still only lets an approver/admin do this, so an
+      // employee deleting their own session can't unilaterally erase a
+      // manager's approval; it's just a no-op for them.
+      await supabase.from("manual_time_requests").delete().eq("applied_log_id", id);
       toast.success("Session deleted");
       fetchData();
     }
