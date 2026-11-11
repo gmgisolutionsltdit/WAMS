@@ -415,11 +415,15 @@ const OTRequests = () => {
                         <Badge className={otStatusStyle(getDisplayStatus(req))}>
                           {getDisplayStatus(req)}
                         </Badge>
-                        {req.modified_by && (
+                        {req.modified_by ? (
                           <div className="text-[10px] text-muted-foreground mt-1">
                             Modified by {profilesMap[req.modified_by] || "Manager"}
                           </div>
-                        )}
+                        ) : req.approved_by && (req.status === "approved" || req.status === "rejected") ? (
+                          <div className="text-[10px] text-muted-foreground mt-1">
+                            {req.status === "approved" ? "Approved" : "Rejected"} by {profilesMap[req.approved_by] || "Manager"}
+                          </div>
+                        ) : null}
                       </TableCell>
                       <TableCell className="text-sm text-muted-foreground">{format(new Date(req.created_at), "MMM d")}</TableCell>
                     </TableRow>

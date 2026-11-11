@@ -49,20 +49,25 @@ export async function applyOTFulfillment(
 
   let candidate = requestedOTHours;
 
-  // Apply standard-hours fulfillment on regular workdays only
+  // Apply standard-hours fulfillment on regular workdays only, and only when
+  // there's an attendance record to measure against — no record for the date
+  // (data not yet synced, or simply missing) must not be read as "worked zero
+  // hours" and wipe out the whole OT request.
   if (!isWeekend && !isHoliday) {
     const { data: logs } = await supabase
       .from("attendance_logs")
       .select("total_hours")
       .eq("user_id", userId)
       .eq("date", date);
-    const totalWorked = (logs || []).reduce(
-      (sum, l) => sum + (Number(l.total_hours) || 0),
-      0
-    );
-    if (totalWorked < standardHours) {
-      const deficit = standardHours - totalWorked;
-      candidate = candidate - deficit;
+    if (logs && logs.length > 0) {
+      const totalWorked = logs.reduce(
+        (sum, l) => sum + (Number(l.total_hours) || 0),
+        0
+      );
+      if (totalWorked < standardHours) {
+        const deficit = standardHours - totalWorked;
+        candidate = candidate - deficit;
+      }
     }
   }
 
