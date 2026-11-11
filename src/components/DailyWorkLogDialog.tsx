@@ -34,7 +34,7 @@ const STATUS_OPTIONS = [
 
 const PROJECT_OPTIONS = ["GM", "GMGI"] as const;
 
-type TaskRow = { task: string; status: string; project: string; time: string };
+export type TaskRow = { task: string; status: string; project: string; time: string };
 
 const emptyRow = (): TaskRow => ({ task: "", status: "", project: "", time: "" });
 
@@ -42,8 +42,10 @@ interface DailyWorkLogDialogProps {
   /** Controlled open state. When omitted, the component manages its own state and renders a trigger button. */
   open?: boolean;
   onOpenChange?: (open: boolean) => void;
-  /** Called after a successful submit (or skip). Useful for chaining e.g. clock-out flow. */
-  onSubmitted?: () => void | Promise<void>;
+  /** Called after a successful submit (or skip), with the rows that were
+   *  actually saved — e.g. so a clock-out flow can carry the GM/GMGI task
+   *  and time through into the attendance session being closed. */
+  onSubmitted?: (tasks: TaskRow[]) => void | Promise<void>;
   /** Custom label for the submit button. */
   submitLabel?: string;
   /** Hide the default trigger button (e.g., when opened programmatically). */
@@ -118,7 +120,7 @@ const DailyWorkLogDialog = ({
     }
     setRows([emptyRow()]);
     setOpen(false);
-    await onSubmitted?.();
+    await onSubmitted?.(cleanTasks);
   };
 
   return (

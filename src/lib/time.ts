@@ -49,3 +49,27 @@ export const hoursToHM = (decimalHours: number | string | null | undefined): { h
 /** Combine hour/minute input parts back into a decimal-hours value, rounded to 2 decimals. */
 export const hmToHours = (h: string, m: string): number =>
   Math.round((hmToMinutes(h, m) / 60) * 100) / 100;
+
+/**
+ * Parse a free-text duration like "2h 30m", "2.5h", "90m", or a bare number
+ * (treated as hours) into decimal hours. Returns 0 for anything it can't
+ * make sense of, rather than throwing — this field is free text, not a
+ * structured input.
+ */
+export const parseFreeTextHours = (text: string | null | undefined): number => {
+  if (!text) return 0;
+  const trimmed = text.trim();
+  if (!trimmed) return 0;
+
+  const bare = Number(trimmed);
+  if (Number.isFinite(bare)) return Math.max(0, bare);
+
+  const hMatch = trimmed.match(/(\d+(?:\.\d+)?)\s*h/i);
+  const mMatch = trimmed.match(/(\d+(?:\.\d+)?)\s*m/i);
+  if (hMatch || mMatch) {
+    const hours = hMatch ? parseFloat(hMatch[1]) : 0;
+    const minutes = mMatch ? parseFloat(mMatch[1]) : 0;
+    return Math.max(0, Math.round((hours + minutes / 60) * 100) / 100);
+  }
+  return 0;
+};

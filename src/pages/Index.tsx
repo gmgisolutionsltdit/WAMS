@@ -14,12 +14,12 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Clock, LogIn, LogOut, Timer, AlertCircle, Users, CheckSquare, Plus, Check, X, Pause, Play } from "lucide-react";
 import { toast } from "sonner";
 import { format } from "date-fns";
-import DailyWorkLogDialog from "@/components/DailyWorkLogDialog";
+import DailyWorkLogDialog, { type TaskRow } from "@/components/DailyWorkLogDialog";
 import DailyWorkSummary from "@/components/DailyWorkSummary";
 import WorkCalendar from "@/components/WorkCalendar";
 import NoticeBoardWidget from "@/components/NoticeBoardWidget";
 import { min48hDateISO, isWithin48h, RETRO_LOCK_MESSAGE } from "@/lib/dateRules";
-import { fmtHMS } from "@/lib/time";
+import { fmtHMS, parseFreeTextHours } from "@/lib/time";
 import { AttendancePunchCard } from "@/components/hrms/AttendancePunchCard";
 import ManualTimeEntryDialog from "@/components/ManualTimeEntryDialog";
 import { DEFAULT_GRACE_MINUTES, DEFAULT_OFFICE_END, DEFAULT_OFFICE_START, evaluateArrival, humanMinutes, officeStart } from "@/lib/officeTime";
@@ -244,22 +244,50 @@ const Dashboard = () => {
   };
 
   /** Step 2: finalize the clock-out after the work log modal is submitted (or skipped blank). */
-  const finalizeClockOut = async () => {
+  const finalizeClockOut = async (workLogTasks?: TaskRow[]) => {
     if (!pendingClockOut) return;
     setLoading(true);
     const { clockOutTime, logId, totalHours, overtimeHours, breakMins } = pendingClockOut;
+
+    // The Daily Work Log's GM/GMGI task rows are the only place this data is
+    // captured at clock-out — carry them into the attendance session itself
+    // (joined task text + summed time per project), so Attendance History's
+    // own GMGI/GM Task/Time columns reflect what was actually logged here,
+    // instead of staying permanently blank.
+    const gmgiRows = (workLogTasks || []).filter((r) => r.project === "GMGI");
+    const gmRows = (workLogTasks || []).filter((r) => r.project === "GM");
+    const gmgiTask = gmgiRows.map((r) => r.task).filter(Boolean).join("; ") || null;
+    const gmTask = gmRows.map((r) => r.task).filter(Boolean).join("; ") || null;
+    const gmgiTime = gmgiRows.reduce((sum, r) => sum + parseFreeTextHours(r.time), 0);
+    const gmTime = gmRows.reduce((sum, r) => sum + parseFreeTextHours(r.time), 0);
+
     const { data, error } = await supabase.from("attendance_logs").update({
       clock_out: clockOutTime,
       total_hours: totalHours,
       overtime_hours: overtimeHours,
       break_start: null,
       break_end: null,
+      gmgi_task: gmgiTask,
+      gm_task: gmTask,
+      gmgi_time: gmgiTime,
+      gm_time: gmTime,
     }).eq("id", logId).select("id");
     if (error) toast.error(error.message);
     else if (!data?.length) toast.error("Couldn't close this session — try refreshing the page.");
     else {
       toast.success(`Clocked out! Total: ${totalHours}h (breaks: ${breakMins}m), OT: ${overtimeHours}h`);
-      setTodayLog((prev: any) => (prev ? { ...prev, clock_out: clockOutTime, total_hours: totalHours, overtime_hours: overtimeHours, break_start: null, break_end: null } : prev));
+      setTodayLog((prev: any) => (prev ? {
+        ...prev,
+        clock_out: clockOutTime,
+        total_hours: totalHours,
+        overtime_hours: overtimeHours,
+        break_start: null,
+        break_end: null,
+        gmgi_task: gmgiTask,
+        gm_task: gmTask,
+        gmgi_time: gmgiTime,
+        gm_time: gmTime,
+      } : prev));
       fetchEmployeeData(); fetchAdminData();
     }
     setPendingClockOut(null);
