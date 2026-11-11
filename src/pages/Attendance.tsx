@@ -250,7 +250,18 @@ const Attendance = () => {
     else {
       toast.success(`Clocked out! Total: ${totals.totalHours}h`);
       setLogs((prev) => prev.map((l) => (l.id === openSession.id
-        ? { ...l, clock_out: now.toISOString(), total_hours: totals.totalHours, overtime_hours: totals.overtimeHours, break_start: null, break_end: null }
+        ? {
+            ...l,
+            clock_out: now.toISOString(),
+            total_hours: totals.totalHours,
+            overtime_hours: totals.overtimeHours,
+            break_start: null,
+            break_end: null,
+            gmgi_task: closeForm.gmgi_task.trim() || null,
+            gm_task: closeForm.gm_task.trim() || null,
+            gmgi_time: gmgiTime,
+            gm_time: gmTime,
+          }
         : l)));
       fetchData();
     }
