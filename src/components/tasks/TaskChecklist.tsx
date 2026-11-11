@@ -2,7 +2,8 @@ import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Progress } from "@/components/ui/progress";
-import { X, Trash2 } from "lucide-react";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { MoreHorizontal, Trash2 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 interface ChecklistItemRow {
@@ -19,12 +20,54 @@ interface Props {
   onDelete: () => void;
   onToggleItem: (itemId: string, done: boolean) => void;
   onDeleteItem: (itemId: string) => void;
+  onConvertItem: (itemId: string, text: string) => void;
   onAddItem: (text: string) => void;
 }
 
+// Trello's per-item "..." → "Item actions" popover: Convert to card, Delete.
+const ItemActionsMenu = ({
+  onConvert,
+  onDelete,
+}: {
+  onConvert: () => void;
+  onDelete: () => void;
+}) => {
+  const [open, setOpen] = useState(false);
+  return (
+    <Popover open={open} onOpenChange={setOpen}>
+      <PopoverTrigger asChild>
+        <button
+          type="button"
+          className="opacity-0 group-hover:opacity-100 text-muted-foreground hover:text-foreground"
+          aria-label="Item actions"
+        >
+          <MoreHorizontal className="h-4 w-4" />
+        </button>
+      </PopoverTrigger>
+      <PopoverContent className="w-48 p-1" align="start">
+        <p className="text-xs font-semibold text-center text-muted-foreground py-1">Item actions</p>
+        <button
+          type="button"
+          className="w-full text-left text-sm rounded px-2 py-1.5 hover:bg-accent"
+          onClick={() => { onConvert(); setOpen(false); }}
+        >
+          Convert to card
+        </button>
+        <button
+          type="button"
+          className="w-full text-left text-sm rounded px-2 py-1.5 hover:bg-accent text-destructive"
+          onClick={() => { onDelete(); setOpen(false); }}
+        >
+          Delete
+        </button>
+      </PopoverContent>
+    </Popover>
+  );
+};
+
 // Trello-style named checklist block: editable title, a progress bar, its
 // items, and an "Add an item" row that expands into an input + Add/Cancel.
-export const TaskChecklist = ({ id, title, items, onRename, onDelete, onToggleItem, onDeleteItem, onAddItem }: Props) => {
+export const TaskChecklist = ({ id, title, items, onRename, onDelete, onToggleItem, onDeleteItem, onConvertItem, onAddItem }: Props) => {
   const [editingTitle, setEditingTitle] = useState(false);
   const [titleDraft, setTitleDraft] = useState(title);
   const [addingItem, setAddingItem] = useState(false);
@@ -96,12 +139,10 @@ export const TaskChecklist = ({ id, title, items, onRename, onDelete, onToggleIt
             <span className={cn("flex-1 text-sm", item.done && "line-through text-muted-foreground")}>
               {item.text}
             </span>
-            <button
-              onClick={() => onDeleteItem(item.id)}
-              className="opacity-0 group-hover:opacity-100 text-muted-foreground hover:text-destructive"
-            >
-              <X className="h-3.5 w-3.5" />
-            </button>
+            <ItemActionsMenu
+              onConvert={() => onConvertItem(item.id, item.text)}
+              onDelete={() => onDeleteItem(item.id)}
+            />
           </div>
         ))}
       </div>

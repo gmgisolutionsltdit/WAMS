@@ -53,7 +53,7 @@ export const MoveCardDialog = ({ task, currentProjectId, currentTaskBoardId, onC
       const tbId = boardRow?.id;
       if (!tbId) { setColumns([]); return; }
       setTaskBoardId(tbId);
-      const { data: cols } = await supabase.from("task_columns").select("id, name, status").eq("board_id", tbId).order("position");
+      const { data: cols } = await supabase.from("task_columns").select("id, name, status").eq("board_id", tbId).eq("archived", false).order("position");
       setColumns((cols || []) as ColumnOption[]);
       // Default to the task's current column only when still on its own
       // board; switching boards defaults to that board's first list.

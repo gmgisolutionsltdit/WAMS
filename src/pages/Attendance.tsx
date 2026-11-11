@@ -141,6 +141,18 @@ const Attendance = () => {
       // employee deleting their own session can't unilaterally erase a
       // manager's approval; it's just a no-op for them.
       await supabase.from("manual_time_requests").delete().eq("applied_log_id", id);
+      // A separate OT request (not tied to any attendance session) approved
+      // for this same date is now orphaned once the session is gone — drop
+      // it too, so Approved Overtime doesn't keep counting hours for a day
+      // whose attendance record no longer exists. Same RLS protection as
+      // above: a no-op for an employee deleting their own session.
+      const deletedRow = data[0] as { user_id: string; date: string };
+      await supabase
+        .from("overtime_requests")
+        .delete()
+        .eq("user_id", deletedRow.user_id)
+        .eq("date", deletedRow.date)
+        .in("status", ["approved", "modified"]);
       toast.success("Session deleted");
       fetchData();
     }
