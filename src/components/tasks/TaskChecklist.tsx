@@ -21,6 +21,7 @@ interface Props {
   onToggleItem: (itemId: string, done: boolean) => void;
   onDeleteItem: (itemId: string) => void;
   onConvertItem: (itemId: string, text: string) => void;
+  onEditItem: (itemId: string, text: string) => void;
   onAddItem: (text: string) => void;
 }
 
@@ -67,11 +68,13 @@ const ItemActionsMenu = ({
 
 // Trello-style named checklist block: editable title, a progress bar, its
 // items, and an "Add an item" row that expands into an input + Add/Cancel.
-export const TaskChecklist = ({ id, title, items, onRename, onDelete, onToggleItem, onDeleteItem, onConvertItem, onAddItem }: Props) => {
+export const TaskChecklist = ({ id, title, items, onRename, onDelete, onToggleItem, onDeleteItem, onConvertItem, onEditItem, onAddItem }: Props) => {
   const [editingTitle, setEditingTitle] = useState(false);
   const [titleDraft, setTitleDraft] = useState(title);
   const [addingItem, setAddingItem] = useState(false);
   const [itemDraft, setItemDraft] = useState("");
+  const [editingItemId, setEditingItemId] = useState<string | null>(null);
+  const [editItemDraft, setEditItemDraft] = useState("");
 
   const total = items.length;
   const done = items.filter((i) => i.done).length;
@@ -89,6 +92,17 @@ export const TaskChecklist = ({ id, title, items, onRename, onDelete, onToggleIt
     if (!trimmed) { setAddingItem(false); return; }
     onAddItem(trimmed);
     setItemDraft("");
+  };
+
+  const startEditItem = (item: ChecklistItemRow) => {
+    setEditingItemId(item.id);
+    setEditItemDraft(item.text);
+  };
+
+  const saveEditItem = () => {
+    const trimmed = editItemDraft.trim();
+    if (editingItemId && trimmed) onEditItem(editingItemId, trimmed);
+    setEditingItemId(null);
   };
 
   return (
@@ -129,20 +143,47 @@ export const TaskChecklist = ({ id, title, items, onRename, onDelete, onToggleIt
 
       <div className="space-y-1">
         {items.map((item) => (
-          <div key={item.id} className="flex items-center gap-2 group">
-            <input
-              type="checkbox"
-              checked={item.done}
-              onChange={(e) => onToggleItem(item.id, e.target.checked)}
-              className="h-4 w-4"
-            />
-            <span className={cn("flex-1 text-sm", item.done && "line-through text-muted-foreground")}>
-              {item.text}
-            </span>
-            <ItemActionsMenu
-              onConvert={() => onConvertItem(item.id, item.text)}
-              onDelete={() => onDeleteItem(item.id)}
-            />
+          <div key={item.id} className="group">
+            {editingItemId === item.id ? (
+              <div className="space-y-2 py-1">
+                <Input
+                  autoFocus
+                  value={editItemDraft}
+                  onChange={(e) => setEditItemDraft(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter") { e.preventDefault(); saveEditItem(); }
+                    else if (e.key === "Escape") setEditingItemId(null);
+                  }}
+                />
+                <div className="flex gap-2">
+                  <Button size="sm" onClick={saveEditItem}>Save</Button>
+                  <Button size="sm" variant="ghost" onClick={() => setEditingItemId(null)}>Cancel</Button>
+                </div>
+              </div>
+            ) : (
+              <div className="flex items-center gap-2">
+                <input
+                  type="checkbox"
+                  checked={item.done}
+                  onChange={(e) => onToggleItem(item.id, e.target.checked)}
+                  className="h-4 w-4"
+                />
+                <button
+                  type="button"
+                  onClick={() => startEditItem(item)}
+                  className={cn(
+                    "flex-1 text-left text-sm rounded px-1 -mx-1 hover:bg-accent",
+                    item.done && "line-through text-muted-foreground",
+                  )}
+                >
+                  {item.text}
+                </button>
+                <ItemActionsMenu
+                  onConvert={() => onConvertItem(item.id, item.text)}
+                  onDelete={() => onDeleteItem(item.id)}
+                />
+              </div>
+            )}
           </div>
         ))}
       </div>

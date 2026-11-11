@@ -225,9 +225,14 @@ export const TaskDatesPopover = ({ startDate, dueDate, recurring, reminder, onSa
           </Select>
         </div>
 
-        {(recurringDraft !== "none" || reminderDraft !== "none") && useDue && (
+        {reminderDraft !== "none" && useDue && (
           <p className="text-[11px] text-muted-foreground bg-muted/50 rounded p-2">
-            Saved for reference only — recurring cards aren't auto-created and reminders aren't sent yet.
+            A reminder notification goes to every member on this card at the chosen time.
+          </p>
+        )}
+        {recurringDraft !== "none" && useDue && (
+          <p className="text-[11px] text-muted-foreground bg-muted/50 rounded p-2">
+            Saved for reference only — recurring cards aren't auto-created yet.
           </p>
         )}
 
