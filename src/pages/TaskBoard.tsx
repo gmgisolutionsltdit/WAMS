@@ -47,6 +47,7 @@ import { BoardSearchCreate } from "@/components/tasks/BoardSearchCreate";
 import { AddChecklistPopover } from "@/components/tasks/AddChecklistPopover";
 import { AddListInline } from "@/components/tasks/AddListInline";
 import { TaskChecklist } from "@/components/tasks/TaskChecklist";
+import { TaskAssigneesPopover } from "@/components/tasks/TaskAssigneesPopover";
 import { cn } from "@/lib/utils";
 import { recordRecentBoard } from "@/lib/boardPrefs";
 
@@ -76,6 +77,7 @@ const TaskBoard = () => {
   const [newComment, setNewComment] = useState("");
   const [checklists, setChecklists] = useState<TaskChecklistRow[]>([]);
   const [checklistItems, setChecklistItems] = useState<TaskChecklistItemRow[]>([]);
+  const [taskAssigneeIds, setTaskAssigneeIds] = useState<string[]>([]);
   const [checklistCounts, setChecklistCounts] = useState<Record<string, { done: number; total: number }>>({});
   const addChecklistTriggerRef = useRef<HTMLButtonElement>(null);
   // Trello's description is a collapsed "Add a more detailed description..."
@@ -449,21 +451,48 @@ const TaskBoard = () => {
     setActiveTask(t);
     setEditingDescription(false);
     openTaskIdRef.current = t.id;
-    const [{ data }, { data: cls }, { data: items }] = await Promise.all([
+    const [{ data }, { data: cls }, { data: items }, { data: assignees }] = await Promise.all([
       supabase.from("task_comments").select("*").eq("task_id", t.id).order("created_at"),
       supabase.from("task_checklists").select("*").eq("task_id", t.id).order("position"),
       supabase.from("task_checklist_items").select("*").eq("task_id", t.id).order("position"),
+      supabase.from("task_assignees").select("user_id").eq("task_id", t.id),
     ]);
     if (openTaskIdRef.current !== t.id) return;
     setComments(data || []);
     setChecklists(cls || []);
     setChecklistItems(items || []);
+    setTaskAssigneeIds(((assignees || []) as { user_id: string }[]).map((a) => a.user_id));
   };
 
   const refreshChecklists = async (taskId: string) => {
     const { data } = await supabase.from("task_checklists").select("*").eq("task_id", taskId).order("position");
     if (openTaskIdRef.current !== taskId) return;
     setChecklists(data || []);
+  };
+
+  const toggleTaskAssignee = async (userId: string, checked: boolean) => {
+    if (!activeTask) return;
+    const taskId = activeTask.id;
+    if (checked) {
+      const { error } = await supabase.from("task_assignees").insert({ task_id: taskId, user_id: userId, assigned_by: user!.id });
+      if (error) { toast.error(error.message); return; }
+      setTaskAssigneeIds((prev) => [...prev, userId]);
+    } else {
+      const { error } = await supabase.from("task_assignees").delete().eq("task_id", taskId).eq("user_id", userId);
+      if (error) { toast.error(error.message); return; }
+      setTaskAssigneeIds((prev) => prev.filter((id) => id !== userId));
+    }
+    // Keep the legacy single assignee_id column pointing at one of the
+    // current assignees, so Kanban avatars / "My Tasks" filters / the
+    // calendar — which all still key off assignee_id — show someone rather
+    // than silently going blank the moment a task gets more than one member.
+    const { data: remaining } = await supabase.from("task_assignees").select("user_id").eq("task_id", taskId);
+    const nextPrimary = (remaining || [])[0]?.user_id || null;
+    if (nextPrimary !== activeTask.assignee_id) {
+      await supabase.from("tasks").update({ assignee_id: nextPrimary }).eq("id", taskId);
+      setActiveTask((at) => (at ? { ...at, assignee_id: nextPrimary } : at));
+      fetchAll();
+    }
   };
 
   const refreshChecklistItems = async (taskId: string) => {
@@ -550,6 +579,12 @@ const TaskBoard = () => {
     if (activeTask) refreshChecklistItems(activeTask.id);
   };
 
+  const editChecklistItem = async (itemId: string, text: string) => {
+    const { error } = await supabase.from("task_checklist_items").update({ text }).eq("id", itemId);
+    if (error) { toast.error(error.message); return; }
+    if (activeTask) refreshChecklistItems(activeTask.id);
+  };
+
   // Trello's "Convert to card": the item's text becomes a new card at the
   // bottom of this task's own column, and the checklist item is removed.
   const convertChecklistItemToCard = async (itemId: string, text: string) => {
@@ -558,7 +593,7 @@ const TaskBoard = () => {
     if (ok) await deleteChecklistItem(itemId);
   };
 
-  const updateTask = async (patch: Partial<KanbanTask>) => {
+  const updateTask = async (patch: Partial<KanbanTask> & { reminder_sent_at?: string | null }) => {
     if (!activeTask) return;
     const { error } = await supabase.from("tasks").update(patch as any).eq("id", activeTask.id);
     if (error) { toast.error(error.message); return; }
@@ -939,7 +974,7 @@ const TaskBoard = () => {
                     dueDate={activeTask.due_date || null}
                     recurring={activeTask.recurring || null}
                     reminder={activeTask.reminder || null}
-                    onSave={(patch) => updateTask(patch)}
+                    onSave={(patch) => updateTask({ ...patch, reminder_sent_at: null })}
                   />
                 </div>
                 <AddChecklistPopover
@@ -953,11 +988,10 @@ const TaskBoard = () => {
                   }
                 />
                 <div ref={membersWrapperRef}>
-                  <EmployeePicker
-                    value={activeTask.assignee_id}
-                    onChange={(id) => updateTask({ assignee_id: id })}
-                    placeholder="Members"
-                    overrideEmployees={allAssignableProfiles}
+                  <TaskAssigneesPopover
+                    assignees={allAssignableProfiles.filter((p) => taskAssigneeIds.includes(p.id))}
+                    allEmployees={allAssignableProfiles}
+                    onToggle={toggleTaskAssignee}
                     className="w-auto h-auto py-1.5"
                   />
                 </div>
@@ -1054,6 +1088,7 @@ const TaskBoard = () => {
                       onToggleItem={toggleChecklistItem}
                       onDeleteItem={deleteChecklistItem}
                       onConvertItem={convertChecklistItemToCard}
+                      onEditItem={editChecklistItem}
                       onAddItem={(text) => addChecklistItem(cl.id, text)}
                     />
                   ))}
