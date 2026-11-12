@@ -204,6 +204,10 @@ const Approvals = () => {
 
   const decideLate = async (req: any, status: "approved" | "rejected") => {
     if (!user) return;
+    if (status === "rejected" && !notes[req.id]?.trim()) {
+      toast.error("A note is required to reject a late time request.");
+      return;
+    }
     const { data, error } = await supabase
       .from("late_time_requests")
       .update({ status, approved_by: user.id, approver_note: notes[req.id] || null })
@@ -244,6 +248,10 @@ const Approvals = () => {
 
   const decideLeave = async (req: any, status: "approved" | "rejected") => {
     if (!user) return;
+    if (status === "rejected" && !notes[req.id]?.trim()) {
+      toast.error("A note is required to reject a leave request.");
+      return;
+    }
     const { data, error } = await supabase
       .from("leave_requests")
       .update({ status, approver_id: user.id, approver_note: notes[req.id] || null, approved_at: new Date().toISOString() })
@@ -266,13 +274,17 @@ const Approvals = () => {
 
   const handleAction = async (req: any, status: "approved" | "rejected") => {
     if (!user) return;
+    if (status === "rejected" && !notes[req.id]?.trim()) {
+      toast.error("A note is required to reject an overtime request.");
+      return;
+    }
     let finalHours = req.requested_hours;
     if (status === "approved") {
       finalHours = await applyOTFulfillment(req.user_id, req.date, req.requested_hours);
     }
     const { data, error } = await supabase
       .from("overtime_requests")
-      .update({ status, approved_by: user.id, requested_hours: finalHours })
+      .update({ status, approved_by: user.id, requested_hours: finalHours, approver_note: notes[req.id] || null })
       .eq("id", req.id)
       .select("id");
     if (error) toast.error(error.message);
@@ -322,8 +334,12 @@ const Approvals = () => {
 
   const decideLoan = async (loan: any, status: "approved" | "rejected") => {
     if (!user) return;
+    if (status === "rejected" && !notes[loan.id]?.trim()) {
+      toast.error("A note is required to reject a loan request.");
+      return;
+    }
     const { data, error } = await supabase.from("personal_advances").update({
-      status, approved_by: user.id, approved_at: new Date().toISOString(),
+      status, approved_by: user.id, approved_at: new Date().toISOString(), approver_note: notes[loan.id] || null,
     }).eq("id", loan.id).select("id");
     if (error) { toast.error(error.message); return; }
     if (!data?.length) { toast.error(NOT_ALLOWED); return; }
@@ -355,8 +371,12 @@ const Approvals = () => {
 
   const decideExpense = async (claim: any, status: "approved" | "rejected") => {
     if (!user) return;
+    if (status === "rejected" && !notes[claim.id]?.trim()) {
+      toast.error("A note is required to reject an expense claim.");
+      return;
+    }
     const { data, error } = await supabase.from("expense_claims").update({
-      status, approver_id: user.id, approved_at: new Date().toISOString(),
+      status, approver_id: user.id, approved_at: new Date().toISOString(), approver_note: notes[claim.id] || null,
     }).eq("id", claim.id).select("id");
     if (error) { toast.error(error.message); return; }
     if (!data?.length) { toast.error(NOT_ALLOWED); return; }
@@ -463,12 +483,13 @@ const Approvals = () => {
                     <TableHead>Date</TableHead>
                     <TableHead>Hours</TableHead>
                     <TableHead>Reason</TableHead>
+                    <TableHead>Note</TableHead>
                     <TableHead>Actions</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
                   {pending.length === 0 ? (
-                    <TableRow><TableCell colSpan={5} className="text-center text-muted-foreground">No pending requests</TableCell></TableRow>
+                    <TableRow><TableCell colSpan={6} className="text-center text-muted-foreground">No pending requests</TableCell></TableRow>
                   ) : pending.map((req) => (
                     <TableRow key={req.id}>
                       <TableCell className="font-medium">{(req.profiles as any)?.full_name || (req.profiles as any)?.email || "Unknown"}</TableCell>
@@ -478,11 +499,24 @@ const Approvals = () => {
                         {req.reason}
                         <AttachmentThumbnails urls={req.attachments} />
                       </TableCell>
+                      <TableCell>
+                        <Input
+                          placeholder="Required to reject"
+                          value={notes[req.id] || ""}
+                          onChange={(e) => setNotes((n) => ({ ...n, [req.id]: e.target.value }))}
+                          className="h-8 w-40"
+                        />
+                      </TableCell>
                       <TableCell className="space-x-1">
                         <Button size="sm" className="bg-lime-500 hover:bg-lime-600 text-white" onClick={() => handleAction(req, "approved")}>
                           <Check className="h-4 w-4 mr-1" /> Approve
                         </Button>
-                        <Button size="sm" className="bg-[#FF6347] hover:bg-[#E5533D] text-white" onClick={() => handleAction(req, "rejected")}>
+                        <Button
+                          size="sm"
+                          className="bg-[#FF6347] hover:bg-[#E5533D] text-white"
+                          disabled={!notes[req.id]?.trim()}
+                          onClick={() => handleAction(req, "rejected")}
+                        >
                           <X className="h-4 w-4 mr-1" /> Reject
                         </Button>
                         <Button size="sm" variant="outline" onClick={() => openEdit(req)}>
@@ -620,7 +654,7 @@ const Approvals = () => {
                       </TableCell>
                       <TableCell>
                         <Input
-                          placeholder="Optional note"
+                          placeholder="Required to reject"
                           value={notes[req.id] || ""}
                           onChange={(e) => setNotes((n) => ({ ...n, [req.id]: e.target.value }))}
                           className="h-8 w-40"
@@ -630,7 +664,12 @@ const Approvals = () => {
                         <Button size="sm" className="bg-lime-500 hover:bg-lime-600 text-white" onClick={() => decideLate(req, "approved")}>
                           <Check className="h-4 w-4 mr-1" /> Approve
                         </Button>
-                        <Button size="sm" className="bg-[#FF6347] hover:bg-[#E5533D] text-white" onClick={() => decideLate(req, "rejected")}>
+                        <Button
+                          size="sm"
+                          className="bg-[#FF6347] hover:bg-[#E5533D] text-white"
+                          disabled={!notes[req.id]?.trim()}
+                          onClick={() => decideLate(req, "rejected")}
+                        >
                           <X className="h-4 w-4 mr-1" /> Reject
                         </Button>
                       </TableCell>
@@ -671,7 +710,7 @@ const Approvals = () => {
                       </TableCell>
                       <TableCell>
                         <Input
-                          placeholder="Optional note"
+                          placeholder="Required to reject"
                           value={notes[req.id] || ""}
                           onChange={(e) => setNotes((n) => ({ ...n, [req.id]: e.target.value }))}
                           className="h-8 w-40"
@@ -681,7 +720,12 @@ const Approvals = () => {
                         <Button size="sm" className="bg-lime-500 hover:bg-lime-600 text-white" onClick={() => decideLeave(req, "approved")}>
                           <Check className="h-4 w-4 mr-1" /> Approve
                         </Button>
-                        <Button size="sm" className="bg-[#FF6347] hover:bg-[#E5533D] text-white" onClick={() => decideLeave(req, "rejected")}>
+                        <Button
+                          size="sm"
+                          className="bg-[#FF6347] hover:bg-[#E5533D] text-white"
+                          disabled={!notes[req.id]?.trim()}
+                          onClick={() => decideLeave(req, "rejected")}
+                        >
                           <X className="h-4 w-4 mr-1" /> Reject
                         </Button>
                       </TableCell>
@@ -700,12 +744,13 @@ const Approvals = () => {
                     <TableHead>Amount</TableHead>
                     <TableHead>Reason</TableHead>
                     <TableHead>Installments</TableHead>
+                    <TableHead>Note</TableHead>
                     <TableHead>Actions</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
                   {loanPending.length === 0 ? (
-                    <TableRow><TableCell colSpan={6} className="text-center text-muted-foreground">No pending loan requests</TableCell></TableRow>
+                    <TableRow><TableCell colSpan={7} className="text-center text-muted-foreground">No pending loan requests</TableCell></TableRow>
                   ) : loanPending.map((loan) => (
                     <TableRow key={loan.id}>
                       <TableCell className="font-medium">{names[loan.user_id] || "Unknown"}</TableCell>
@@ -713,11 +758,24 @@ const Approvals = () => {
                       <TableCell className="font-semibold">{Number(loan.amount).toLocaleString()}</TableCell>
                       <TableCell className="max-w-48 truncate text-xs text-muted-foreground">{loan.reason || "—"}</TableCell>
                       <TableCell>{loan.installments} installment{loan.installments === 1 ? "" : "s"} · {Number(loan.monthly_deduction).toLocaleString()}/mo</TableCell>
+                      <TableCell>
+                        <Input
+                          placeholder="Required to reject"
+                          value={notes[loan.id] || ""}
+                          onChange={(e) => setNotes((n) => ({ ...n, [loan.id]: e.target.value }))}
+                          className="h-8 w-40"
+                        />
+                      </TableCell>
                       <TableCell className="space-x-1 whitespace-nowrap">
                         <Button size="sm" className="bg-lime-500 hover:bg-lime-600 text-white" onClick={() => decideLoan(loan, "approved")}>
                           <Check className="h-4 w-4 mr-1" /> Approve
                         </Button>
-                        <Button size="sm" className="bg-[#FF6347] hover:bg-[#E5533D] text-white" onClick={() => decideLoan(loan, "rejected")}>
+                        <Button
+                          size="sm"
+                          className="bg-[#FF6347] hover:bg-[#E5533D] text-white"
+                          disabled={!notes[loan.id]?.trim()}
+                          onClick={() => decideLoan(loan, "rejected")}
+                        >
                           <X className="h-4 w-4 mr-1" /> Reject
                         </Button>
                       </TableCell>
@@ -736,12 +794,13 @@ const Approvals = () => {
                     <TableHead>Category</TableHead>
                     <TableHead>Amount</TableHead>
                     <TableHead>Description</TableHead>
+                    <TableHead>Note</TableHead>
                     <TableHead>Actions</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
                   {expensePending.length === 0 ? (
-                    <TableRow><TableCell colSpan={6} className="text-center text-muted-foreground">No pending expense claims</TableCell></TableRow>
+                    <TableRow><TableCell colSpan={7} className="text-center text-muted-foreground">No pending expense claims</TableCell></TableRow>
                   ) : expensePending.map((claim) => (
                     <TableRow key={claim.id}>
                       <TableCell className="font-medium">{names[claim.user_id] || "Unknown"}</TableCell>
@@ -749,11 +808,24 @@ const Approvals = () => {
                       <TableCell><Badge variant="outline">{claim.category}</Badge></TableCell>
                       <TableCell className="font-semibold">{Number(claim.amount).toLocaleString()}</TableCell>
                       <TableCell className="max-w-48 truncate text-xs text-muted-foreground">{claim.description || "—"}</TableCell>
+                      <TableCell>
+                        <Input
+                          placeholder="Required to reject"
+                          value={notes[claim.id] || ""}
+                          onChange={(e) => setNotes((n) => ({ ...n, [claim.id]: e.target.value }))}
+                          className="h-8 w-40"
+                        />
+                      </TableCell>
                       <TableCell className="space-x-1 whitespace-nowrap">
                         <Button size="sm" className="bg-lime-500 hover:bg-lime-600 text-white" onClick={() => decideExpense(claim, "approved")}>
                           <Check className="h-4 w-4 mr-1" /> Approve
                         </Button>
-                        <Button size="sm" className="bg-[#FF6347] hover:bg-[#E5533D] text-white" onClick={() => decideExpense(claim, "rejected")}>
+                        <Button
+                          size="sm"
+                          className="bg-[#FF6347] hover:bg-[#E5533D] text-white"
+                          disabled={!notes[claim.id]?.trim()}
+                          onClick={() => decideExpense(claim, "rejected")}
+                        >
                           <X className="h-4 w-4 mr-1" /> Reject
                         </Button>
                       </TableCell>
