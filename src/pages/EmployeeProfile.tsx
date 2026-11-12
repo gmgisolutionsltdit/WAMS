@@ -237,6 +237,10 @@ const EmployeeProfile = () => {
   const [managers, setManagers] = useState<{ id: string; full_name: string | null; email: string | null }[]>([]);
   const [wings, setWings] = useState<WingRow[]>([]);
   const [wingDesignations, setWingDesignations] = useState<{ id: string; wing_id: string; title: string }[]>([]);
+  // Every wing this employee belongs to, in selection order — the first one
+  // is the "primary" wing (overviewForm.wing_id/company_wing), which keeps
+  // driving attendance/payroll/overtime/holiday calculations unchanged.
+  const [wingIds, setWingIds] = useState<string[]>([]);
   const [addWingOpen, setAddWingOpen] = useState(false);
   const [newWing, setNewWing] = useState({ name: "", code: "" });
   const [savingWing, setSavingWing] = useState(false);
@@ -350,7 +354,7 @@ const EmployeeProfile = () => {
       late_grace_minutes: String(p.late_grace_minutes ?? DEFAULT_GRACE_MINUTES),
       working_days: p.working_days?.length ? p.working_days.map(Number) : [...DEFAULT_WORKING_DAYS],
     });
-    const [mgrRes, incRes, repRes, taskRes, dateHistRes] = await Promise.all([
+    const [mgrRes, incRes, repRes, taskRes, dateHistRes, wingMemberRes] = await Promise.all([
       p.reporting_manager_id
         ? supabase.from("profiles").select("id, full_name, email").eq("id", p.reporting_manager_id).maybeSingle()
         : Promise.resolve({ data: null }),
@@ -363,6 +367,7 @@ const EmployeeProfile = () => {
         .order("updated_at", { ascending: false })
         .limit(50),
       supabase.from("employee_date_history").select("date_type, date").eq("user_id", id).order("date", { ascending: true }),
+      supabase.from("profile_wings").select("wing_id").eq("profile_id", id),
     ]);
     const m: any = mgrRes.data;
     setManager(m ? { id: m.id, name: m.full_name || m.email || "—" } : null);
@@ -372,6 +377,8 @@ const EmployeeProfile = () => {
     const dateHist = (dateHistRes.data as { date_type: string; date: string }[]) || [];
     setExtraJoiningDates(dateHist.filter((d) => d.date_type === "joining").map((d) => d.date));
     setExtraPromotionDates(dateHist.filter((d) => d.date_type === "promotion").map((d) => d.date));
+    const memberWingIds = (wingMemberRes.data || []).map((r: { wing_id: string }) => r.wing_id);
+    setWingIds(p.wing_id ? [p.wing_id, ...memberWingIds.filter((wid: string) => wid !== p.wing_id)] : memberWingIds);
     setLoading(false);
   }, [id]);
 
@@ -563,6 +570,12 @@ const EmployeeProfile = () => {
           ...extraPromotionDates.filter(Boolean).map((date) => ({ user_id: id, date_type: "promotion", date, created_by: user?.id })),
         ];
         if (extraRows.length) await supabase.from("employee_date_history").insert(extraRows);
+
+        // Re-sync wing memberships — admin only (RLS also enforces this).
+        await supabase.from("profile_wings").delete().eq("profile_id", id);
+        if (wingIds.length) {
+          await supabase.from("profile_wings").insert(wingIds.map((wing_id) => ({ profile_id: id, wing_id })));
+        }
       }
       toast.success("Profile updated");
       setReloadKey((k) => k + 1);
@@ -865,32 +878,41 @@ const EmployeeProfile = () => {
                             </Button>
                           )}
                         </div>
-                        <Select
-
-                          value={overviewForm.wing_id || "none"}
-                          onValueChange={(v) => {
-                            const wingId = v === "none" ? "" : v;
-                            const selectedWing = wings.find((w) => w.id === wingId);
-                            const validTitles = wingDesignations.filter((d) => d.wing_id === wingId).map((d) => d.title);
-                            setOverviewForm((f) => ({
-                              ...f,
-                              wing_id: wingId,
-                              company_wing: selectedWing?.name || f.company_wing,
-                              // Only clear Designation when the new wing has its own
-                              // defined list and the current value isn't in it — a
-                              // wing with no defined designations yet (true for all
-                              // of them today) leaves Designation as free text below,
-                              // untouched.
-                              designation: validTitles.length === 0 || validTitles.includes(f.designation) ? f.designation : "",
-                            }));
-                          }}
-                        >
-                          <SelectTrigger><SelectValue placeholder="Select wing" /></SelectTrigger>
-                          <SelectContent>
-                            <SelectItem value="none">Unassigned</SelectItem>
-                            {activeWings.map((w) => <SelectItem key={w.id} value={w.id}>{w.name}</SelectItem>)}
-                          </SelectContent>
-                        </Select>
+                        <div className="flex flex-wrap gap-3 rounded-md border p-2 mt-1">
+                          {activeWings.length === 0 ? (
+                            <span className="text-xs text-muted-foreground">No wings yet — use Manage to add one.</span>
+                          ) : (
+                            activeWings.map((w) => (
+                              <label key={w.id} className="flex items-center gap-1.5 text-sm">
+                                <Checkbox
+                                  checked={wingIds.includes(w.id)}
+                                  disabled={!isAdmin}
+                                  onCheckedChange={() => {
+                                    if (!isAdmin) return;
+                                    const nextIds = wingIds.includes(w.id)
+                                      ? wingIds.filter((x) => x !== w.id)
+                                      : [...wingIds, w.id];
+                                    setWingIds(nextIds);
+                                    // The first checked wing is the primary one — it
+                                    // keeps driving attendance/payroll/overtime/holiday
+                                    // calculations unchanged.
+                                    const primaryId = nextIds[0] || "";
+                                    const selectedWing = wings.find((x) => x.id === primaryId);
+                                    const validTitles = wingDesignations.filter((d) => d.wing_id === primaryId).map((d) => d.title);
+                                    setOverviewForm((f) => ({
+                                      ...f,
+                                      wing_id: primaryId,
+                                      company_wing: selectedWing?.name || f.company_wing,
+                                      designation: validTitles.length === 0 || validTitles.includes(f.designation) ? f.designation : "",
+                                    }));
+                                  }}
+                                />
+                                {w.name}
+                              </label>
+                            ))
+                          )}
+                        </div>
+                        {!isAdmin && <p className="text-xs text-muted-foreground mt-1">Only an admin can change wing membership.</p>}
                       </div>
                       <div>
                         <Label className="text-xs">Designation</Label>
@@ -1143,7 +1165,11 @@ const EmployeeProfile = () => {
             <Card>
               <CardHeader><CardTitle className="text-base">Location</CardTitle></CardHeader>
               <CardContent className="space-y-4">
-                <Row icon={Building2} label="Wing" value={fmt(profile.company_wing)} />
+                <Row icon={Building2} label="Wing" value={
+                  wingIds.length > 1
+                    ? wingIds.map((wid) => wings.find((w) => w.id === wid)?.name).filter(Boolean).join(", ")
+                    : fmt(profile.company_wing)
+                } />
                 <Row icon={MapPin} label="Department" value={fmt(profile.department)} />
               </CardContent>
             </Card>
