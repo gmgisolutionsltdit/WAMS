@@ -246,42 +246,14 @@ export const ManualTimeEntryDialog = ({ onSubmitted, trigger, initial, supersede
         .from("manual_time_requests").insert(payload).select().single();
       if (error) throw error;
 
-      // Temporary diagnostic: confirm what was actually written for
-      // GMGI/GM task+time, to isolate whether a report of it going missing
-      // is a submit-time loss or something downstream (approval trigger,
-      // display). Safe to remove once the root cause is confirmed.
-      console.log("[ManualTimeEntryDialog] inserted row:", inserted);
-      toast.info(
-        `Saved — GMGI: "${inserted.gmgi_task ?? "null"}" (${inserted.gmgi_time}h), GM: "${inserted.gm_task ?? "null"}" (${inserted.gm_time}h)`,
-        { duration: 8000 },
-      );
-
       if (isAdmin) {
         // Admin entries are self-approved and applied to attendance immediately.
-        const { data: approvedRow, error: appErr } = await supabase
+        const { error: appErr } = await supabase
           .from("manual_time_requests")
           .update({ status: "approved", approved_by: user.id })
-          .eq("id", inserted.id)
-          .select("applied_log_id")
-          .single();
+          .eq("id", inserted.id);
         if (appErr) throw appErr;
         toast.success("Manual entry recorded and applied");
-
-        // Temporary diagnostic: check what the approval trigger actually
-        // wrote into attendance_logs (same fields, read back from the row
-        // it created), to see whether the loss happens at the trigger step.
-        if (approvedRow?.applied_log_id) {
-          const { data: appliedLog } = await supabase
-            .from("attendance_logs")
-            .select("gmgi_task, gm_task, gmgi_time, gm_time")
-            .eq("id", approvedRow.applied_log_id)
-            .maybeSingle();
-          console.log("[ManualTimeEntryDialog] applied attendance_logs row:", appliedLog);
-          toast.info(
-            `attendance_logs — GMGI: "${appliedLog?.gmgi_task ?? "null"}" (${appliedLog?.gmgi_time}h), GM: "${appliedLog?.gm_task ?? "null"}" (${appliedLog?.gm_time}h)`,
-            { duration: 8000 },
-          );
-        }
       } else {
         await notifyManagersAndAdmins(
           "Manual Time Entry Request",
