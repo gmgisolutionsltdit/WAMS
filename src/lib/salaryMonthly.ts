@@ -60,7 +60,7 @@ export const computeMonthlySalaryRows = async (
   const [{ data: profiles }, { data: attRows }, { data: holidayRows }, { data: leaveRows }, { data: recoveryRows }, { data: loanActionRows }, { data: settlementRows }, otHoursByUserMonth] = await Promise.all([
     supabase.from("profiles").select("id, full_name, email, base_salary, office_start_time, late_grace_minutes, standard_daily_hours, unpaid_break_minutes, working_days, company_wing").in("id", targetIds),
     supabase.from("attendance_logs").select("id, user_id, date, clock_in, clock_out, break_minutes, late_minutes, penalty_minutes, penalty_reviewed").in("user_id", targetIds).gte("date", rangeStart).lte("date", rangeEnd),
-    supabase.from("holidays").select("holiday_date, name, wing"),
+    supabase.from("holidays").select("holiday_date, name, wing_names"),
     supabase.from("leave_requests").select("user_id, start_date, end_date").in("user_id", targetIds).eq("status", "approved"),
     supabase.from("expense_recovery_actions").select("user_id, amount, action_type, month").in("user_id", targetIds).in("month", monthDates),
     supabase.from("personal_advance_actions").select("user_id, amount, action_type, month").in("user_id", targetIds).eq("action_type", "payroll_deduction").in("month", monthDates),
@@ -100,8 +100,8 @@ export const computeMonthlySalaryRows = async (
     if (!schedule || !t) return;
 
     const holidayMap = new Map<string, string>();
-    ((holidayRows || []) as { holiday_date: string; name: string; wing: string | null }[])
-      .filter((h) => h.wing === null || h.wing === schedule.company_wing)
+    ((holidayRows || []) as { holiday_date: string; name: string; wing_names: string[] | null }[])
+      .filter((h) => !h.wing_names?.length || h.wing_names.includes(schedule.company_wing))
       .forEach((h) => holidayMap.set(h.holiday_date, h.name));
     const dayKind = classifyDay(day.date, holidayMap, weekendDaysFor(schedule));
     const onLeave = leaveByUser.get(userId)?.has(day.date) ?? false;

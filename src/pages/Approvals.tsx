@@ -121,7 +121,7 @@ const Approvals = () => {
         supabase.from("profiles")
           .select("id, working_days, company_wing, standard_daily_hours, unpaid_break_minutes")
           .in("id", manualUserIds),
-        supabase.from("holidays").select("holiday_date, name, wing"),
+        supabase.from("holidays").select("holiday_date, name, wing_names"),
       ]);
       type ScheduleRow = WorkSchedule & { id: string; company_wing: string | null };
       const scheduleMap = new Map((schedules || []).map((s: ScheduleRow) => [s.id, s]));
@@ -130,7 +130,7 @@ const Approvals = () => {
         const schedule = scheduleMap.get(r.user_id);
         const holidayMap = new Map<string, string>();
         (holidays || [])
-          .filter((h: { wing: string | null }) => h.wing === null || h.wing === schedule?.company_wing)
+          .filter((h: { wing_names: string[] | null }) => !h.wing_names?.length || h.wing_names.includes(schedule?.company_wing))
           .forEach((h: { holiday_date: string; name: string }) => holidayMap.set(h.holiday_date, h.name));
         const nonWorking = classifyDay(r.date, holidayMap, weekendDaysFor(schedule)).nonWorking;
         const total = Number(r.total_hours) || 0;

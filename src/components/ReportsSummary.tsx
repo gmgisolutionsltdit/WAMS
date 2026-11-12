@@ -175,7 +175,7 @@ const ReportsSummary = () => {
           return q;
         })(),
         supabase.from("user_roles").select("user_id, role").in("user_id", targetIds),
-        supabase.from("holidays").select("holiday_date, name, wing"),
+        supabase.from("holidays").select("holiday_date, name, wing_names"),
         supabase.from("leave_requests").select("user_id, start_date, end_date").in("user_id", targetIds).eq("status", "approved"),
       ]);
 
@@ -251,7 +251,7 @@ const ReportsSummary = () => {
         // A holiday with no wing applies to everyone; otherwise only to its wing.
         const holidayMap = new Map<string, string>();
         (holidayRows || [])
-          .filter((h) => h.wing === null || h.wing === schedule.company_wing)
+          .filter((h) => !h.wing_names?.length || h.wing_names.includes(schedule.company_wing))
           .forEach((h) => holidayMap.set(h.holiday_date, h.name));
         const dayKind = classifyDay(day.date, holidayMap, weekendDaysFor(schedule));
         const onLeave = leaveByUser.get(userId)?.has(day.date) ?? false;

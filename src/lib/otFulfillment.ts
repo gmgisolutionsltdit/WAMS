@@ -37,7 +37,7 @@ export async function applyOTFulfillment(
   // Holiday lookup (any wing-wide or matching wing)
   const { data: holiday } = await supabase
     .from("holidays")
-    .select("id, wing")
+    .select("id, wing_names")
     .eq("holiday_date", date)
     .maybeSingle();
 
@@ -45,7 +45,7 @@ export async function applyOTFulfillment(
   const isWeekend = weekendDays.includes(dow);
   const isHoliday =
     !!holiday &&
-    (holiday.wing === null || holiday.wing === profile?.company_wing);
+    (!holiday.wing_names?.length || holiday.wing_names.includes(profile?.company_wing));
 
   let candidate = requestedOTHours;
 

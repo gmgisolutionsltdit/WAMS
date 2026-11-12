@@ -67,7 +67,7 @@ const Attendance = () => {
     Promise.all([
       supabase.from("attendance_logs").select("*").eq("user_id", user.id).order("date", { ascending: false }),
       supabase.from("profiles").select("office_start_time, office_end_time, late_grace_minutes, standard_daily_hours, unpaid_break_minutes, working_days, company_wing").eq("id", user.id).maybeSingle(),
-      supabase.from("holidays").select("holiday_date, name, wing"),
+      supabase.from("holidays").select("holiday_date, name, wing_names"),
       supabase.from("overtime_requests").select("date, requested_hours").eq("user_id", user.id).in("status", ["approved", "modified"]),
       supabase.from("leave_requests").select("start_date, end_date, leave_types(name)").eq("user_id", user.id).eq("status", "approved"),
       supabase.from("manual_time_requests").select("date, overtime_hours, updated_at").eq("user_id", user.id).eq("status", "approved").order("updated_at", { ascending: true }),
@@ -79,7 +79,7 @@ const Attendance = () => {
       const wing = (prof as { company_wing?: string } | null)?.company_wing;
       const map = new Map<string, string>();
       (holidayRows || [])
-        .filter((h: { wing: string | null }) => h.wing === null || h.wing === wing)
+        .filter((h: { wing_names: string[] | null }) => !h.wing_names?.length || h.wing_names.includes(wing))
         .forEach((h: { holiday_date: string; name: string }) => map.set(h.holiday_date, h.name));
       setHolidays(map);
       const otRequestMap: Record<string, number> = {};

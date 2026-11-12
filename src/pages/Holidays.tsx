@@ -5,22 +5,29 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
+import { Checkbox } from "@/components/ui/checkbox";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Textarea } from "@/components/ui/textarea";
 import { toast } from "sonner";
 import { Calendar, Plus, Trash2, Upload, Pencil } from "lucide-react";
 import { format } from "date-fns";
 
-/** Group consecutive-date rows that share the same name + wing into one display row. */
+/** Same wing_names array, order-independent. */
+const sameWings = (a: string[] | null, b: string[] | null) => {
+  const sa = [...(a || [])].sort();
+  const sb = [...(b || [])].sort();
+  return sa.length === sb.length && sa.every((v, i) => v === sb[i]);
+};
+
+/** Group consecutive-date rows that share the same name + wings into one display row. */
 const groupHolidays = (rows: any[]) => {
   const sorted = [...rows].sort((a, b) => a.holiday_date.localeCompare(b.holiday_date));
-  const groups: { ids: string[]; name: string; wing: string | null; start_date: string; end_date: string }[] = [];
+  const groups: { ids: string[]; name: string; wing_names: string[] | null; start_date: string; end_date: string }[] = [];
   for (const h of sorted) {
     const last = groups[groups.length - 1];
-    if (last && last.name === h.name && last.wing === h.wing) {
+    if (last && last.name === h.name && sameWings(last.wing_names, h.wing_names)) {
       const nextDay = new Date(last.end_date + "T00:00:00");
       nextDay.setDate(nextDay.getDate() + 1);
       if (format(nextDay, "yyyy-MM-dd") === h.holiday_date) {
@@ -29,7 +36,7 @@ const groupHolidays = (rows: any[]) => {
         continue;
       }
     }
-    groups.push({ ids: [h.id], name: h.name, wing: h.wing, start_date: h.holiday_date, end_date: h.holiday_date });
+    groups.push({ ids: [h.id], name: h.name, wing_names: h.wing_names, start_date: h.holiday_date, end_date: h.holiday_date });
   }
   return groups;
 };
@@ -37,10 +44,11 @@ const groupHolidays = (rows: any[]) => {
 const Holidays = () => {
   const { role } = useAuth();
   const [holidays, setHolidays] = useState<any[]>([]);
+  const [wings, setWings] = useState<{ id: string; name: string; active: boolean }[]>([]);
   const [open, setOpen] = useState(false);
   const [bulkOpen, setBulkOpen] = useState(false);
   const [editingIds, setEditingIds] = useState<string[] | null>(null);
-  const [form, setForm] = useState({ name: "", start_date: "", end_date: "", wing: "ALL" });
+  const [form, setForm] = useState({ name: "", start_date: "", end_date: "", wings: [] as string[] });
   const [bulkText, setBulkText] = useState("");
 
   const fetchHolidays = useCallback(async () => {
@@ -48,19 +56,29 @@ const Holidays = () => {
     setHolidays(data || []);
   }, []);
 
+  const fetchWings = useCallback(async () => {
+    const { data } = await supabase.from("company_wings").select("id, name, active").order("name", { ascending: true });
+    setWings((data || []) as { id: string; name: string; active: boolean }[]);
+  }, []);
+
   useEffect(() => { fetchHolidays(); }, [fetchHolidays]);
+  useEffect(() => { fetchWings(); }, [fetchWings]);
 
   const isAdmin = role === "admin";
+  const activeWings = wings.filter((w) => w.active);
 
-  const resetForm = () => { setForm({ name: "", start_date: "", end_date: "", wing: "ALL" }); setEditingIds(null); };
+  const resetForm = () => { setForm({ name: "", start_date: "", end_date: "", wings: [] }); setEditingIds(null); };
 
   const openCreate = () => { resetForm(); setOpen(true); };
 
-  const openEdit = (group: { ids: string[]; name: string; wing: string | null; start_date: string; end_date: string }) => {
+  const openEdit = (group: { ids: string[]; name: string; wing_names: string[] | null; start_date: string; end_date: string }) => {
     setEditingIds(group.ids);
-    setForm({ name: group.name, start_date: group.start_date, end_date: group.end_date, wing: group.wing || "ALL" });
+    setForm({ name: group.name, start_date: group.start_date, end_date: group.end_date, wings: group.wing_names || [] });
     setOpen(true);
   };
+
+  const toggleWing = (name: string) =>
+    setForm((f) => ({ ...f, wings: f.wings.includes(name) ? f.wings.filter((w) => w !== name) : [...f.wings, name] }));
 
   const handleAdd = async () => {
     if (!form.name || !form.start_date) { toast.error("Name and start date required"); return; }
@@ -72,7 +90,7 @@ const Holidays = () => {
       rows.push({
         name: form.name,
         holiday_date: format(d, "yyyy-MM-dd"),
-        wing: form.wing === "ALL" ? null : (form.wing as "GMGI" | "MORU"),
+        wing_names: form.wings.length ? form.wings : null,
       });
     }
 
@@ -100,17 +118,19 @@ const Holidays = () => {
   const handleBulk = async () => {
     const lines = bulkText.split("\n").map((l) => l.trim()).filter(Boolean);
     const rows: any[] = [];
+    const wingNames = new Set(wings.map((w) => w.name));
     for (const line of lines) {
-      // CSV: date,name[,wing]
+      // CSV: date,name[,wing1|wing2]
       const [d, n, w] = line.split(",").map((s) => s?.trim());
       if (!d || !n) continue;
+      const selectedWings = (w || "").split("|").map((s) => s.trim()).filter((s) => wingNames.has(s));
       rows.push({
         holiday_date: d,
         name: n,
-        wing: w === "GMGI" || w === "MORU" ? w : null,
+        wing_names: selectedWings.length ? selectedWings : null,
       });
     }
-    if (!rows.length) { toast.error("No valid rows. Use: YYYY-MM-DD,Name,GMGI|MORU"); return; }
+    if (!rows.length) { toast.error(`No valid rows. Use: YYYY-MM-DD,Name,${wings.map((w) => w.name).join("|") || "Wing"}`); return; }
     const { error } = await supabase.from("holidays").insert(rows);
     if (error) toast.error(error.message);
     else { toast.success(`Added ${rows.length} holidays`); setBulkOpen(false); setBulkText(""); fetchHolidays(); }
@@ -127,7 +147,7 @@ const Holidays = () => {
             <DialogContent>
               <DialogHeader><DialogTitle>Bulk Upload Holidays</DialogTitle></DialogHeader>
               <div className="space-y-3">
-                <p className="text-sm text-muted-foreground">One per line: <code>YYYY-MM-DD,Holiday Name,GMGI|MORU</code> (wing optional, leave blank for all wings)</p>
+                <p className="text-sm text-muted-foreground">One per line: <code>YYYY-MM-DD,Holiday Name,Wing1|Wing2</code> (wings optional, leave blank for all wings; separate multiple wings with |)</p>
                 <Textarea rows={10} value={bulkText} onChange={(e) => setBulkText(e.target.value)} placeholder={"2026-12-25,Christmas\n2026-01-01,New Year,GMGI"} />
                 <Button className="w-full" onClick={handleBulk}>Upload</Button>
               </div>
@@ -151,15 +171,15 @@ const Holidays = () => {
                 </div>
                 <p className="text-xs text-muted-foreground">Leave End Date blank for a single-day holiday. A range creates one entry per day.</p>
                 <div>
-                  <Label>Wing</Label>
-                  <Select value={form.wing} onValueChange={(v) => setForm((f) => ({ ...f, wing: v }))}>
-                    <SelectTrigger><SelectValue /></SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="ALL">All Wings</SelectItem>
-                      <SelectItem value="GMGI">GMGI</SelectItem>
-                      <SelectItem value="MORU">MORU</SelectItem>
-                    </SelectContent>
-                  </Select>
+                  <Label>Wings <span className="text-xs text-muted-foreground">(none selected = all wings)</span></Label>
+                  <div className="flex flex-wrap gap-3 mt-1">
+                    {activeWings.map((w) => (
+                      <label key={w.id} className="flex items-center gap-1.5 text-sm">
+                        <Checkbox checked={form.wings.includes(w.name)} onCheckedChange={() => toggleWing(w.name)} />
+                        {w.name}
+                      </label>
+                    ))}
+                  </div>
                 </div>
                 <Button className="w-full" onClick={handleAdd}>{editingIds ? "Save Changes" : "Add"}</Button>
               </div>
@@ -195,7 +215,11 @@ const Holidays = () => {
                     : `${format(new Date(g.start_date), "EEEE")} – ${format(new Date(g.end_date), "EEEE")}`}
                 </TableCell>
                 <TableCell className="font-medium">{g.name}</TableCell>
-                <TableCell><Badge variant={g.wing ? "secondary" : "outline"}>{g.wing || "All"}</Badge></TableCell>
+                <TableCell>
+                  {g.wing_names?.length
+                    ? g.wing_names.map((w) => <Badge key={w} variant="secondary" className="mr-1">{w}</Badge>)
+                    : <Badge variant="outline">All</Badge>}
+                </TableCell>
                 {isAdmin && (
                   <TableCell className="space-x-1">
                     <Button size="sm" variant="ghost" onClick={() => openEdit(g)}>
