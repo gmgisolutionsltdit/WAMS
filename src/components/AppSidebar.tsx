@@ -26,7 +26,6 @@ const employeeItems = [
   { title: "Notice Board", url: "/notices", icon: Megaphone },
   { title: "SOP", url: "/sop", icon: BookOpenCheck },
   { title: "Tasks", url: "/tasks", icon: FolderKanban },
-  { title: "Holidays", url: "/holidays", icon: CalendarHeart },
 ];
 
 const managerItems = [
@@ -34,8 +33,11 @@ const managerItems = [
   { title: "Performance Evaluation", url: "/performance-evaluation", icon: ClipboardList },
 ];
 
+const holidaysItem = { title: "Holidays", url: "/holidays", icon: CalendarHeart };
+
 const adminItems = [
   { title: "Employees", url: "/employees", icon: Users },
+  holidaysItem,
 ];
 
 
@@ -71,6 +73,16 @@ export function AppSidebar() {
                   </SidebarMenuButton>
                 </SidebarMenuItem>
               ))}
+              {!isAdmin && (
+                <SidebarMenuItem>
+                  <SidebarMenuButton asChild isActive={isActive(holidaysItem.url)}>
+                    <NavLink to={holidaysItem.url} end className="hover:bg-muted/50" activeClassName="bg-muted text-primary font-medium">
+                      <holidaysItem.icon className="mr-2 h-4 w-4" />
+                      {!collapsed && <span>{holidaysItem.title}</span>}
+                    </NavLink>
+                  </SidebarMenuButton>
+                </SidebarMenuItem>
+              )}
               {!isAdmin && user && (
                 <SidebarMenuItem>
                   <SidebarMenuButton asChild isActive={isActive(profileUrl)}>
