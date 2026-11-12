@@ -26,6 +26,7 @@ const employeeItems = [
   { title: "Notice Board", url: "/notices", icon: Megaphone },
   { title: "SOP", url: "/sop", icon: BookOpenCheck },
   { title: "Tasks", url: "/tasks", icon: FolderKanban },
+  { title: "Holidays", url: "/holidays", icon: CalendarHeart },
 ];
 
 const managerItems = [
@@ -35,7 +36,6 @@ const managerItems = [
 
 const adminItems = [
   { title: "Employees", url: "/employees", icon: Users },
-  { title: "Holidays", url: "/holidays", icon: CalendarHeart },
 ];
 
 

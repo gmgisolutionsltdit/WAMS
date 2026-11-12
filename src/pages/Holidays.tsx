@@ -50,14 +50,7 @@ const Holidays = () => {
 
   useEffect(() => { fetchHolidays(); }, [fetchHolidays]);
 
-  if (role !== "admin") {
-    return (
-      <Card><CardContent className="p-8 text-center text-muted-foreground">
-        <Calendar className="h-12 w-12 mx-auto mb-4 opacity-50" />
-        <p>Only Admins can manage holidays.</p>
-      </CardContent></Card>
-    );
-  }
+  const isAdmin = role === "admin";
 
   const resetForm = () => { setForm({ name: "", start_date: "", end_date: "", wing: "ALL" }); setEditingIds(null); };
 
@@ -127,6 +120,7 @@ const Holidays = () => {
     <Card>
       <CardHeader className="flex flex-row items-center justify-between">
         <CardTitle className="flex items-center gap-2"><Calendar className="h-5 w-5" /> Holidays</CardTitle>
+        {isAdmin && (
         <div className="flex gap-2">
           <Dialog open={bulkOpen} onOpenChange={setBulkOpen}>
             <DialogTrigger asChild><Button size="sm" variant="outline"><Upload className="mr-1 h-4 w-4" /> Bulk Upload</Button></DialogTrigger>
@@ -172,6 +166,7 @@ const Holidays = () => {
             </DialogContent>
           </Dialog>
         </div>
+        )}
       </CardHeader>
       <CardContent>
         <Table>
@@ -181,12 +176,12 @@ const Holidays = () => {
               <TableHead>Day</TableHead>
               <TableHead>Name</TableHead>
               <TableHead>Wing</TableHead>
-              <TableHead>Actions</TableHead>
+              {isAdmin && <TableHead>Actions</TableHead>}
             </TableRow>
           </TableHeader>
           <TableBody>
             {holidays.length === 0 ? (
-              <TableRow><TableCell colSpan={5} className="text-center text-muted-foreground">No holidays declared</TableCell></TableRow>
+              <TableRow><TableCell colSpan={isAdmin ? 5 : 4} className="text-center text-muted-foreground">No holidays declared</TableCell></TableRow>
             ) : groupHolidays(holidays).map((g) => (
               <TableRow key={g.ids[0]}>
                 <TableCell>
@@ -201,14 +196,16 @@ const Holidays = () => {
                 </TableCell>
                 <TableCell className="font-medium">{g.name}</TableCell>
                 <TableCell><Badge variant={g.wing ? "secondary" : "outline"}>{g.wing || "All"}</Badge></TableCell>
-                <TableCell className="space-x-1">
-                  <Button size="sm" variant="ghost" onClick={() => openEdit(g)}>
-                    <Pencil className="h-4 w-4" />
-                  </Button>
-                  <Button size="sm" variant="ghost" onClick={() => handleDeleteGroup(g.ids)}>
-                    <Trash2 className="h-4 w-4" />
-                  </Button>
-                </TableCell>
+                {isAdmin && (
+                  <TableCell className="space-x-1">
+                    <Button size="sm" variant="ghost" onClick={() => openEdit(g)}>
+                      <Pencil className="h-4 w-4" />
+                    </Button>
+                    <Button size="sm" variant="ghost" onClick={() => handleDeleteGroup(g.ids)}>
+                      <Trash2 className="h-4 w-4" />
+                    </Button>
+                  </TableCell>
+                )}
               </TableRow>
             ))}
           </TableBody>
