@@ -55,7 +55,7 @@ export const PayrollAdjustments = ({ isAdmin }: { isAdmin: boolean }) => {
         supabase.from("profiles").select("id, base_salary, office_start_time, late_grace_minutes, standard_daily_hours, unpaid_break_minutes, working_days, company_wing").eq("id", targetUserId).maybeSingle(),
         supabase.from("attendance_logs").select("id, user_id, date, clock_in, clock_out, break_minutes, late_minutes, penalty_minutes, penalty_reviewed")
           .eq("user_id", targetUserId).gte("date", monthStartISO).lte("date", monthEndISO),
-        supabase.from("holidays").select("holiday_date, name, wing"),
+        supabase.from("holidays").select("holiday_date, name, wing_names"),
         supabase.from("leave_requests").select("start_date, end_date").eq("user_id", targetUserId).eq("status", "approved"),
         supabase.from("payroll_due_adjustments").select("id, decision, amount")
           .eq("user_id", targetUserId).eq("month", monthStartISO).order("created_at", { ascending: false }),
@@ -76,7 +76,7 @@ export const PayrollAdjustments = ({ isAdmin }: { isAdmin: boolean }) => {
       if (sched) {
         const holidayMap = new Map<string, string>();
         (holidayRows || [])
-          .filter((h) => h.wing === null || h.wing === sched.company_wing)
+          .filter((h) => !h.wing_names?.length || h.wing_names.includes(sched.company_wing))
           .forEach((h) => holidayMap.set(h.holiday_date, h.name));
         const leaveSet = new Set<string>();
         (leaveRows || []).forEach((r) => {

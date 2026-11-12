@@ -237,6 +237,11 @@ const EmployeeProfile = () => {
   const [managers, setManagers] = useState<{ id: string; full_name: string | null; email: string | null }[]>([]);
   const [wings, setWings] = useState<WingRow[]>([]);
   const [wingDesignations, setWingDesignations] = useState<{ id: string; wing_id: string; title: string }[]>([]);
+  // Additional wing memberships (beyond the primary Wing field above), admin-only.
+  const [extraWingIds, setExtraWingIds] = useState<string[]>([]);
+  const [addWingOpen, setAddWingOpen] = useState(false);
+  const [newWing, setNewWing] = useState({ name: "", code: "" });
+  const [savingWing, setSavingWing] = useState(false);
   const [manageDesignationsOpen, setManageDesignationsOpen] = useState(false);
   const [newDesignationTitle, setNewDesignationTitle] = useState("");
   const [savingDesignation, setSavingDesignation] = useState(false);
@@ -385,12 +390,13 @@ const EmployeeProfile = () => {
   useEffect(() => {
     if (!canManageThisEmployee || !id) return;
     (async () => {
-      const [{ data: mgrs }, { data: wingRows }, { data: projectRows }, { data: memberRows }, { data: leaveTypeRows }] = await Promise.all([
+      const [{ data: mgrs }, { data: wingRows }, { data: projectRows }, { data: memberRows }, { data: leaveTypeRows }, { data: wingMemberRows }] = await Promise.all([
         supabase.rpc("manager_candidates"),
         supabase.from("company_wings").select("id, name, code, active").order("name", { ascending: true }),
         supabase.from("projects").select("id, name, key").eq("archived", false).order("name", { ascending: true }),
         supabase.from("project_members").select("project_id").eq("user_id", id),
         supabase.from("leave_types").select("*").order("name"),
+        supabase.from("profile_wings").select("wing_id").eq("profile_id", id),
       ]);
       setManagers(mgrs || []);
       setWings((wingRows || []) as WingRow[]);
@@ -399,6 +405,7 @@ const EmployeeProfile = () => {
       setMemberProjectIds(ids);
       setSelectedProjectIds(ids);
       setLeaveTypes((leaveTypeRows || []) as LeaveType[]);
+      setExtraWingIds((wingMemberRows || []).map((r: { wing_id: string }) => r.wing_id));
       await fetchDesignations();
     })();
   }, [canManageThisEmployee, id, fetchDesignations]);
@@ -426,6 +433,25 @@ const EmployeeProfile = () => {
   };
 
   const activeWings = wings.filter((w) => w.active);
+
+  const handleCreateWing = async () => {
+    const name = newWing.name.trim();
+    const code = (newWing.code.trim() || name.slice(0, 4)).toUpperCase();
+    if (!name) { toast.error("Wing name is required"); return; }
+    setSavingWing(true);
+    try {
+      const { data, error } = await supabase.from("company_wings").insert({ name, code, active: true }).select("id, name, code, active").single();
+      if (error) { toast.error(error.message); return; }
+      const created = data as WingRow;
+      setWings((prev) => [...prev, created].sort((a, b) => a.name.localeCompare(b.name)));
+      setExtraWingIds((prev) => [...prev, created.id]);
+      setNewWing({ name: "", code: "" });
+      setAddWingOpen(false);
+      toast.success(`Wing "${created.name}" created`);
+    } finally {
+      setSavingWing(false);
+    }
+  };
 
   const goBack = () => {
     if (window.history.length > 1) navigate(-1); else navigate("/employees");
@@ -534,6 +560,14 @@ const EmployeeProfile = () => {
           ...extraPromotionDates.filter(Boolean).map((date) => ({ user_id: id, date_type: "promotion", date, created_by: user?.id })),
         ];
         if (extraRows.length) await supabase.from("employee_date_history").insert(extraRows);
+
+        // Re-sync wing memberships — the primary wing (wing_id above) is
+        // always included, plus whatever extra wings were checked.
+        await supabase.from("profile_wings").delete().eq("profile_id", id);
+        const wingMemberIds = Array.from(new Set([overviewForm.wing_id, ...extraWingIds].filter(Boolean)));
+        if (wingMemberIds.length) {
+          await supabase.from("profile_wings").insert(wingMemberIds.map((wing_id) => ({ profile_id: id, wing_id })));
+        }
       }
       toast.success("Profile updated");
       setReloadKey((k) => k + 1);
@@ -855,6 +889,29 @@ const EmployeeProfile = () => {
                             {activeWings.map((w) => <SelectItem key={w.id} value={w.id}>{w.name}</SelectItem>)}
                           </SelectContent>
                         </Select>
+                        {isAdmin && (
+                          <div className="mt-2">
+                            <div className="flex items-center justify-between">
+                              <Label className="text-xs text-muted-foreground">Also a member of</Label>
+                              <Button type="button" variant="ghost" size="icon" className="h-5 w-5" title="Add a new wing" onClick={() => setAddWingOpen(true)}>
+                                <Plus className="h-3.5 w-3.5" />
+                              </Button>
+                            </div>
+                            <div className="flex flex-wrap gap-3 mt-1">
+                              {activeWings.filter((w) => w.id !== overviewForm.wing_id).map((w) => (
+                                <label key={w.id} className="flex items-center gap-1.5 text-sm">
+                                  <Checkbox
+                                    checked={extraWingIds.includes(w.id)}
+                                    onCheckedChange={() =>
+                                      setExtraWingIds((prev) => (prev.includes(w.id) ? prev.filter((x) => x !== w.id) : [...prev, w.id]))
+                                    }
+                                  />
+                                  {w.name}
+                                </label>
+                              ))}
+                            </div>
+                          </div>
+                        )}
                       </div>
                       <div>
                         <Label className="text-xs">Designation</Label>
@@ -1107,7 +1164,12 @@ const EmployeeProfile = () => {
             <Card>
               <CardHeader><CardTitle className="text-base">Location</CardTitle></CardHeader>
               <CardContent className="space-y-4">
-                <Row icon={Building2} label="Wing" value={fmt(profile.company_wing)} />
+                <Row icon={Building2} label="Wing" value={
+                  extraWingIds.length
+                    ? [profile.company_wing, ...activeWings.filter((w) => extraWingIds.includes(w.id) && w.id !== overviewForm.wing_id).map((w) => w.name)]
+                      .filter(Boolean).join(", ")
+                    : fmt(profile.company_wing)
+                } />
                 <Row icon={MapPin} label="Department" value={fmt(profile.department)} />
               </CardContent>
             </Card>
@@ -1662,6 +1724,29 @@ const EmployeeProfile = () => {
               </Button>
             </div>
           </div>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={addWingOpen} onOpenChange={(o) => { setAddWingOpen(o); if (!o) setNewWing({ name: "", code: "" }); }}>
+        <DialogContent className="max-w-sm">
+          <DialogHeader>
+            <DialogTitle>Add New Wing</DialogTitle>
+            <DialogDescription>Create a company wing — it's added to this employee's memberships too.</DialogDescription>
+          </DialogHeader>
+          <div className="space-y-3">
+            <div>
+              <Label>Wing Name *</Label>
+              <Input value={newWing.name} onChange={(e) => setNewWing((w) => ({ ...w, name: e.target.value }))} placeholder="e.g. Logistics" />
+            </div>
+            <div>
+              <Label>Short Code</Label>
+              <Input value={newWing.code} onChange={(e) => setNewWing((w) => ({ ...w, code: e.target.value }))} placeholder="e.g. LOG" />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setAddWingOpen(false)}>Cancel</Button>
+            <Button onClick={handleCreateWing} disabled={savingWing}>{savingWing ? "Saving…" : "Create Wing"}</Button>
+          </DialogFooter>
         </DialogContent>
       </Dialog>
 

@@ -128,10 +128,10 @@ export const ManualTimeEntryDialog = ({ onSubmitted, trigger, initial, supersede
         : await supabase.from("profiles").select("working_days, company_wing").eq("id", user.id).maybeSingle();
       setWorkingDays((data?.working_days as number[] | null) || null);
       const wing = data?.company_wing ?? null;
-      const { data: holidays } = await supabase.from("holidays").select("holiday_date, name, wing");
+      const { data: holidays } = await supabase.from("holidays").select("holiday_date, name, wing_names");
       const map = new Map<string, string>();
       (holidays || [])
-        .filter((h) => h.wing === null || h.wing === wing)
+        .filter((h) => !h.wing_names?.length || h.wing_names.includes(wing))
         .forEach((h) => map.set(h.holiday_date, h.name));
       setHolidayMap(map);
     }, targetEmail ? 400 : 0);
