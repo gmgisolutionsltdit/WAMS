@@ -97,7 +97,7 @@ const EmployeeManagement = () => {
   const initialForm = {
     full_name: "", email: "", password: "", department: "", designation: "", phone: "",
     role: "employee" as string, reporting_manager_ids: [] as string[],
-    company_wing: "GMGI", wing_id: "" as string, extra_wing_ids: [] as string[],
+    company_wing: "GMGI", wing_id: "" as string,
     service_status: "Permanent", employee_status: "Active",
     joining_date: "", promotion_date: "", resign_date: "",
     daily_ot_cap: "4", monthly_ot_cap: "40",
@@ -352,11 +352,6 @@ const EmployeeManagement = () => {
       await supabase.from("profiles").update(postCreate).eq("id", created.userId);
       await syncProjectMembers(created.userId);
 
-      const wingMemberIds = Array.from(new Set([form.wing_id, ...form.extra_wing_ids].filter(Boolean)));
-      if (wingMemberIds.length) {
-        await supabase.from("profile_wings").insert(wingMemberIds.map((wing_id) => ({ profile_id: created.userId, wing_id })));
-      }
-
       toast.success("Employee created");
       setDialogOpen(false);
       resetForm();
@@ -571,34 +566,6 @@ const EmployeeManagement = () => {
                     {canManageWings && <SelectItem value="__add__">+ Add new wing</SelectItem>}
                   </SelectContent>
                 </Select>
-                {canManageWings && (
-                  <div className="mt-2">
-                    <div className="flex items-center justify-between">
-                      <Label className="text-xs text-muted-foreground">Also a member of</Label>
-                      <Button type="button" variant="ghost" size="icon" className="h-5 w-5" title="Add a new wing" onClick={() => setAddWingOpen(true)}>
-                        <Plus className="h-3.5 w-3.5" />
-                      </Button>
-                    </div>
-                    <div className="flex flex-wrap gap-3 mt-1">
-                      {activeWings.filter((w) => w.id !== form.wing_id).map((w) => (
-                        <label key={w.id} className="flex items-center gap-1.5 text-sm">
-                          <Checkbox
-                            checked={form.extra_wing_ids.includes(w.id)}
-                            onCheckedChange={() =>
-                              setForm((f) => ({
-                                ...f,
-                                extra_wing_ids: f.extra_wing_ids.includes(w.id)
-                                  ? f.extra_wing_ids.filter((x) => x !== w.id)
-                                  : [...f.extra_wing_ids, w.id],
-                              }))
-                            }
-                          />
-                          {w.name}
-                        </label>
-                      ))}
-                    </div>
-                  </div>
-                )}
               </div>
 
               <div className="col-span-2">
