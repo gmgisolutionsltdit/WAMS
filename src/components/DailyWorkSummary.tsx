@@ -4,9 +4,10 @@ import { useRealtimeSubscription } from "@/hooks/useRealtimeSubscription";
 import { supabase } from "@/integrations/supabase/client";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { format, parseISO, addDays, isWeekend } from "date-fns";
-import { ClipboardList } from "lucide-react";
+import { format, parseISO, addDays, isWeekend, startOfMonth, endOfMonth, addMonths } from "date-fns";
+import { ClipboardList, ChevronLeft, ChevronRight } from "lucide-react";
 import { mergeDailySessions, type MergedDay } from "@/lib/attendance";
 import { fmtHMS, fmtClock } from "@/lib/time";
 
@@ -61,12 +62,16 @@ const statusBadgeClass = (status: string) => {
   }
 };
 
-/** Build per-date groups, forwarding unfinished tasks to subsequent working days. */
+/** Build per-date groups, forwarding unfinished tasks to subsequent working days.
+ *  `cutoff` is the last date forwarding/"always show" logic treats as "today" —
+ *  the real today when viewing the current month, or the viewed month's last
+ *  day when paging to a past month, so forwarded tasks don't leak past it. */
 const buildGroups = (
   attendance: Attendance[],
   workLogs: WorkLog[],
+  cutoff: string,
 ): DayGroup[] => {
-  const today = localToday();
+  const today = cutoff;
 
   // Collect all relevant dates (attendance dates + log dates + today).
   const dateSet = new Set<string>([today]);
@@ -114,7 +119,7 @@ const buildGroups = (
           if (!FORWARD_STATUSES.has(t.status)) return;
           // Check this date is one of the forwarded working days after w.log_date.
           let cursor = nextWorkingDay(parseISO(w.log_date));
-          const todayDate = parseISO(localToday());
+          const todayDate = parseISO(today);
           let appears = false;
           while (cursor <= todayDate) {
             if (format(cursor, "yyyy-MM-dd") === date) {
@@ -146,23 +151,35 @@ const DailyWorkSummary = () => {
   const { user } = useAuth();
   const [attendance, setAttendance] = useState<Attendance[]>([]);
   const [workLogs, setWorkLogs] = useState<WorkLog[]>([]);
+  const [month, setMonth] = useState(() => startOfMonth(new Date()));
+
+  const monthStartStr = format(month, "yyyy-MM-dd");
+  const monthEndStr = format(endOfMonth(month), "yyyy-MM-dd");
+  const todayStr = localToday();
+  // Forwarding/"always show today" logic treats this as "today" — the real
+  // today when on the current month, the viewed month's last day otherwise,
+  // so forwarded tasks don't leak into a past month's view.
+  const cutoff = monthEndStr < todayStr ? monthEndStr : todayStr;
 
   const fetchData = useCallback(async () => {
     if (!user) return;
-    // Pull last 60 days to give us enough history for forwarding.
-    const since = format(addDays(new Date(), -60), "yyyy-MM-dd");
+    // Pull 60 days before the viewed month too, for forwarding history.
+    const since = format(addDays(month, -60), "yyyy-MM-dd");
+    const until = monthEndStr < todayStr ? monthEndStr : todayStr;
     const [{ data: att }, { data: logs }] = await Promise.all([
       supabase
         .from("attendance_logs")
         .select("id, date, clock_in, clock_out, total_hours, break_minutes")
         .eq("user_id", user.id)
         .gte("date", since)
+        .lte("date", until)
         .order("date", { ascending: false }),
       supabase
         .from("daily_work_logs")
         .select("id, log_date, tasks")
         .eq("user_id", user.id)
         .gte("log_date", since)
+        .lte("log_date", until)
         .order("log_date", { ascending: false }),
     ]);
     setAttendance((att ?? []) as Attendance[]);
@@ -173,7 +190,7 @@ const DailyWorkSummary = () => {
         tasks: Array.isArray(l.tasks) ? (l.tasks as Task[]) : [],
       })),
     );
-  }, [user]);
+  }, [user, month, monthEndStr, todayStr]);
 
   useEffect(() => {
     fetchData();
@@ -182,7 +199,8 @@ const DailyWorkSummary = () => {
   useRealtimeSubscription("attendance_logs", fetchData, "summary-attendance");
   useRealtimeSubscription("daily_work_logs", fetchData, "summary-worklogs");
 
-  const groups = buildGroups(attendance, workLogs);
+  const groups = buildGroups(attendance, workLogs, cutoff)
+    .filter((g) => g.date >= monthStartStr && g.date <= monthEndStr);
 
 
   // Flatten rows: one row per task, plus one "no tasks" row for days without entries.
@@ -296,6 +314,20 @@ const DailyWorkSummary = () => {
             </Table>
           </div>
         )}
+        <div className="flex items-center justify-center gap-1 sm:gap-2 pt-3">
+          <Button variant="outline" size="icon" className="h-8 w-8" onClick={() => setMonth((m) => addMonths(m, -1))}>
+            <ChevronLeft className="h-4 w-4" />
+          </Button>
+          <div className="min-w-[110px] text-center text-sm font-medium tabular-nums">
+            {format(month, "MMMM yyyy")}
+          </div>
+          <Button variant="outline" size="icon" className="h-8 w-8" onClick={() => setMonth((m) => addMonths(m, 1))}>
+            <ChevronRight className="h-4 w-4" />
+          </Button>
+          <Button variant="ghost" size="sm" className="h-8" onClick={() => setMonth(startOfMonth(new Date()))}>
+            Today
+          </Button>
+        </div>
       </CardContent>
     </Card>
   );
