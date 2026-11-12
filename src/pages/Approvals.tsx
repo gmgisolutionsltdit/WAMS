@@ -410,11 +410,14 @@ const Approvals = () => {
     if (!editReq || !user) return;
     const newHours = parseFloat(editHours);
     if (isNaN(newHours) || newHours <= 0) { toast.error("Invalid hours"); return; }
-    const adjustedHours = await applyOTFulfillment(editReq.user_id, editReq.date, newHours);
+    // Modify is an explicit admin override — store exactly what they typed.
+    // Re-running applyOTFulfillment here silently re-capped/re-adjusted the
+    // admin's chosen value (e.g. typed 5h, daily cap quietly saved 4h),
+    // which made Modify not actually set the hours the admin asked for.
     const { data, error } = await supabase
       .from("overtime_requests")
       .update({
-        requested_hours: adjustedHours,
+        requested_hours: newHours,
         original_hours: editReq.original_hours ?? editReq.requested_hours,
         status: "modified" as any,
         approved_by: user.id,
@@ -426,14 +429,11 @@ const Approvals = () => {
     if (error) toast.error(error.message);
     else if (!data?.length) toast.error(NOT_ALLOWED);
     else {
-      const msg = adjustedHours < newHours
-        ? `Modified to ${newHours}h, adjusted to ${adjustedHours}h after fulfillment`
-        : `Hours modified to ${adjustedHours}h & approved`;
-      toast.success(msg);
+      toast.success(`Hours modified to ${newHours}h & approved`);
       await notifyEmployee(
         editReq.user_id,
         "OT Hours Modified",
-        `Your OT request was modified to ${adjustedHours}h (adjusted for standard hours fulfillment).`,
+        `Your OT request was modified to ${newHours}h.`,
         editReq.id,
         { route: "/ot-requests", type: "ot_update" }
       );
