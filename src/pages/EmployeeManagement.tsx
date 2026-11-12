@@ -543,15 +543,9 @@ const EmployeeManagement = () => {
               <div><Label>Department</Label><Input value={form.department} onChange={(e) => setForm((f) => ({ ...f, department: e.target.value }))} /></div>
               <div><Label>Designation</Label><Input value={form.designation} onChange={(e) => setForm((f) => ({ ...f, designation: e.target.value }))} /></div>
               <div>
-                <div className="flex items-center justify-between">
-                  <Label>Wing</Label>
-                  {canManageWings && (
-                    <Button type="button" variant="link" size="sm" className="h-auto p-0 text-xs" onClick={() => setManageWingsOpen(true)}>
-                      Manage
-                    </Button>
-                  )}
-                </div>
-                <div className="flex flex-wrap gap-3 rounded-md border p-2 mt-1">
+                <Label>Wing</Label>
+                <div className="relative">
+                <div className={`flex flex-wrap gap-3 rounded-md border p-2 mt-1 ${canManageWings ? "pr-16" : ""}`}>
                   {activeWings.length === 0 ? (
                     <span className="text-xs text-muted-foreground">No wings yet — use Manage to add one.</span>
                   ) : (
@@ -577,6 +571,18 @@ const EmployeeManagement = () => {
                       </label>
                     ))
                   )}
+                </div>
+                {canManageWings && (
+                  <Button
+                    type="button"
+                    variant="link"
+                    size="sm"
+                    className="absolute right-2 top-2 h-auto p-0 text-xs"
+                    onClick={() => setManageWingsOpen(true)}
+                  >
+                    Manage
+                  </Button>
+                )}
                 </div>
               </div>
 
