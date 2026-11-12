@@ -16,7 +16,7 @@ import {
 } from "@/components/ui/dialog";
 import { toast } from "sonner";
 import {
-  Plus, Users, Search, Upload, Download, Camera, ArrowRight,
+  Plus, Users, Search, Upload, Download, Camera, ArrowRight, Trash2,
 } from "lucide-react";
 import { PasswordInput } from "@/components/PasswordInput";
 import { useRealtimeSubscription } from "@/hooks/useRealtimeSubscription";
@@ -89,6 +89,7 @@ const EmployeeManagement = () => {
   const [addWingOpen, setAddWingOpen] = useState(false);
   const [newWing, setNewWing] = useState({ name: "", code: "" });
   const [savingWing, setSavingWing] = useState(false);
+  const [manageWingsOpen, setManageWingsOpen] = useState(false);
   const [projects, setProjects] = useState<{ id: string; name: string; key: string }[]>([]);
   /** Project memberships keyed by employee id, for the list column and edit form. */
   const [memberProjects, setMemberProjects] = useState<Record<string, string[]>>({});
@@ -242,6 +243,13 @@ const EmployeeManagement = () => {
     } finally {
       setSavingWing(false);
     }
+  };
+
+  const removeWing = async (wingId: string) => {
+    const { error } = await supabase.from("company_wings").delete().eq("id", wingId);
+    if (error) { toast.error(error.message || "Couldn't delete this wing — it may still be assigned to employees."); return; }
+    setWings((prev) => prev.filter((w) => w.id !== wingId));
+    toast.success("Wing removed");
   };
 
   /** Reconcile an employee's project memberships against the form selection. */
@@ -536,7 +544,14 @@ const EmployeeManagement = () => {
               <div><Label>Department</Label><Input value={form.department} onChange={(e) => setForm((f) => ({ ...f, department: e.target.value }))} /></div>
               <div><Label>Designation</Label><Input value={form.designation} onChange={(e) => setForm((f) => ({ ...f, designation: e.target.value }))} /></div>
               <div>
-                <Label>Wing</Label>
+                <div className="flex items-center justify-between">
+                  <Label>Wing</Label>
+                  {canManageWings && (
+                    <Button type="button" variant="link" size="sm" className="h-auto p-0 text-xs" onClick={() => setManageWingsOpen(true)}>
+                      Manage
+                    </Button>
+                  )}
+                </div>
                 <Select
                   value={form.wing_id || "none"}
                   onValueChange={(v) => {
@@ -954,6 +969,50 @@ const EmployeeManagement = () => {
             <Button variant="outline" onClick={() => setAddWingOpen(false)}>Cancel</Button>
             <Button onClick={handleCreateWing} disabled={savingWing}>{savingWing ? "Saving…" : "Create Wing"}</Button>
           </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Manage wings dialog */}
+      <Dialog open={manageWingsOpen} onOpenChange={setManageWingsOpen}>
+        <DialogContent className="max-w-sm">
+          <DialogHeader>
+            <DialogTitle>Manage Wings</DialogTitle>
+            <DialogDescription>Add or remove company wings.</DialogDescription>
+          </DialogHeader>
+          <div className="space-y-3">
+            <div className="space-y-1 max-h-60 overflow-y-auto">
+              {wings.length === 0 ? (
+                <p className="text-sm text-muted-foreground">No wings yet.</p>
+              ) : (
+                wings.map((w) => (
+                  <div key={w.id} className="flex items-center justify-between rounded-md border px-3 py-2">
+                    <span className="text-sm">{w.name} <span className="text-xs text-muted-foreground">({w.code})</span></span>
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="icon"
+                      className="h-7 w-7"
+                      onClick={() => removeWing(w.id)}
+                      aria-label={`Remove ${w.name}`}
+                    >
+                      <Trash2 className="h-4 w-4 text-destructive" />
+                    </Button>
+                  </div>
+                ))
+              )}
+            </div>
+            <div className="flex gap-2">
+              <Input
+                placeholder="New wing name"
+                value={newWing.name}
+                onChange={(e) => setNewWing((w) => ({ ...w, name: e.target.value }))}
+                onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); handleCreateWing(); } }}
+              />
+              <Button type="button" onClick={handleCreateWing} disabled={savingWing || !newWing.name.trim()}>
+                Add
+              </Button>
+            </div>
+          </div>
         </DialogContent>
       </Dialog>
     </Card>
