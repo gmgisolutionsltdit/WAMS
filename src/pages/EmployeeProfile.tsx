@@ -523,14 +523,18 @@ const EmployeeProfile = () => {
         if (existing) await supabase.from("user_roles").update({ role: overviewForm.role as any }).eq("user_id", id);
         else await supabase.from("user_roles").insert({ user_id: id, role: overviewForm.role as any });
       }
-      // Re-sync the extra Joining/Promotion dates: simplest consistent
-      // approach is replace-all rather than diffing adds/removes.
-      await supabase.from("employee_date_history").delete().eq("user_id", id).in("date_type", ["joining", "promotion"]);
-      const extraRows = [
-        ...extraJoiningDates.filter(Boolean).map((date) => ({ user_id: id, date_type: "joining", date, created_by: user?.id })),
-        ...extraPromotionDates.filter(Boolean).map((date) => ({ user_id: id, date_type: "promotion", date, created_by: user?.id })),
-      ];
-      if (extraRows.length) await supabase.from("employee_date_history").insert(extraRows);
+      // Re-sync the extra Joining/Promotion dates — admin only (RLS also
+      // enforces this; the client check just avoids a pointless round trip
+      // for a manager/self save, since they can't add or remove these).
+      // Simplest consistent approach is replace-all rather than diffing.
+      if (isAdmin) {
+        await supabase.from("employee_date_history").delete().eq("user_id", id).in("date_type", ["joining", "promotion"]);
+        const extraRows = [
+          ...extraJoiningDates.filter(Boolean).map((date) => ({ user_id: id, date_type: "joining", date, created_by: user?.id })),
+          ...extraPromotionDates.filter(Boolean).map((date) => ({ user_id: id, date_type: "promotion", date, created_by: user?.id })),
+        ];
+        if (extraRows.length) await supabase.from("employee_date_history").insert(extraRows);
+      }
       toast.success("Profile updated");
       setReloadKey((k) => k + 1);
       return true;
@@ -995,42 +999,58 @@ const EmployeeProfile = () => {
                   <div>
                     <div className="flex items-center justify-between">
                       <Label className="text-xs">Joining Date</Label>
-                      <Button type="button" variant="ghost" size="icon" className="h-5 w-5" title="Add another joining date" onClick={() => setExtraJoiningDates((d) => [...d, ""])}>
-                        <Plus className="h-3.5 w-3.5" />
-                      </Button>
+                      {isAdmin && (
+                        <Button type="button" variant="ghost" size="icon" className="h-5 w-5" title="Add another joining date" onClick={() => setExtraJoiningDates((d) => [...d, ""])}>
+                          <Plus className="h-3.5 w-3.5" />
+                        </Button>
+                      )}
                     </div>
                     <Input type="date" value={overviewForm.joining_date} onChange={(e) => setOverviewForm((f) => ({ ...f, joining_date: e.target.value }))} />
                     {extraJoiningDates.map((d, idx) => (
                       <div key={idx} className="flex items-center gap-1 mt-1">
-                        <Input
-                          type="date"
-                          value={d}
-                          onChange={(e) => setExtraJoiningDates((arr) => arr.map((v, i) => (i === idx ? e.target.value : v)))}
-                        />
-                        <Button type="button" variant="ghost" size="icon" className="h-8 w-8 shrink-0" onClick={() => setExtraJoiningDates((arr) => arr.filter((_, i) => i !== idx))}>
-                          <Trash2 className="h-3.5 w-3.5 text-destructive" />
-                        </Button>
+                        {isAdmin ? (
+                          <>
+                            <Input
+                              type="date"
+                              value={d}
+                              onChange={(e) => setExtraJoiningDates((arr) => arr.map((v, i) => (i === idx ? e.target.value : v)))}
+                            />
+                            <Button type="button" variant="ghost" size="icon" className="h-8 w-8 shrink-0" onClick={() => setExtraJoiningDates((arr) => arr.filter((_, i) => i !== idx))}>
+                              <Trash2 className="h-3.5 w-3.5 text-destructive" />
+                            </Button>
+                          </>
+                        ) : (
+                          <Input type="date" value={d} disabled />
+                        )}
                       </div>
                     ))}
                   </div>
                   <div>
                     <div className="flex items-center justify-between">
                       <Label className="text-xs">Promotion Date</Label>
-                      <Button type="button" variant="ghost" size="icon" className="h-5 w-5" title="Add another promotion date" onClick={() => setExtraPromotionDates((d) => [...d, ""])}>
-                        <Plus className="h-3.5 w-3.5" />
-                      </Button>
+                      {isAdmin && (
+                        <Button type="button" variant="ghost" size="icon" className="h-5 w-5" title="Add another promotion date" onClick={() => setExtraPromotionDates((d) => [...d, ""])}>
+                          <Plus className="h-3.5 w-3.5" />
+                        </Button>
+                      )}
                     </div>
                     <Input type="date" value={overviewForm.promotion_date} onChange={(e) => setOverviewForm((f) => ({ ...f, promotion_date: e.target.value }))} />
                     {extraPromotionDates.map((d, idx) => (
                       <div key={idx} className="flex items-center gap-1 mt-1">
-                        <Input
-                          type="date"
-                          value={d}
-                          onChange={(e) => setExtraPromotionDates((arr) => arr.map((v, i) => (i === idx ? e.target.value : v)))}
-                        />
-                        <Button type="button" variant="ghost" size="icon" className="h-8 w-8 shrink-0" onClick={() => setExtraPromotionDates((arr) => arr.filter((_, i) => i !== idx))}>
-                          <Trash2 className="h-3.5 w-3.5 text-destructive" />
-                        </Button>
+                        {isAdmin ? (
+                          <>
+                            <Input
+                              type="date"
+                              value={d}
+                              onChange={(e) => setExtraPromotionDates((arr) => arr.map((v, i) => (i === idx ? e.target.value : v)))}
+                            />
+                            <Button type="button" variant="ghost" size="icon" className="h-8 w-8 shrink-0" onClick={() => setExtraPromotionDates((arr) => arr.filter((_, i) => i !== idx))}>
+                              <Trash2 className="h-3.5 w-3.5 text-destructive" />
+                            </Button>
+                          </>
+                        ) : (
+                          <Input type="date" value={d} disabled />
+                        )}
                       </div>
                     ))}
                   </div>
