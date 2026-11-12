@@ -242,6 +242,7 @@ const EmployeeProfile = () => {
   const [addWingOpen, setAddWingOpen] = useState(false);
   const [newWing, setNewWing] = useState({ name: "", code: "" });
   const [savingWing, setSavingWing] = useState(false);
+  const [manageWingsOpen, setManageWingsOpen] = useState(false);
   const [manageDesignationsOpen, setManageDesignationsOpen] = useState(false);
   const [newDesignationTitle, setNewDesignationTitle] = useState("");
   const [savingDesignation, setSavingDesignation] = useState(false);
@@ -451,6 +452,14 @@ const EmployeeProfile = () => {
     } finally {
       setSavingWing(false);
     }
+  };
+
+  const removeWing = async (wingId: string) => {
+    const { error } = await supabase.from("company_wings").delete().eq("id", wingId);
+    if (error) { toast.error(error.message || "Couldn't delete this wing — it may still be assigned to employees."); return; }
+    setWings((prev) => prev.filter((w) => w.id !== wingId));
+    setExtraWingIds((prev) => prev.filter((id) => id !== wingId));
+    toast.success("Wing removed");
   };
 
   const goBack = () => {
@@ -862,7 +871,14 @@ const EmployeeProfile = () => {
                     <Label className="text-xs">Wing &amp; Designation</Label>
                     <div className="grid gap-3 md:grid-cols-2 mt-1">
                       <div>
-                        <Label className="text-xs">Wing</Label>
+                        <div className="flex items-center justify-between">
+                          <Label className="text-xs">Wing</Label>
+                          {isAdmin && (
+                            <Button type="button" variant="link" size="sm" className="h-auto p-0 text-xs" onClick={() => setManageWingsOpen(true)}>
+                              Manage
+                            </Button>
+                          )}
+                        </div>
                         <Select
 
                           value={overviewForm.wing_id || "none"}
@@ -1747,6 +1763,49 @@ const EmployeeProfile = () => {
             <Button variant="outline" onClick={() => setAddWingOpen(false)}>Cancel</Button>
             <Button onClick={handleCreateWing} disabled={savingWing}>{savingWing ? "Saving…" : "Create Wing"}</Button>
           </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={manageWingsOpen} onOpenChange={setManageWingsOpen}>
+        <DialogContent className="max-w-sm">
+          <DialogHeader>
+            <DialogTitle>Manage Wings</DialogTitle>
+            <DialogDescription>Add or remove company wings.</DialogDescription>
+          </DialogHeader>
+          <div className="space-y-3">
+            <div className="space-y-1 max-h-60 overflow-y-auto">
+              {wings.length === 0 ? (
+                <p className="text-sm text-muted-foreground">No wings yet.</p>
+              ) : (
+                wings.map((w) => (
+                  <div key={w.id} className="flex items-center justify-between rounded-md border px-3 py-2">
+                    <span className="text-sm">{w.name} <span className="text-xs text-muted-foreground">({w.code})</span></span>
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="icon"
+                      className="h-7 w-7"
+                      onClick={() => removeWing(w.id)}
+                      aria-label={`Remove ${w.name}`}
+                    >
+                      <Trash2 className="h-4 w-4 text-destructive" />
+                    </Button>
+                  </div>
+                ))
+              )}
+            </div>
+            <div className="flex gap-2">
+              <Input
+                placeholder="New wing name"
+                value={newWing.name}
+                onChange={(e) => setNewWing((w) => ({ ...w, name: e.target.value }))}
+                onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); handleCreateWing(); } }}
+              />
+              <Button type="button" onClick={handleCreateWing} disabled={savingWing || !newWing.name.trim()}>
+                Add
+              </Button>
+            </div>
+          </div>
         </DialogContent>
       </Dialog>
 
