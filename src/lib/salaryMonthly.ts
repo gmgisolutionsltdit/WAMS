@@ -66,9 +66,9 @@ export const computeMonthlySalaryRows = async (
     supabase.from("personal_advance_actions").select("user_id, amount, action_type, month").in("user_id", targetIds).eq("action_type", "payroll_deduction").in("month", monthDates),
     supabase.from("payroll_settlements").select("user_id, month, net_hours_paid").in("user_id", targetIds).in("month", monthDates),
     // OT Payment uses the exact same computation as Reports > Performance
-    // Summary's "Approved Overtime" (overtime_requests + manual_time_requests,
-    // gated to dates with matching actual overtime) so the two can never
-    // silently diverge.
+    // Summary's "Approved Overtime" (every approved/modified overtime_request
+    // and approved manual_time_requests correction for the month) so the two
+    // can never silently diverge.
     fetchApprovedOTHoursByUserMonth(targetIds, rangeStart, rangeEnd),
   ]);
 
