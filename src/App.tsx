@@ -90,7 +90,7 @@ const AppRoutes = () => (
       <Route path="/reports" element={<Reports />} />
       <Route path="/employees" element={<RoleGate allow={["admin"]}><EmployeeManagement /></RoleGate>} />
       <Route path="/employees/:id" element={<EmployeeProfile />} />
-      <Route path="/holidays" element={<RoleGate allow={["admin"]}><Holidays /></RoleGate>} />
+      <Route path="/holidays" element={<Holidays />} />
       <Route path="/leave" element={<LeaveManagement />} />
       <Route path="/tasks" element={<Tasks />} />
       <Route path="/tasks/:id" element={<ErrorBoundary fallbackTitle="Couldn't open this board"><TaskBoard /></ErrorBoundary>} />
