@@ -97,7 +97,7 @@ const EmployeeManagement = () => {
   const initialForm = {
     full_name: "", email: "", password: "", department: "", designation: "", phone: "",
     role: "employee" as string, reporting_manager_ids: [] as string[],
-    company_wing: "GMGI", wing_id: "" as string,
+    company_wing: "GMGI", wing_id: "" as string, wing_ids: [] as string[],
     service_status: "Permanent", employee_status: "Active",
     joining_date: "", promotion_date: "", resign_date: "",
     daily_ot_cap: "4", monthly_ot_cap: "40",
@@ -352,6 +352,10 @@ const EmployeeManagement = () => {
       await supabase.from("profiles").update(postCreate).eq("id", created.userId);
       await syncProjectMembers(created.userId);
 
+      if (form.wing_ids.length) {
+        await supabase.from("profile_wings").insert(form.wing_ids.map((wing_id) => ({ profile_id: created.userId, wing_id })));
+      }
+
       toast.success("Employee created");
       setDialogOpen(false);
       resetForm();
@@ -547,25 +551,33 @@ const EmployeeManagement = () => {
                     </Button>
                   )}
                 </div>
-                <Select
-                  value={form.wing_id || "none"}
-                  onValueChange={(v) => {
-                    if (v === "__add__") { setAddWingOpen(true); return; }
-                    const w = wings.find((x) => x.id === v);
-                    setForm((f) => ({
-                      ...f,
-                      wing_id: v === "none" ? "" : v,
-                      company_wing: w && LEGACY_WINGS.includes(w.name) ? w.name : f.company_wing,
-                    }));
-                  }}
-                >
-                  <SelectTrigger><SelectValue placeholder="Select wing" /></SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="none">Unassigned</SelectItem>
-                    {activeWings.map((w) => <SelectItem key={w.id} value={w.id}>{w.name}</SelectItem>)}
-                    {canManageWings && <SelectItem value="__add__">+ Add new wing</SelectItem>}
-                  </SelectContent>
-                </Select>
+                <div className="flex flex-wrap gap-3 rounded-md border p-2 mt-1">
+                  {activeWings.length === 0 ? (
+                    <span className="text-xs text-muted-foreground">No wings yet — use Manage to add one.</span>
+                  ) : (
+                    activeWings.map((w) => (
+                      <label key={w.id} className="flex items-center gap-1.5 text-sm">
+                        <Checkbox
+                          checked={form.wing_ids.includes(w.id)}
+                          onCheckedChange={() => {
+                            const nextIds = form.wing_ids.includes(w.id)
+                              ? form.wing_ids.filter((x) => x !== w.id)
+                              : [...form.wing_ids, w.id];
+                            const primaryId = nextIds[0] || "";
+                            const primaryWing = wings.find((x) => x.id === primaryId);
+                            setForm((f) => ({
+                              ...f,
+                              wing_ids: nextIds,
+                              wing_id: primaryId,
+                              company_wing: primaryWing && LEGACY_WINGS.includes(primaryWing.name) ? primaryWing.name : f.company_wing,
+                            }));
+                          }}
+                        />
+                        {w.name}
+                      </label>
+                    ))
+                  )}
+                </div>
               </div>
 
               <div className="col-span-2">
