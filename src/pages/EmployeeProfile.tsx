@@ -870,15 +870,9 @@ const EmployeeProfile = () => {
                     <Label className="text-xs">Wing &amp; Designation</Label>
                     <div className="grid gap-3 md:grid-cols-2 mt-1">
                       <div>
-                        <div className="flex items-center justify-between">
-                          <Label className="text-xs">Wing</Label>
-                          {isAdmin && (
-                            <Button type="button" variant="link" size="sm" className="h-auto p-0 text-xs" onClick={() => setManageWingsOpen(true)}>
-                              Manage
-                            </Button>
-                          )}
-                        </div>
-                        <div className="flex flex-wrap gap-3 rounded-md border p-2 mt-1">
+                        <Label className="text-xs">Wing</Label>
+                        <div className="relative">
+                        <div className={`flex flex-wrap gap-3 rounded-md border p-2 mt-1 ${isAdmin ? "pr-16" : ""}`}>
                           {activeWings.length === 0 ? (
                             <span className="text-xs text-muted-foreground">No wings yet — use Manage to add one.</span>
                           ) : (
@@ -911,6 +905,18 @@ const EmployeeProfile = () => {
                               </label>
                             ))
                           )}
+                        </div>
+                        {isAdmin && (
+                          <Button
+                            type="button"
+                            variant="link"
+                            size="sm"
+                            className="absolute right-2 top-2 h-auto p-0 text-xs"
+                            onClick={() => setManageWingsOpen(true)}
+                          >
+                            Manage
+                          </Button>
+                        )}
                         </div>
                         {!isAdmin && <p className="text-xs text-muted-foreground mt-1">Only an admin can change wing membership.</p>}
                       </div>
