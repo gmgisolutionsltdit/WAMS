@@ -27,7 +27,7 @@ import {
 import {
   ArrowLeft, Mail, Phone, Calendar, IdCard, Briefcase, UserCheck,
   Users, MapPin, Building2, TrendingUp, DollarSign, FolderKanban, UserCog,
-  ClipboardList, Pencil, KeyRound, Trash2, Camera, Clock3, ShieldAlert, Loader2,
+  ClipboardList, Pencil, KeyRound, Trash2, Camera, Clock3, ShieldAlert, Loader2, Plus,
 } from "lucide-react";
 import { format } from "date-fns";
 import { toast } from "sonner";
@@ -253,6 +253,10 @@ const EmployeeProfile = () => {
     overtime_scaling: "1", due_time_scaling: "1",
     working_days: [...DEFAULT_WORKING_DAYS] as number[],
   });
+  // Additional Joining/Promotion dates beyond the primary one above — an
+  // employee can rejoin or be promoted more than once over their career.
+  const [extraJoiningDates, setExtraJoiningDates] = useState<string[]>([]);
+  const [extraPromotionDates, setExtraPromotionDates] = useState<string[]>([]);
 
   // ---- Editable "Projects & Tasks" assignment — admin only ----
   const [projects, setProjects] = useState<{ id: string; name: string; key: string }[]>([]);
@@ -342,7 +346,7 @@ const EmployeeProfile = () => {
       late_grace_minutes: String(p.late_grace_minutes ?? DEFAULT_GRACE_MINUTES),
       working_days: p.working_days?.length ? p.working_days.map(Number) : [...DEFAULT_WORKING_DAYS],
     });
-    const [mgrRes, incRes, repRes, taskRes] = await Promise.all([
+    const [mgrRes, incRes, repRes, taskRes, dateHistRes] = await Promise.all([
       p.reporting_manager_id
         ? supabase.from("profiles").select("id, full_name, email").eq("id", p.reporting_manager_id).maybeSingle()
         : Promise.resolve({ data: null }),
@@ -354,12 +358,16 @@ const EmployeeProfile = () => {
         .eq("archived", false)
         .order("updated_at", { ascending: false })
         .limit(50),
+      supabase.from("employee_date_history").select("date_type, date").eq("user_id", id).order("date", { ascending: true }),
     ]);
     const m: any = mgrRes.data;
     setManager(m ? { id: m.id, name: m.full_name || m.email || "—" } : null);
     setIncrements((incRes.data as Increment[]) || []);
     setReports((repRes.data as DirectReport[]) || []);
     setTasks((taskRes.data as any[]) || []);
+    const dateHist = (dateHistRes.data as { date_type: string; date: string }[]) || [];
+    setExtraJoiningDates(dateHist.filter((d) => d.date_type === "joining").map((d) => d.date));
+    setExtraPromotionDates(dateHist.filter((d) => d.date_type === "promotion").map((d) => d.date));
     setLoading(false);
   }, [id]);
 
@@ -515,6 +523,14 @@ const EmployeeProfile = () => {
         if (existing) await supabase.from("user_roles").update({ role: overviewForm.role as any }).eq("user_id", id);
         else await supabase.from("user_roles").insert({ user_id: id, role: overviewForm.role as any });
       }
+      // Re-sync the extra Joining/Promotion dates: simplest consistent
+      // approach is replace-all rather than diffing adds/removes.
+      await supabase.from("employee_date_history").delete().eq("user_id", id).in("date_type", ["joining", "promotion"]);
+      const extraRows = [
+        ...extraJoiningDates.filter(Boolean).map((date) => ({ user_id: id, date_type: "joining", date, created_by: user?.id })),
+        ...extraPromotionDates.filter(Boolean).map((date) => ({ user_id: id, date_type: "promotion", date, created_by: user?.id })),
+      ];
+      if (extraRows.length) await supabase.from("employee_date_history").insert(extraRows);
       toast.success("Profile updated");
       setReloadKey((k) => k + 1);
       return true;
@@ -977,12 +993,46 @@ const EmployeeProfile = () => {
                     </Select>
                   </div>
                   <div>
-                    <Label className="text-xs">Joining Date</Label>
+                    <div className="flex items-center justify-between">
+                      <Label className="text-xs">Joining Date</Label>
+                      <Button type="button" variant="ghost" size="icon" className="h-5 w-5" title="Add another joining date" onClick={() => setExtraJoiningDates((d) => [...d, ""])}>
+                        <Plus className="h-3.5 w-3.5" />
+                      </Button>
+                    </div>
                     <Input type="date" value={overviewForm.joining_date} onChange={(e) => setOverviewForm((f) => ({ ...f, joining_date: e.target.value }))} />
+                    {extraJoiningDates.map((d, idx) => (
+                      <div key={idx} className="flex items-center gap-1 mt-1">
+                        <Input
+                          type="date"
+                          value={d}
+                          onChange={(e) => setExtraJoiningDates((arr) => arr.map((v, i) => (i === idx ? e.target.value : v)))}
+                        />
+                        <Button type="button" variant="ghost" size="icon" className="h-8 w-8 shrink-0" onClick={() => setExtraJoiningDates((arr) => arr.filter((_, i) => i !== idx))}>
+                          <Trash2 className="h-3.5 w-3.5 text-destructive" />
+                        </Button>
+                      </div>
+                    ))}
                   </div>
                   <div>
-                    <Label className="text-xs">Promotion Date</Label>
+                    <div className="flex items-center justify-between">
+                      <Label className="text-xs">Promotion Date</Label>
+                      <Button type="button" variant="ghost" size="icon" className="h-5 w-5" title="Add another promotion date" onClick={() => setExtraPromotionDates((d) => [...d, ""])}>
+                        <Plus className="h-3.5 w-3.5" />
+                      </Button>
+                    </div>
                     <Input type="date" value={overviewForm.promotion_date} onChange={(e) => setOverviewForm((f) => ({ ...f, promotion_date: e.target.value }))} />
+                    {extraPromotionDates.map((d, idx) => (
+                      <div key={idx} className="flex items-center gap-1 mt-1">
+                        <Input
+                          type="date"
+                          value={d}
+                          onChange={(e) => setExtraPromotionDates((arr) => arr.map((v, i) => (i === idx ? e.target.value : v)))}
+                        />
+                        <Button type="button" variant="ghost" size="icon" className="h-8 w-8 shrink-0" onClick={() => setExtraPromotionDates((arr) => arr.filter((_, i) => i !== idx))}>
+                          <Trash2 className="h-3.5 w-3.5 text-destructive" />
+                        </Button>
+                      </div>
+                    ))}
                   </div>
                   <div>
                     <Label className="text-xs">Resign Date</Label>
@@ -1015,8 +1065,16 @@ const EmployeeProfile = () => {
               <CardContent className="space-y-4">
                 <Row icon={IdCard} label="Employee ID" value={<span className="font-mono text-xs">{profile.id}</span>} />
                 <Row icon={Briefcase} label="Designation" value={fmt(profile.designation)} />
-                <Row icon={Calendar} label="Joining Date" value={fmtDate(profile.joining_date)} />
-                <Row icon={UserCheck} label="Date of Permanency" value={fmtDate(profile.promotion_date)} />
+                <Row icon={Calendar} label="Joining Date" value={
+                  extraJoiningDates.length
+                    ? [profile.joining_date, ...extraJoiningDates].filter(Boolean).map((d) => fmtDate(d)).join(", ")
+                    : fmtDate(profile.joining_date)
+                } />
+                <Row icon={UserCheck} label="Date of Permanency" value={
+                  extraPromotionDates.length
+                    ? [profile.promotion_date, ...extraPromotionDates].filter(Boolean).map((d) => fmtDate(d)).join(", ")
+                    : fmtDate(profile.promotion_date)
+                } />
                 <Row icon={Briefcase} label="Employment Type" value={fmt(profile.service_status)} />
                 <Row icon={Users} label="Reporting To" value={
                   manager
