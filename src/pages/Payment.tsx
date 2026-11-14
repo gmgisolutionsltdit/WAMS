@@ -734,6 +734,8 @@ function MyPaymentsTab() {
   const [finalSalaryNoExpense, setFinalSalaryNoExpense] = useState(0);
   const [loan, setLoan] = useState<{ id: string; monthly_deduction: number; remaining_balance: number } | null>(null);
   const [otOutstanding, setOtOutstanding] = useState(0);
+  const [thisMonthOt, setThisMonthOt] = useState(0);
+  const [carryInOt, setCarryInOt] = useState(0);
   const [expenseOutstanding, setExpenseOutstanding] = useState(0);
   const [existingSettlement, setExistingSettlement] = useState<any>(null);
 
@@ -822,6 +824,14 @@ function MyPaymentsTab() {
       const totalOtHours = Array.from(otHoursByUserMonth.values()).reduce((s, h) => s + h, 0);
       const totalOtEarned = hourlyRate(row ? row.gross : 0) * totalOtHours;
       const priorOtPaid = (priorOtPaidRows || []).reduce((s, r) => s + Number(r.ot_amount_paid || 0), 0);
+      // Split the outstanding figure so the card can say specifically how
+      // much is this month's own OT vs. an unpaid balance carried in from
+      // earlier months, instead of one blended number — this month's own
+      // OT (row.otPayment) is already computed exactly the same way as the
+      // all-time total above, so subtracting it out gives the carry-in.
+      const thisMonth = row ? row.otPayment : 0;
+      setThisMonthOt(thisMonth);
+      setCarryInOt(totalOtEarned - priorOtPaid - thisMonth);
       setOtOutstanding(totalOtEarned - priorOtPaid);
       setOtAmount("0");
       setOtAmountTouched(false);
@@ -1136,7 +1146,22 @@ function MyPaymentsTab() {
               </div>
               <div className="rounded-md border p-3 space-y-2">
                 <div className="text-sm font-medium">Overtime</div>
-                <div className="text-lg font-semibold">{fmtBDT(otOutstanding)}</div>
+                <div className="space-y-1">
+                  <div className="flex items-center justify-between text-sm">
+                    <span className="text-muted-foreground">This Month's OT</span>
+                    <span className="font-semibold">{fmtBDT(thisMonthOt)}</span>
+                  </div>
+                  {carryInOt !== 0 && (
+                    <div className="flex items-center justify-between text-sm">
+                      <span className="text-muted-foreground">Carried from Before</span>
+                      <span className="font-semibold">{fmtBDT(carryInOt)}</span>
+                    </div>
+                  )}
+                  <div className="flex items-center justify-between text-sm pt-1">
+                    <span className="text-muted-foreground">Total Due</span>
+                    <span className="text-lg font-semibold">{fmtBDT(otOutstanding)}</span>
+                  </div>
+                </div>
                 <label className="flex items-center gap-2 text-xs">
                   <Checkbox checked={otPaidNow} onCheckedChange={(v) => setOtPaidNow(!!v)} />
                   Adjust Now (unchecked = carry to next month)
@@ -1217,6 +1242,8 @@ function MyPaymentsSummary() {
   const [finalSalaryNoExpense, setFinalSalaryNoExpense] = useState(0);
   const [loan, setLoan] = useState<{ monthly_deduction: number; remaining_balance: number } | null>(null);
   const [otOutstanding, setOtOutstanding] = useState(0);
+  const [thisMonthOt, setThisMonthOt] = useState(0);
+  const [carryInOt, setCarryInOt] = useState(0);
   const [otTotalPaid, setOtTotalPaid] = useState(0);
   const [expenseOutstanding, setExpenseOutstanding] = useState(0);
   const [expenseTotalPaid, setExpenseTotalPaid] = useState(0);
@@ -1271,9 +1298,12 @@ function MyPaymentsSummary() {
     const totalOtHours = Array.from(otHoursByUserMonth.values()).reduce((s, h) => s + h, 0);
     const totalOtEarned = hourlyRate(row ? row.gross : 0) * totalOtHours;
     const priorOtPaid = (priorOtPaidRows || []).reduce((s, r) => s + Number(r.ot_amount_paid || 0), 0);
-    const thisMonthOt = settlementRow?.ot_paid ? Number(settlementRow.ot_amount_paid) || 0 : 0;
-    setOtOutstanding(totalOtEarned - priorOtPaid - thisMonthOt);
-    setOtTotalPaid(priorOtPaid + thisMonthOt);
+    const thisMonthOtPaid = settlementRow?.ot_paid ? Number(settlementRow.ot_amount_paid) || 0 : 0;
+    const thisMonth = row ? row.otPayment : 0;
+    setThisMonthOt(thisMonth);
+    setCarryInOt(totalOtEarned - priorOtPaid - thisMonth);
+    setOtOutstanding(totalOtEarned - priorOtPaid - thisMonthOtPaid);
+    setOtTotalPaid(priorOtPaid + thisMonthOtPaid);
 
     // Mirrors the admin's My Payments tab: all claims to date minus all
     // open advance claims to date, minus whatever reimbursement was
@@ -1443,7 +1473,22 @@ function MyPaymentsSummary() {
               </div>
               <div className="rounded-md border p-3 space-y-2">
                 <div className="text-sm font-medium">Overtime</div>
-                <div className="text-lg font-semibold">{fmtBDT(otOutstanding)}</div>
+                <div className="space-y-1">
+                  <div className="flex items-center justify-between text-sm">
+                    <span className="text-muted-foreground">This Month's OT</span>
+                    <span className="font-semibold">{fmtBDT(thisMonthOt)}</span>
+                  </div>
+                  {carryInOt !== 0 && (
+                    <div className="flex items-center justify-between text-sm">
+                      <span className="text-muted-foreground">Carried from Before</span>
+                      <span className="font-semibold">{fmtBDT(carryInOt)}</span>
+                    </div>
+                  )}
+                  <div className="flex items-center justify-between text-sm pt-1">
+                    <span className="text-muted-foreground">Total Due</span>
+                    <span className="text-lg font-semibold">{fmtBDT(otOutstanding)}</span>
+                  </div>
+                </div>
                 <Badge variant="outline">Paid {fmtBDT(otTotalPaid)}</Badge>
               </div>
               <div className="rounded-md border p-3 space-y-2">
