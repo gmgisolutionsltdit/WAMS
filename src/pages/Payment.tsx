@@ -29,6 +29,7 @@ import { humanMinutes } from "@/lib/officeTime";
 import { uploadAttachments } from "@/lib/attachments";
 import AttachmentsInput from "@/components/AttachmentsInput";
 import AttachmentThumbnails from "@/components/AttachmentThumbnails";
+import { DeleteReasonDialog } from "@/components/DeleteReasonDialog";
 
 type PayrollSettlementRow = {
   id: string;
@@ -193,14 +194,20 @@ const Payment = () => {
 
   const isResigned = (loan: any) => loan.profiles?.employee_status === "Resigned";
 
-  const deleteLoan = async (loanId: string) => {
-    if (!window.confirm("Delete this loan request? This cannot be undone.")) return;
+  const deleteLoan = async (loan: { id: string; user_id: string; amount: number }, reason: string) => {
     // RLS blocking this doesn't error — it just matches 0 rows, which would
     // otherwise look like silent success while the row stays put.
-    const { data, error } = await supabase.from("personal_advances").delete().eq("id", loanId).select("id");
+    const { data, error } = await supabase.from("personal_advances").delete().eq("id", loan.id).select("id");
     if (error) { toast.error(error.message); return; }
     if (!data?.length) { toast.error("Delete didn't go through — you may not have permission to delete this."); return; }
     toast.success("Loan deleted");
+    await notifyEmployee(
+      loan.user_id,
+      "Loan Request Deleted",
+      `Your loan request of ${loan.amount} was deleted by an admin. Reason: ${reason}`,
+      undefined,
+      { route: "/payment", type: "personal_advance_update" },
+    );
     fetchAll();
   };
 
@@ -241,9 +248,16 @@ const Payment = () => {
             <Button size="sm" variant="outline" onClick={() => setDeductDialogId(loan.id)}>Record This Month's Deduction</Button>
           )}
           {isAdmin && (
-            <Button size="icon" variant="ghost" className="text-destructive hover:text-destructive" onClick={() => deleteLoan(loan.id)}>
-              <Trash2 className="h-4 w-4" />
-            </Button>
+            <DeleteReasonDialog
+              title="Delete this loan request?"
+              description="This cannot be undone."
+              onConfirm={(reason) => deleteLoan(loan, reason)}
+              trigger={
+                <Button size="icon" variant="ghost" className="text-destructive hover:text-destructive">
+                  <Trash2 className="h-4 w-4" />
+                </Button>
+              }
+            />
           )}
         </div>
       </TableCell>
@@ -2023,7 +2037,7 @@ function ExpenseClaimsTab() {
     fetchClaims();
   };
 
-  const deleteClaim = async (id: string) => {
+  const deleteClaim = async (id: string, reason: string) => {
     // An advance already (partially) recovered via My Payments has
     // expense_recovery_actions rows tied to it by ON DELETE CASCADE —
     // deleting the claim would silently wipe that ledger history, and the
@@ -2034,13 +2048,21 @@ function ExpenseClaimsTab() {
       toast.error("This claim has already been partially or fully recovered via My Payments and can't be deleted.");
       return;
     }
-    if (!window.confirm("Delete this claim? This cannot be undone.")) return;
     // RLS blocking this doesn't error — it just matches 0 rows, which would
     // otherwise look like silent success while the row stays put.
     const { data, error } = await supabase.from("expense_claims").delete().eq("id", id).select("id");
     if (error) { toast.error(error.message); return; }
     if (!data?.length) { toast.error("Delete didn't go through — you may not have permission to delete this."); return; }
     toast.success("Claim deleted");
+    if (claim) {
+      await notifyEmployee(
+        claim.user_id,
+        "Expense Claim Deleted",
+        `Your ${claim.category} claim for ${claim.amount} was deleted by an admin. Reason: ${reason}`,
+        undefined,
+        { route: "/expenses", type: "expense_claim_update" },
+      );
+    }
     fetchClaims();
   };
 
@@ -2281,7 +2303,14 @@ const ClaimTable = ({ claims, showEmployee, onApprove, onReject, onTogglePaid, o
                       </>
                     )}
                     {isAdmin && (
-                      <Button size="icon" variant="ghost" className="text-destructive hover:text-destructive" onClick={()=>onDelete?.(c.id)}><Trash2 className="h-4 w-4" /></Button>
+                      <DeleteReasonDialog
+                        title="Delete this claim?"
+                        description="This cannot be undone."
+                        onConfirm={(reason) => onDelete?.(c.id, reason)}
+                        trigger={
+                          <Button size="icon" variant="ghost" className="text-destructive hover:text-destructive"><Trash2 className="h-4 w-4" /></Button>
+                        }
+                      />
                     )}
                   </div>
                 </TableCell>
