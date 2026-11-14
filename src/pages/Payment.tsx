@@ -23,8 +23,9 @@ import { format } from "date-fns";
 import { notifyManagersAndAdmins, notifyEmployee } from "@/lib/notifications";
 import { applyDuePersonalAdvanceDeduction, downloadPaymentReceiptPDF, type PayrollProfile } from "@/lib/payroll";
 import { PayrollAdjustments } from "@/components/PayrollAdjustments";
-import { monthsInRange, fmtBDT } from "@/lib/payrollAdjustments";
+import { monthsInRange, fmtBDT, hourlyRate } from "@/lib/payrollAdjustments";
 import { computeMonthlySalaryRows, type SalaryMonthRow } from "@/lib/salaryMonthly";
+import { fetchApprovedOTHoursByUserMonth } from "@/lib/approvedOvertime";
 import { uploadAttachments } from "@/lib/attachments";
 import AttachmentsInput from "@/components/AttachmentsInput";
 import AttachmentThumbnails from "@/components/AttachmentThumbnails";
@@ -35,6 +36,8 @@ type PayrollSettlementRow = {
   month: string;
   net_hours_amount: number;
   net_hours_paid: boolean;
+  ot_amount_paid: number;
+  ot_paid: boolean;
   expense_amount_paid: number;
   expense_paid: boolean;
   loan_amount_paid: number;
@@ -628,10 +631,11 @@ function PaymentHistoryTable({
   // same gating the live Net Payment card uses.
   const netFor = (r: PayrollSettlementRow) =>
     (r.net_hours_paid ? Number(r.net_hours_amount) : 0)
+    + (r.ot_paid ? Number(r.ot_amount_paid) : 0)
     + (r.expense_paid ? Number(r.expense_amount_paid) : 0)
     - (r.loan_paid ? Number(r.loan_amount_paid) : 0);
 
-  const colCount = canDelete ? 7 : 6;
+  const colCount = canDelete ? 8 : 7;
 
   return (
     <div className="space-y-2">
@@ -642,6 +646,7 @@ function PaymentHistoryTable({
             <TableRow>
               <TableHead>Month</TableHead>
               <TableHead className="text-right">Net Salary</TableHead>
+              <TableHead className="text-right">Overtime Paid</TableHead>
               <TableHead className="text-right">Expense Paid</TableHead>
               <TableHead className="text-right">Loan Paid</TableHead>
               <TableHead className="text-right">Net Payment</TableHead>
@@ -659,6 +664,9 @@ function PaymentHistoryTable({
                 <TableCell className="whitespace-nowrap">{format(new Date(r.month), "MMMM yyyy")}</TableCell>
                 <TableCell className="text-right">
                   {r.net_hours_paid ? fmtBDT(r.net_hours_amount) : <span className="text-muted-foreground text-xs">Carried</span>}
+                </TableCell>
+                <TableCell className="text-right">
+                  {r.ot_paid ? fmtBDT(r.ot_amount_paid) : <span className="text-muted-foreground text-xs">Carried</span>}
                 </TableCell>
                 <TableCell className="text-right">
                   {r.expense_paid ? fmtBDT(r.expense_amount_paid) : <span className="text-muted-foreground text-xs">Carried</span>}
@@ -722,20 +730,24 @@ function MyPaymentsTab() {
 
   const [grossSalary, setGrossSalary] = useState(0);
   const [netAdjustment, setNetAdjustment] = useState(0);
+  const [dueDeduction, setDueDeduction] = useState(0);
   const [finalSalaryNoExpense, setFinalSalaryNoExpense] = useState(0);
   const [loan, setLoan] = useState<{ id: string; monthly_deduction: number; remaining_balance: number } | null>(null);
+  const [otOutstanding, setOtOutstanding] = useState(0);
   const [expenseOutstanding, setExpenseOutstanding] = useState(0);
   const [existingSettlement, setExistingSettlement] = useState<any>(null);
 
-  const [netHoursPaidNow, setNetHoursPaidNow] = useState(true);
+  const [otPaidNow, setOtPaidNow] = useState(true);
   const [expensePaidNow, setExpensePaidNow] = useState(true);
   const [loanPaidNow, setLoanPaidNow] = useState(true);
+  const [otAmount, setOtAmount] = useState("0");
   const [expenseAmount, setExpenseAmount] = useState("0");
   const [loanAmount, setLoanAmount] = useState("0");
   // Whether the admin has actually typed into each box this time the form
   // was loaded — the box itself always starts at 0, but saving without
   // touching it must not overwrite (and reverse the ledger effect of) a
   // previously recorded amount just because a note or attachment changed.
+  const [otAmountTouched, setOtAmountTouched] = useState(false);
   const [expenseAmountTouched, setExpenseAmountTouched] = useState(false);
   const [loanAmountTouched, setLoanAmountTouched] = useState(false);
   const [note, setNote] = useState("");
@@ -761,7 +773,7 @@ function MyPaymentsTab() {
       // (paid or not) carries into every later month the same as before.
       const monthStartISO = `${month}-01`;
       const monthEndISO = format(new Date(Number(month.slice(0, 4)), Number(month.slice(5, 7)), 0), "yyyy-MM-dd");
-      const [rows, { data: loanRow }, { data: settlement }, { data: claims }, { data: priorPaidRows }] = await Promise.all([
+      const [rows, { data: loanRow }, { data: settlement }, { data: claims }, { data: priorPaidRows }, otHoursByUserMonth, { data: priorOtPaidRows }] = await Promise.all([
         computeMonthlySalaryRows([selectedUserId], [month]),
         supabase.from("personal_advances").select("id, monthly_deduction, remaining_balance, created_at")
           .eq("user_id", selectedUserId).eq("status", "approved").gt("remaining_balance", 0)
@@ -776,15 +788,23 @@ function MyPaymentsTab() {
         // What's already been paid out in prior months (expense_paid =
         // true settlements), so it isn't counted as still outstanding here.
         supabase.from("payroll_settlements").select("expense_amount_paid").eq("user_id", selectedUserId).eq("expense_paid", true).lt("month", monthStartISO),
+        // Every approved OT hour ever logged for this employee, up to this
+        // month's end (no lower bound, same reasoning as the expense claims
+        // above) — this is the OT card's own running total, separate from
+        // the bundled Net Adjustment figure.
+        fetchApprovedOTHoursByUserMonth([selectedUserId], "2000-01-01", monthEndISO),
+        // What's already been paid out against OT in prior months.
+        supabase.from("payroll_settlements").select("ot_amount_paid").eq("user_id", selectedUserId).eq("ot_paid", true).lt("month", monthStartISO),
       ]);
 
       const row = rows[0];
       setGrossSalary(row ? row.gross : 0);
       setNetAdjustment(row ? row.netAdjustment : 0);
-      setFinalSalaryNoExpense(row ? row.final + row.recoveryTotal : 0);
+      setDueDeduction(row ? row.dueDeduction : 0);
+      setFinalSalaryNoExpense(row ? row.final + row.recoveryTotal - row.otPayment : 0);
       setLoan(loanRow || null);
       setExistingSettlement(settlement || null);
-      setNetHoursPaidNow(settlement ? settlement.net_hours_paid : true);
+      setOtPaidNow(settlement ? settlement.ot_paid : true);
       setExpensePaidNow(settlement ? settlement.expense_paid : true);
       setLoanPaidNow(settlement ? settlement.loan_paid : true);
       const loanDue = Math.min(Number(loanRow?.monthly_deduction || 0), Number(loanRow?.remaining_balance || 0));
@@ -794,6 +814,17 @@ function MyPaymentsTab() {
       // re-submitting a stale or mismatched number.
       setLoanAmount("0");
       setLoanAmountTouched(false);
+
+      // Total OT ever earned (hours × this employee's current hourly rate)
+      // minus whatever's already been paid out against OT in a prior month
+      // — an unadjusted balance (Adjust Now unchecked) keeps carrying
+      // forward until it's actually paid, same pattern as Expense Balance.
+      const totalOtHours = Array.from(otHoursByUserMonth.values()).reduce((s, h) => s + h, 0);
+      const totalOtEarned = hourlyRate(row ? row.gross : 0) * totalOtHours;
+      const priorOtPaid = (priorOtPaidRows || []).reduce((s, r) => s + Number(r.ot_amount_paid || 0), 0);
+      setOtOutstanding(totalOtEarned - priorOtPaid);
+      setOtAmount("0");
+      setOtAmountTouched(false);
 
       // All reimbursement claims to date minus all open advance claims to
       // date (net of whatever's already been recovered), minus whatever
@@ -823,15 +854,14 @@ function MyPaymentsTab() {
   }, [selectedUserId, month]);
 
   const loanDue = loan ? Math.min(Number(loan.monthly_deduction), Number(loan.remaining_balance)) : 0;
-  // Each card's own full-balance figure counts only while its own Adjust Now
-  // is checked; unchecked (carried to next month) drops out of Net Payment
-  // entirely — Net Salary falls back to Gross Salary (Net Adjustment not
-  // counted) rather than to 0, since the gross is being paid regardless.
-  // Expense/Loan use the editable amount boxes (default to the full
-  // outstanding balance) so a partial entry there is reflected here too.
-  // Both are added directly — Loan's box is negative by convention (a
-  // deduction), same as Expense's box can be.
-  const netPayment = (netHoursPaidNow ? finalSalaryNoExpense : grossSalary)
+  // Due Deduction is a penalty, not an optional adjustment — it's always
+  // folded into the base (finalSalaryNoExpense already has it subtracted
+  // out, same as before). Overtime, Expense and Loan are each independently
+  // partial-payable/carry-forward via their own editable amount box — each
+  // counts here only while its own Adjust Now is checked. Loan's box is
+  // negative by convention (a deduction), same as Expense's box can be.
+  const netPayment = finalSalaryNoExpense
+    + (otPaidNow ? (Number(otAmount) || 0) : 0)
     + (expensePaidNow ? (Number(expenseAmount) || 0) : 0)
     + (loanPaidNow ? (Number(loanAmount) || 0) : 0);
 
@@ -855,6 +885,9 @@ function MyPaymentsTab() {
       // reverse the loan/advance ledger effect it already applied.
       const loanPaid = loanPaidNow
         ? (loanAmountTouched ? Math.abs(Number(loanAmount) || 0) : Math.abs(Number(existingSettlement?.loan_amount_paid) || 0))
+        : 0;
+      const otPaid = otPaidNow
+        ? (otAmountTouched ? (Number(otAmount) || 0) : (Number(existingSettlement?.ot_amount_paid) || 0))
         : 0;
       // Expense can be negative (an outstanding advance recovery) — not
       // clamped to 0 like Loan, since that would silently drop it.
@@ -913,7 +946,9 @@ function MyPaymentsTab() {
         user_id: selectedUserId,
         month: `${month}-01`,
         net_hours_amount: finalSalaryNoExpense,
-        net_hours_paid: netHoursPaidNow,
+        net_hours_paid: true,
+        ot_amount_paid: otPaid,
+        ot_paid: otPaidNow,
         expense_amount_paid: expensePaid,
         expense_paid: expensePaidNow,
         loan_amount_paid: loanPaid,
@@ -997,7 +1032,7 @@ function MyPaymentsTab() {
       const monthLabel = format(new Date(`${month}-01`), "MMMM yyyy");
       const recordedEmployeeName = employees.find((e) => e.id === selectedUserId)?.full_name
         || employees.find((e) => e.id === selectedUserId)?.email || "An employee";
-      const summary = `Net Salary ${netHoursPaidNow ? "paid" : "carried to next month"}, Expense ${fmtBDT(expensePaid)}, Loan ${fmtBDT(loanPaid)}.`;
+      const summary = `Base Salary settled, Overtime ${otPaidNow ? fmtBDT(otPaid) : "carried to next month"}, Expense ${fmtBDT(expensePaid)}, Loan ${fmtBDT(loanPaid)}.`;
       // Employee and their manager can both approve/reject it (whoever acts
       // first settles it) — admins are only informed, not asked to act.
       await notifyEmployee(
@@ -1040,6 +1075,7 @@ function MyPaymentsTab() {
       finalSalary: grossSalary,
       netAdjustment,
       finalSalaryNoExpense,
+      otPaid: otPaidNow ? (Number(otAmount) || 0) : 0,
       expensePaid: Number(expenseAmount) || 0,
       loanPaid: Math.abs(Number(loanAmount) || 0),
       netPayment,
@@ -1052,7 +1088,7 @@ function MyPaymentsTab() {
     <Card>
       <CardHeader>
         <CardTitle>My Payments</CardTitle>
-        <CardDescription>Decide how much of this month's Net Salary, Expense balance and Loan due to pay now.</CardDescription>
+        <CardDescription>Decide how much of this month's Overtime, Expense balance and Loan due to pay now. Due Deduction is always applied to the base salary.</CardDescription>
         <div className="flex flex-wrap items-end gap-3 pt-2">
           <div className="space-y-1">
             <Label className="text-xs">Employee</Label>
@@ -1079,7 +1115,7 @@ function MyPaymentsTab() {
                 A payment for {format(new Date(`${month}-01`), "MMMM yyyy")} was already recorded — saving again updates it.
               </p>
             )}
-            <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
+            <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-5">
               <div className="rounded-md border p-3 space-y-2">
                 <div className="text-sm font-medium">Net Salary</div>
                 <div className="space-y-1">
@@ -1088,18 +1124,24 @@ function MyPaymentsTab() {
                     <span className="font-semibold">{fmtBDT(grossSalary)}</span>
                   </div>
                   <div className="flex items-center justify-between text-sm pt-1">
-                    <span className="text-muted-foreground">Net Adjustment</span>
-                    <span className="font-semibold">{fmtBDT(netAdjustment)}</span>
+                    <span className="text-muted-foreground">Due Deduction</span>
+                    <span className="font-semibold">{fmtBDT(-dueDeduction)}</span>
                   </div>
                   <div className="flex items-center justify-between text-sm pt-1">
-                    <span className="text-muted-foreground">Final Salary (no Expense)</span>
+                    <span className="text-muted-foreground">Final Salary (no OT/Expense)</span>
                     <span className="font-semibold">{fmtBDT(finalSalaryNoExpense)}</span>
                   </div>
-                  <label className="flex items-center gap-2 text-xs">
-                    <Checkbox checked={netHoursPaidNow} onCheckedChange={(v) => setNetHoursPaidNow(!!v)} />
-                    Adjust Now (unchecked = carry to next month)
-                  </label>
+                  <p className="text-xs text-muted-foreground">Always applied — not a carry-forward item.</p>
                 </div>
+              </div>
+              <div className="rounded-md border p-3 space-y-2">
+                <div className="text-sm font-medium">Overtime</div>
+                <div className="text-lg font-semibold">{fmtBDT(otOutstanding)}</div>
+                <label className="flex items-center gap-2 text-xs">
+                  <Checkbox checked={otPaidNow} onCheckedChange={(v) => setOtPaidNow(!!v)} />
+                  Adjust Now (unchecked = carry to next month)
+                </label>
+                <Input type="number" value={otAmount} onChange={(e) => { setOtAmount(e.target.value); setOtAmountTouched(true); }} disabled={!otPaidNow} />
               </div>
               <div className="rounded-md border p-3 space-y-2">
                 <div className="text-sm font-medium">Expense Balance</div>
@@ -1126,7 +1168,7 @@ function MyPaymentsTab() {
                 <div className="text-sm font-medium">Net Payment</div>
                 <div className="text-lg font-semibold">{fmtBDT(netPayment)}</div>
                 <p className="text-xs text-muted-foreground">
-                  Only counts each card while its own Adjust Now is checked — unchecked Net Salary falls back to Gross Salary, unchecked Expense/Loan drop out entirely.
+                  Net Salary is always included — Overtime, Expense and Loan each count only while their own Adjust Now is checked.
                 </p>
               </div>
             </div>
@@ -1171,8 +1213,11 @@ function MyPaymentsSummary() {
   const [loading, setLoading] = useState(false);
   const [grossSalary, setGrossSalary] = useState(0);
   const [netAdjustment, setNetAdjustment] = useState(0);
+  const [dueDeduction, setDueDeduction] = useState(0);
   const [finalSalaryNoExpense, setFinalSalaryNoExpense] = useState(0);
   const [loan, setLoan] = useState<{ monthly_deduction: number; remaining_balance: number } | null>(null);
+  const [otOutstanding, setOtOutstanding] = useState(0);
+  const [otTotalPaid, setOtTotalPaid] = useState(0);
   const [expenseOutstanding, setExpenseOutstanding] = useState(0);
   const [expenseTotalPaid, setExpenseTotalPaid] = useState(0);
   const [settlement, setSettlement] = useState<PayrollSettlementRow | null>(null);
@@ -1194,7 +1239,7 @@ function MyPaymentsSummary() {
     // after the viewed month hasn't happened yet as of that month.
     const monthStartISO = `${month}-01`;
     const monthEndISO = format(new Date(Number(month.slice(0, 4)), Number(month.slice(5, 7)), 0), "yyyy-MM-dd");
-    const [rows, { data: loanRow }, { data: settlementRow }, { data: claims }, { data: profile }, { data: priorPaidRows }] = await Promise.all([
+    const [rows, { data: loanRow }, { data: settlementRow }, { data: claims }, { data: profile }, { data: priorPaidRows }, otHoursByUserMonth, { data: priorOtPaidRows }] = await Promise.all([
       computeMonthlySalaryRows([user.id], [month]),
       supabase.from("personal_advances").select("monthly_deduction, remaining_balance")
         .eq("user_id", user.id).eq("status", "approved").gt("remaining_balance", 0)
@@ -1207,15 +1252,28 @@ function MyPaymentsSummary() {
       supabase.from("expense_claims").select("amount, entry_type, recovered_amount").eq("user_id", user.id).eq("status", "approved").lte("claim_date", monthEndISO),
       supabase.from("profiles").select("full_name, email").eq("id", user.id).maybeSingle(),
       supabase.from("payroll_settlements").select("expense_amount_paid").eq("user_id", user.id).eq("expense_paid", true).lt("month", monthStartISO),
+      fetchApprovedOTHoursByUserMonth([user.id], "2000-01-01", monthEndISO),
+      supabase.from("payroll_settlements").select("ot_amount_paid").eq("user_id", user.id).eq("ot_paid", true).lt("month", monthStartISO),
     ]);
 
     const row = rows[0];
     setGrossSalary(row ? row.gross : 0);
     setNetAdjustment(row ? row.netAdjustment : 0);
-    setFinalSalaryNoExpense(row ? row.final + row.recoveryTotal : 0);
+    setDueDeduction(row ? row.dueDeduction : 0);
+    setFinalSalaryNoExpense(row ? row.final + row.recoveryTotal - row.otPayment : 0);
     setLoan(loanRow || null);
     setSettlement(settlementRow || null);
     setEmployeeName(profile?.full_name || profile?.email || "");
+
+    // Mirrors the admin's My Payments tab's OT card: total OT ever earned
+    // minus whatever's already been paid out in a prior month, plus this
+    // month's own if it's been recorded.
+    const totalOtHours = Array.from(otHoursByUserMonth.values()).reduce((s, h) => s + h, 0);
+    const totalOtEarned = hourlyRate(row ? row.gross : 0) * totalOtHours;
+    const priorOtPaid = (priorOtPaidRows || []).reduce((s, r) => s + Number(r.ot_amount_paid || 0), 0);
+    const thisMonthOt = settlementRow?.ot_paid ? Number(settlementRow.ot_amount_paid) || 0 : 0;
+    setOtOutstanding(totalOtEarned - priorOtPaid - thisMonthOt);
+    setOtTotalPaid(priorOtPaid + thisMonthOt);
 
     // Mirrors the admin's My Payments tab: all claims to date minus all
     // open advance claims to date, minus whatever reimbursement was
@@ -1296,7 +1354,7 @@ function MyPaymentsSummary() {
     }
     const { data, error } = await supabase.from("payroll_settlements").update({
       approval_status: "rejected", approved_by: user.id, approved_at: new Date().toISOString(), rejection_reason: rejectReason.trim(),
-      expense_paid: false, loan_paid: false, expense_amount_paid: 0, loan_amount_paid: 0,
+      ot_paid: false, expense_paid: false, loan_paid: false, ot_amount_paid: 0, expense_amount_paid: 0, loan_amount_paid: 0,
     }).eq("id", row.id).select("id");
     setActing(false);
     if (error) return toast.error(error.message);
@@ -1318,14 +1376,17 @@ function MyPaymentsSummary() {
   };
 
   const loanDue = loan ? Math.min(Number(loan.monthly_deduction), Number(loan.remaining_balance)) : 0;
-  // Until the admin actually records this month (no settlement yet), Net
-  // Payment shows the base salary alone — no live Expense/Loan estimate
-  // folded in, matching the "Not recorded yet" badges shown for each card.
-  // Once recorded, it reflects exactly what was decided: each card's own
-  // Adjust Now flag and its recorded paid amount, same as MyPaymentsTab.
+  // Due Deduction is always folded into finalSalaryNoExpense (a penalty,
+  // not optional). Until the admin actually records this month (no
+  // settlement yet), Net Payment shows the base salary alone — no live
+  // Overtime/Expense/Loan estimate folded in, matching the "Not recorded
+  // yet" badges shown for each card. Once recorded, it reflects exactly
+  // what was decided: each card's own Adjust Now flag and its recorded
+  // paid amount, same as MyPaymentsTab.
   const netPayment = !settlement
     ? finalSalaryNoExpense
-    : (settlement.net_hours_paid ? finalSalaryNoExpense : grossSalary)
+    : finalSalaryNoExpense
+      + (settlement.ot_paid ? Number(settlement.ot_amount_paid) || 0 : 0)
       + (settlement.expense_paid ? Number(settlement.expense_amount_paid) || 0 : 0)
       - (settlement.loan_paid ? Number(settlement.loan_amount_paid) || 0 : 0);
 
@@ -1336,6 +1397,7 @@ function MyPaymentsSummary() {
       finalSalary: grossSalary,
       netAdjustment,
       finalSalaryNoExpense,
+      otPaid: settlement?.ot_paid ? Number(settlement.ot_amount_paid) || 0 : 0,
       expensePaid: Number(settlement?.expense_amount_paid) || 0,
       loanPaid: Number(settlement?.loan_amount_paid) || 0,
       netPayment,
@@ -1360,7 +1422,7 @@ function MyPaymentsSummary() {
           <p className="text-sm text-muted-foreground">Loading…</p>
         ) : (
           <>
-            <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
+            <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-5">
               <div className="rounded-md border p-3 space-y-2">
                 <div className="text-sm font-medium">Net Salary</div>
                 <div className="space-y-1">
@@ -1369,17 +1431,20 @@ function MyPaymentsSummary() {
                     <span className="font-semibold">{fmtBDT(grossSalary)}</span>
                   </div>
                   <div className="flex items-center justify-between text-sm">
-                    <span className="text-muted-foreground">Net Adjustment</span>
-                    <span className="font-semibold">{fmtBDT(netAdjustment)}</span>
+                    <span className="text-muted-foreground">Due Deduction</span>
+                    <span className="font-semibold">{fmtBDT(-dueDeduction)}</span>
                   </div>
                   <div className="flex items-center justify-between text-sm">
-                    <span className="text-muted-foreground">Final Salary (no Expense)</span>
+                    <span className="text-muted-foreground">Final Salary (no OT/Expense)</span>
                     <span className="font-semibold">{fmtBDT(finalSalaryNoExpense)}</span>
                   </div>
                 </div>
-                <Badge variant="outline">
-                  {!settlement ? "Not recorded yet" : settlement.net_hours_paid ? "Paid" : "Carried to next month"}
-                </Badge>
+                <Badge variant="outline">Always settled</Badge>
+              </div>
+              <div className="rounded-md border p-3 space-y-2">
+                <div className="text-sm font-medium">Overtime</div>
+                <div className="text-lg font-semibold">{fmtBDT(otOutstanding)}</div>
+                <Badge variant="outline">Paid {fmtBDT(otTotalPaid)}</Badge>
               </div>
               <div className="rounded-md border p-3 space-y-2">
                 <div className="text-sm font-medium">Expense Balance</div>
@@ -1398,7 +1463,7 @@ function MyPaymentsSummary() {
                 <div className="text-sm font-medium">Net Payment</div>
                 <div className="text-lg font-semibold">{fmtBDT(netPayment)}</div>
                 <p className="text-xs text-muted-foreground">
-                  Only counts each card while its own Adjust Now is checked — unchecked Net Salary falls back to Gross Salary, unchecked Expense/Loan drop out entirely.
+                  Net Salary is always included — Overtime, Expense and Loan each count only while their own Adjust Now was checked when recorded.
                 </p>
               </div>
             </div>
