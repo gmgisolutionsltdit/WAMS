@@ -18,6 +18,7 @@ import { applyOTFulfillment } from "@/lib/otFulfillment";
 import { humanMinutes } from "@/lib/officeTime";
 import { classifyDay, netRequiredHours, weekendDaysFor, type WorkSchedule } from "@/lib/workSchedule";
 import AttachmentThumbnails from "@/components/AttachmentThumbnails";
+import { DeleteReasonDialog } from "@/components/DeleteReasonDialog";
 
 /** RLS blocks a disallowed update/delete without an error — it just matches 0 rows,
  *  which would otherwise look like silent success. */
@@ -305,30 +306,48 @@ const Approvals = () => {
     }
   };
 
-  const deleteOT = async (req: any) => {
-    if (!window.confirm("Delete this OT request? This cannot be undone.")) return;
+  const deleteOT = async (req: any, reason: string) => {
     const { data, error } = await supabase.from("overtime_requests").delete().eq("id", req.id).select("id");
     if (error) { toast.error(error.message); return; }
     if (!data?.length) { toast.error(NOT_ALLOWED); return; }
     toast.success("OT request deleted");
+    await notifyEmployee(
+      req.user_id,
+      "OT Request Deleted",
+      `Your ${req.requested_hours}h OT request for ${format(new Date(req.date), "MMM d")} was deleted by an admin. Reason: ${reason}`,
+      undefined,
+      { route: "/ot-requests", type: "ot_update" },
+    );
     fetchData();
   };
 
-  const deleteLeave = async (req: any) => {
-    if (!window.confirm("Delete this leave request? This cannot be undone.")) return;
+  const deleteLeave = async (req: any, reason: string) => {
     const { data, error } = await supabase.from("leave_requests").delete().eq("id", req.id).select("id");
     if (error) { toast.error(error.message); return; }
     if (!data?.length) { toast.error(NOT_ALLOWED); return; }
     toast.success("Leave request deleted");
+    await notifyEmployee(
+      req.user_id,
+      "Leave Request Deleted",
+      `Your ${leaveTypeNames[req.leave_type_id] || "leave"} request (${req.start_date} → ${req.end_date}) was deleted by an admin. Reason: ${reason}`,
+      undefined,
+      { route: "/leave", type: "leave_update" },
+    );
     fetchData();
   };
 
-  const deleteLate = async (req: any) => {
-    if (!window.confirm("Delete this late time request? This cannot be undone.")) return;
+  const deleteLate = async (req: any, reason: string) => {
     const { data, error } = await supabase.from("late_time_requests").delete().eq("id", req.id).select("id");
     if (error) { toast.error(error.message); return; }
     if (!data?.length) { toast.error(NOT_ALLOWED); return; }
     toast.success("Late time request deleted");
+    await notifyEmployee(
+      req.user_id,
+      "Late Time Request Deleted",
+      `Your ${req.request_type === "office_time_change" ? "office time change" : "late adjustment"} request for ${format(new Date(req.effective_date), "MMM d")} was deleted by an admin. Reason: ${reason}`,
+      undefined,
+      { route: "/", type: "late_time_update" },
+    );
     fetchData();
   };
 
@@ -360,12 +379,18 @@ const Approvals = () => {
     fetchData();
   };
 
-  const deleteLoanHistory = async (loan: any) => {
-    if (!window.confirm("Delete this loan record? This cannot be undone.")) return;
+  const deleteLoanHistory = async (loan: any, reason: string) => {
     const { data, error } = await supabase.from("personal_advances").delete().eq("id", loan.id).select("id");
     if (error) { toast.error(error.message); return; }
     if (!data?.length) { toast.error(NOT_ALLOWED); return; }
     toast.success("Loan record deleted");
+    await notifyEmployee(
+      loan.user_id,
+      "Loan Record Deleted",
+      `Your loan record of ${loan.amount} was deleted by an admin. Reason: ${reason}`,
+      undefined,
+      { route: "/payment", type: "personal_advance_update" },
+    );
     fetchData();
   };
 
@@ -391,12 +416,25 @@ const Approvals = () => {
     fetchData();
   };
 
-  const deleteExpenseHistory = async (claim: any) => {
-    if (!window.confirm("Delete this expense claim? This cannot be undone.")) return;
+  const deleteExpenseHistory = async (claim: any, reason: string) => {
+    // Same guard Payment.tsx's own delete already applies — a recovered
+    // claim's expense_recovery_actions rows cascade-delete with it, which
+    // would silently wipe ledger history rather than just the claim.
+    if (Number(claim.recovered_amount) > 0) {
+      toast.error("This claim has already been partially or fully recovered via My Payments and can't be deleted.");
+      return;
+    }
     const { data, error } = await supabase.from("expense_claims").delete().eq("id", claim.id).select("id");
     if (error) { toast.error(error.message); return; }
     if (!data?.length) { toast.error(NOT_ALLOWED); return; }
     toast.success("Expense claim deleted");
+    await notifyEmployee(
+      claim.user_id,
+      "Expense Claim Deleted",
+      `Your ${claim.category} claim for ${claim.amount} was deleted by an admin. Reason: ${reason}`,
+      undefined,
+      { route: "/expenses", type: "expense_claim_update" },
+    );
     fetchData();
   };
 
@@ -522,9 +560,16 @@ const Approvals = () => {
                         <Button size="sm" variant="outline" onClick={() => openEdit(req)}>
                           <Pencil className="h-4 w-4 mr-1" /> Modify
                         </Button>
-                        <Button size="sm" variant="ghost" className="text-destructive hover:text-destructive" onClick={() => deleteOT(req)}>
-                          <Trash2 className="h-4 w-4 mr-1" /> Delete
-                        </Button>
+                        <DeleteReasonDialog
+                          title="Delete this OT request?"
+                          description="This cannot be undone."
+                          onConfirm={(reason) => deleteOT(req, reason)}
+                          trigger={
+                            <Button size="sm" variant="ghost" className="text-destructive hover:text-destructive">
+                              <Trash2 className="h-4 w-4 mr-1" /> Delete
+                            </Button>
+                          }
+                        />
                       </TableCell>
                     </TableRow>
                   ))}
@@ -893,9 +938,16 @@ const Approvals = () => {
                         </Badge>
                       </TableCell>
                       <TableCell>
-                        <Button size="sm" variant="ghost" className="text-destructive hover:text-destructive" onClick={() => deleteOT(req)}>
-                          <Trash2 className="h-4 w-4 mr-1" /> Delete
-                        </Button>
+                        <DeleteReasonDialog
+                          title="Delete this OT request?"
+                          description="This cannot be undone."
+                          onConfirm={(reason) => deleteOT(req, reason)}
+                          trigger={
+                            <Button size="sm" variant="ghost" className="text-destructive hover:text-destructive">
+                              <Trash2 className="h-4 w-4 mr-1" /> Delete
+                            </Button>
+                          }
+                        />
                       </TableCell>
                     </TableRow>
                   ))}
@@ -941,9 +993,16 @@ const Approvals = () => {
                       <TableCell className="text-xs text-muted-foreground">{req.approved_by ? names[req.approved_by] || "—" : "—"}</TableCell>
                       <TableCell className="max-w-48 truncate text-xs text-muted-foreground">{req.approver_note || "—"}</TableCell>
                       <TableCell>
-                        <Button size="sm" variant="ghost" className="text-destructive hover:text-destructive" onClick={() => deleteLate(req)}>
-                          <Trash2 className="h-4 w-4" />
-                        </Button>
+                        <DeleteReasonDialog
+                          title="Delete this late time request?"
+                          description="This cannot be undone."
+                          onConfirm={(reason) => deleteLate(req, reason)}
+                          trigger={
+                            <Button size="sm" variant="ghost" className="text-destructive hover:text-destructive">
+                              <Trash2 className="h-4 w-4" />
+                            </Button>
+                          }
+                        />
                       </TableCell>
                     </TableRow>
                   ))}
@@ -982,9 +1041,16 @@ const Approvals = () => {
                       <TableCell className="text-xs text-muted-foreground">{req.approver_id ? names[req.approver_id] || "—" : "—"}</TableCell>
                       <TableCell className="max-w-48 truncate text-xs text-muted-foreground">{req.approver_note || "—"}</TableCell>
                       <TableCell>
-                        <Button size="sm" variant="ghost" className="text-destructive hover:text-destructive" onClick={() => deleteLeave(req)}>
-                          <Trash2 className="h-4 w-4" />
-                        </Button>
+                        <DeleteReasonDialog
+                          title="Delete this leave request?"
+                          description="This cannot be undone."
+                          onConfirm={(reason) => deleteLeave(req, reason)}
+                          trigger={
+                            <Button size="sm" variant="ghost" className="text-destructive hover:text-destructive">
+                              <Trash2 className="h-4 w-4" />
+                            </Button>
+                          }
+                        />
                       </TableCell>
                     </TableRow>
                   ))}
@@ -1019,9 +1085,16 @@ const Approvals = () => {
                       </TableCell>
                       <TableCell className="text-xs text-muted-foreground">{loan.approved_by ? names[loan.approved_by] || "—" : "—"}</TableCell>
                       <TableCell>
-                        <Button size="sm" variant="ghost" className="text-destructive hover:text-destructive" onClick={() => deleteLoanHistory(loan)}>
-                          <Trash2 className="h-4 w-4" />
-                        </Button>
+                        <DeleteReasonDialog
+                          title="Delete this loan record?"
+                          description="This cannot be undone."
+                          onConfirm={(reason) => deleteLoanHistory(loan, reason)}
+                          trigger={
+                            <Button size="sm" variant="ghost" className="text-destructive hover:text-destructive">
+                              <Trash2 className="h-4 w-4" />
+                            </Button>
+                          }
+                        />
                       </TableCell>
                     </TableRow>
                   ))}
@@ -1056,9 +1129,16 @@ const Approvals = () => {
                       </TableCell>
                       <TableCell className="text-xs text-muted-foreground">{claim.approver_id ? names[claim.approver_id] || "—" : "—"}</TableCell>
                       <TableCell>
-                        <Button size="sm" variant="ghost" className="text-destructive hover:text-destructive" onClick={() => deleteExpenseHistory(claim)}>
-                          <Trash2 className="h-4 w-4" />
-                        </Button>
+                        <DeleteReasonDialog
+                          title="Delete this expense claim?"
+                          description="This cannot be undone."
+                          onConfirm={(reason) => deleteExpenseHistory(claim, reason)}
+                          trigger={
+                            <Button size="sm" variant="ghost" className="text-destructive hover:text-destructive">
+                              <Trash2 className="h-4 w-4" />
+                            </Button>
+                          }
+                        />
                       </TableCell>
                     </TableRow>
                   ))}
