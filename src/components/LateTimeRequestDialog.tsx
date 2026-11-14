@@ -28,6 +28,7 @@ export const LateTimeRequestDialog = ({ officeStartTime, officeEndTime, onSubmit
   const [saving, setSaving] = useState(false);
   const [form, setForm] = useState({
     effective_date: format(new Date(), "yyyy-MM-dd"),
+    effective_to: "",
     requested_start_time: officeStartTime?.slice(0, 5) || DEFAULT_OFFICE_START,
     requested_end_time: officeEndTime?.slice(0, 5) || DEFAULT_OFFICE_END,
     reason: "",
@@ -45,6 +46,10 @@ export const LateTimeRequestDialog = ({ officeStartTime, officeEndTime, onSubmit
   const submit = async () => {
     if (!user) return;
     if (!form.reason.trim()) { toast.error("Please add a reason"); return; }
+    if (form.effective_to && form.effective_to < form.effective_date) {
+      toast.error("Effective To can't be before Effective From");
+      return;
+    }
     setSaving(true);
     try {
       const attachmentUrls = attachments.length ? await uploadAttachments(attachments, user.id) : [];
@@ -52,6 +57,7 @@ export const LateTimeRequestDialog = ({ officeStartTime, officeEndTime, onSubmit
         user_id: user.id,
         request_type: "office_time_change",
         effective_date: form.effective_date,
+        effective_to: form.effective_to || null,
         requested_start_time: form.requested_start_time,
         requested_end_time: form.requested_end_time,
         adjustment_minutes: 0,
@@ -59,14 +65,15 @@ export const LateTimeRequestDialog = ({ officeStartTime, officeEndTime, onSubmit
         attachments: attachmentUrls,
       }).select().single();
       if (error) throw error;
+      const rangeLabel = form.effective_to ? `${form.effective_date} to ${form.effective_to}` : form.effective_date;
       await notifyManagersAndAdmins(
         "Office Time Change Request",
-        `${user.email} submitted an office time change for ${form.effective_date}.`,
+        `${user.email} submitted an office time change for ${rangeLabel}.`,
         data?.id,
         { route: "/approvals", type: "late_time_request", requesterId: user.id },
       );
       toast.success("Request submitted for approval");
-      setForm((f) => ({ ...f, reason: "" }));
+      setForm((f) => ({ ...f, effective_to: "", reason: "" }));
       setAttachments([]);
       onSubmitted?.();
     } catch (e: any) {
@@ -81,20 +88,33 @@ export const LateTimeRequestDialog = ({ officeStartTime, officeEndTime, onSubmit
       <CardHeader>
         <CardTitle>Change Approved Office Time</CardTitle>
         <CardDescription>
-          Approved office time: {(officeStartTime || DEFAULT_OFFICE_START).slice(0, 5)}–
+          Your current office time: {(officeStartTime || DEFAULT_OFFICE_START).slice(0, 5)}–
           {(officeEndTime || DEFAULT_OFFICE_END).slice(0, 5)}. Arriving more than 11 minutes late adds{" "}
-          {humanMinutes(LATE_PENALTY_MINUTES)} of extra required work for that day.
+          {humanMinutes(LATE_PENALTY_MINUTES)} of extra required work for that day. This only changes the
+          date(s) you pick below — not your schedule going forward.
         </CardDescription>
       </CardHeader>
       <CardContent className="space-y-4">
-        <div>
-          <Label>Effective From</Label>
-          <Input
-            type="date"
-            value={form.effective_date}
-            onChange={(e) => setForm((f) => ({ ...f, effective_date: e.target.value }))}
-          />
+        <div className="grid grid-cols-2 gap-4">
+          <div>
+            <Label>Effective From</Label>
+            <Input
+              type="date"
+              value={form.effective_date}
+              onChange={(e) => setForm((f) => ({ ...f, effective_date: e.target.value }))}
+            />
+          </div>
+          <div>
+            <Label>Effective To <span className="text-xs text-muted-foreground">(optional)</span></Label>
+            <Input
+              type="date"
+              min={form.effective_date || undefined}
+              value={form.effective_to}
+              onChange={(e) => setForm((f) => ({ ...f, effective_to: e.target.value }))}
+            />
+          </div>
         </div>
+        <p className="text-xs text-muted-foreground -mt-2">Leave Effective To blank for a single-day change.</p>
         <div className="grid grid-cols-2 gap-4">
           <div><Label>New Start Time</Label><Input type="time" value={form.requested_start_time} onChange={(e) => setForm((f) => ({ ...f, requested_start_time: e.target.value }))} /></div>
           <div><Label>New End Time</Label><Input type="time" value={form.requested_end_time} onChange={(e) => setForm((f) => ({ ...f, requested_end_time: e.target.value }))} /></div>

@@ -466,7 +466,10 @@ const OTRequests = () => {
                     <TableRow><TableCell colSpan={5} className="text-center text-muted-foreground">No requests</TableCell></TableRow>
                   ) : myLateRequests.map((req) => (
                     <TableRow key={req.id}>
-                      <TableCell className="whitespace-nowrap">{format(new Date(req.effective_date), "MMM d, yyyy")}</TableCell>
+                      <TableCell className="whitespace-nowrap">
+                        {format(new Date(req.effective_date), "MMM d, yyyy")}
+                        {req.effective_to && req.effective_to !== req.effective_date && ` – ${format(new Date(req.effective_to), "MMM d, yyyy")}`}
+                      </TableCell>
                       <TableCell className="text-xs whitespace-nowrap">
                         {String(req.requested_start_time).slice(0, 5)} – {String(req.requested_end_time).slice(0, 5)}
                       </TableCell>
