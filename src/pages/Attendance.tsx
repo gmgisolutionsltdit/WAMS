@@ -15,6 +15,8 @@ import { WORK_FROM_OPTIONS, DEFAULT_WORK_FROM } from "@/lib/workFrom";
 import { format, addMonths, startOfMonth } from "date-fns";
 import { ChevronDown, ChevronRight, ChevronLeft } from "lucide-react";
 import { useRealtimeSubscription } from "@/hooks/useRealtimeSubscription";
+import { notifyManagersAndAdmins } from "@/lib/notifications";
+import { DeleteReasonDialog } from "@/components/DeleteReasonDialog";
 import { fmtHMS, fmtClock, hmToHours, hoursToHM } from "@/lib/time";
 import { mergeDailySessions, sessionWorkedSeconds, type AttendanceSession } from "@/lib/attendance";
 import { evaluateArrival, humanMinutes, officeStart } from "@/lib/officeTime";
@@ -124,8 +126,7 @@ const Attendance = () => {
   const breakAllowance = unpaidBreakMinutes(schedule);
   const requiredDaySeconds = netRequiredHours(schedule) * 3600;
 
-  const deleteSession = async (id: string) => {
-    if (!window.confirm("Delete this session? This cannot be undone.")) return;
+  const deleteSession = async (id: string, reason: string) => {
     const { data, error } = await supabase.from("attendance_logs").delete().eq("id", id).select();
     if (error) toast.error(error.message);
     // RLS silently returns zero rows (no error) when the delete is blocked -
@@ -154,6 +155,12 @@ const Attendance = () => {
         .eq("date", deletedRow.date)
         .in("status", ["approved", "modified"]);
       toast.success("Session deleted");
+      await notifyManagersAndAdmins(
+        "Attendance Session Deleted",
+        `An attendance session on ${deletedRow.date} was deleted. Reason: ${reason}`,
+        undefined,
+        { route: "/attendance", type: "attendance_session_delete", requesterId: deletedRow.user_id },
+      );
       fetchData();
     }
   };
@@ -713,15 +720,21 @@ const Attendance = () => {
                                             </Button>
                                           }
                                         />
-                                        <Button
-                                          variant="ghost"
-                                          size="icon"
-                                          className="h-7 w-7 text-destructive hover:text-destructive"
-                                          aria-label="Delete this session"
-                                          onClick={() => deleteSession(s.id)}
-                                        >
-                                          <Trash2 className="h-3.5 w-3.5" />
-                                        </Button>
+                                        <DeleteReasonDialog
+                                          title="Delete this session?"
+                                          description="This cannot be undone."
+                                          onConfirm={(reason) => deleteSession(s.id, reason)}
+                                          trigger={
+                                            <Button
+                                              variant="ghost"
+                                              size="icon"
+                                              className="h-7 w-7 text-destructive hover:text-destructive"
+                                              aria-label="Delete this session"
+                                            >
+                                              <Trash2 className="h-3.5 w-3.5" />
+                                            </Button>
+                                          }
+                                        />
                                       </div>
                                     </TableCell>
                                   </TableRow>
