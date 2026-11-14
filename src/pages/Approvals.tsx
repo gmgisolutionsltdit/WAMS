@@ -38,6 +38,10 @@ const Approvals = () => {
   const [history, setHistory] = useState<any[]>([]);
   const [stats, setStats] = useState({ totalOT: 0, pendingCount: 0, activeEmployees: 0 });
   const [manualPending, setManualPending] = useState<any[]>([]);
+  const [manualHistory, setManualHistory] = useState<{
+    id: string; user_id: string; date: string; clock_in: string; clock_out: string;
+    total_hours: number; overtime_hours: number; status: string; approved_by: string | null; approver_note: string | null;
+  }[]>([]);
   const [latePending, setLatePending] = useState<any[]>([]);
   const [lateHistory, setLateHistory] = useState<any[]>([]);
   const [leavePending, setLeavePending] = useState<any[]>([]);
@@ -48,7 +52,7 @@ const Approvals = () => {
   const [expenseHistory, setExpenseHistory] = useState<any[]>([]);
   const [historyTab, setHistoryTab] = useState("overtime");
   const [historyPage, setHistoryPage] = useState<Record<string, number>>({
-    overtime: 1, late: 1, leave: 1, loan: 1, expense: 1,
+    overtime: 1, manual: 1, late: 1, leave: 1, loan: 1, expense: 1,
   });
   const [leaveTypeNames, setLeaveTypeNames] = useState<Record<string, string>>({});
   const [names, setNames] = useState<Record<string, string>>({});
@@ -66,7 +70,7 @@ const Approvals = () => {
 
   const fetchData = useCallback(async () => {
     if (!user) return;
-    const [{ data: requests }, { data: resolved }, { data: manualReqs }, { data: lateReqs }, { data: lateHist }, { data: leaveReqs }, { data: leaveHist }, { data: leaveTypes }, { data: loanPend }, { data: loanHist }, { data: expensePend }, { data: expenseHist }] = await Promise.all([
+    const [{ data: requests }, { data: resolved }, { data: manualReqs }, { data: manualHist }, { data: lateReqs }, { data: lateHist }, { data: leaveReqs }, { data: leaveHist }, { data: leaveTypes }, { data: loanPend }, { data: loanHist }, { data: expensePend }, { data: expenseHist }] = await Promise.all([
       supabase
         .from("overtime_requests")
         .select("*, profiles!overtime_requests_user_id_fkey(full_name, email)")
@@ -79,6 +83,7 @@ const Approvals = () => {
         .order("updated_at", { ascending: false })
         .limit(20),
       supabase.from("manual_time_requests").select("*").eq("status", "pending").order("created_at", { ascending: false }),
+      supabase.from("manual_time_requests").select("*").neq("status", "pending").order("updated_at", { ascending: false }).limit(20),
       supabase.from("late_time_requests").select("*").eq("status", "pending").order("created_at", { ascending: false }),
       supabase.from("late_time_requests").select("*").neq("status", "pending").order("updated_at", { ascending: false }).limit(20),
       supabase.from("leave_requests").select("*").eq("status", "pending").order("created_at", { ascending: false }),
@@ -92,6 +97,7 @@ const Approvals = () => {
     setPending(requests || []);
     setHistory(resolved || []);
     setManualPending(manualReqs || []);
+    setManualHistory(manualHist || []);
     setLatePending(lateReqs || []);
     setLateHistory(lateHist || []);
     setLeavePending(leaveReqs || []);
@@ -105,7 +111,7 @@ const Approvals = () => {
     setLeaveTypeNames(ltNames);
 
     const ids = Array.from(new Set(
-      [...(manualReqs || []), ...(lateReqs || []), ...(lateHist || []), ...(leaveReqs || []), ...(leaveHist || []), ...(loanPend || []), ...(loanHist || []), ...(expensePend || []), ...(expenseHist || [])]
+      [...(manualReqs || []), ...(manualHist || []), ...(lateReqs || []), ...(lateHist || []), ...(leaveReqs || []), ...(leaveHist || []), ...(loanPend || []), ...(loanHist || []), ...(expensePend || []), ...(expenseHist || [])]
         .flatMap((r: any) => [r.user_id, r.approved_by, r.approver_id])
         .filter(Boolean)
     ));
@@ -317,6 +323,21 @@ const Approvals = () => {
       `Your ${req.requested_hours}h OT request for ${format(new Date(req.date), "MMM d")} was deleted by an admin. Reason: ${reason}`,
       undefined,
       { route: "/ot-requests", type: "ot_update" },
+    );
+    fetchData();
+  };
+
+  const deleteManual = async (req: { id: string; user_id: string; date: string }, reason: string) => {
+    const { data, error } = await supabase.from("manual_time_requests").delete().eq("id", req.id).select("id");
+    if (error) { toast.error(error.message); return; }
+    if (!data?.length) { toast.error(NOT_ALLOWED); return; }
+    toast.success("Manual time request deleted");
+    await notifyEmployee(
+      req.user_id,
+      "Manual Time Request Deleted",
+      `Your manual time entry for ${format(new Date(req.date), "MMM d")} was deleted by an admin. Reason: ${reason}`,
+      undefined,
+      { route: "/attendance", type: "manual_time_update" },
     );
     fetchData();
   };
@@ -889,7 +910,7 @@ const Approvals = () => {
       {/* History — every decided request, grouped into tabs by type */}
       {(() => {
         const historyData: Record<string, any[]> = {
-          overtime: history, late: lateHistory, leave: leaveHistory, loan: loanHistory, expense: expenseHistory,
+          overtime: history, manual: manualHistory, late: lateHistory, leave: leaveHistory, loan: loanHistory, expense: expenseHistory,
         };
         const activeHistory = historyData[historyTab] || [];
         const historyPageCount = Math.max(1, Math.ceil(activeHistory.length / HISTORY_PAGE_SIZE));
@@ -907,6 +928,7 @@ const Approvals = () => {
           <Tabs value={historyTab} onValueChange={setHistoryTab}>
             <TabsList>
               <TabsTrigger value="overtime">Overtime</TabsTrigger>
+              <TabsTrigger value="manual">Manual Time</TabsTrigger>
               <TabsTrigger value="late">Late Time</TabsTrigger>
               <TabsTrigger value="leave">Leave</TabsTrigger>
               <TabsTrigger value="loan">Loan</TabsTrigger>
@@ -945,6 +967,56 @@ const Approvals = () => {
                           trigger={
                             <Button size="sm" variant="ghost" className="text-destructive hover:text-destructive">
                               <Trash2 className="h-4 w-4 mr-1" /> Delete
+                            </Button>
+                          }
+                        />
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </TabsContent>
+
+            <TabsContent value="manual">
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Employee</TableHead>
+                    <TableHead>Date</TableHead>
+                    <TableHead>Time</TableHead>
+                    <TableHead>Total</TableHead>
+                    <TableHead>OT</TableHead>
+                    <TableHead>Status</TableHead>
+                    <TableHead>Decided By</TableHead>
+                    <TableHead>Note</TableHead>
+                    <TableHead>Actions</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {manualHistory.length === 0 ? (
+                    <TableRow><TableCell colSpan={9} className="text-center text-muted-foreground">No manual time request history yet</TableCell></TableRow>
+                  ) : pageSlice(manualHistory).map((req) => (
+                    <TableRow key={req.id}>
+                      <TableCell className="font-medium">{names[req.user_id] || "Unknown"}</TableCell>
+                      <TableCell className="whitespace-nowrap">{format(new Date(req.date), "MMM d, yyyy")}</TableCell>
+                      <TableCell className="whitespace-nowrap text-xs font-mono">
+                        {format(new Date(req.clock_in), "HH:mm")} – {format(new Date(req.clock_out), "HH:mm")}
+                      </TableCell>
+                      <TableCell><Badge>{Number(req.total_hours).toFixed(2)}h</Badge></TableCell>
+                      <TableCell>{Number(req.overtime_hours).toFixed(2)}h</TableCell>
+                      <TableCell>
+                        <Badge className={otStatusStyle(req.status)}>{req.status}</Badge>
+                      </TableCell>
+                      <TableCell className="text-xs text-muted-foreground">{req.approved_by ? names[req.approved_by] || "—" : "—"}</TableCell>
+                      <TableCell className="max-w-48 truncate text-xs text-muted-foreground">{req.approver_note || "—"}</TableCell>
+                      <TableCell>
+                        <DeleteReasonDialog
+                          title="Delete this manual time request?"
+                          description="This cannot be undone."
+                          onConfirm={(reason) => deleteManual(req, reason)}
+                          trigger={
+                            <Button size="sm" variant="ghost" className="text-destructive hover:text-destructive">
+                              <Trash2 className="h-4 w-4" />
                             </Button>
                           }
                         />
