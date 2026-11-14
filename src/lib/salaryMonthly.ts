@@ -30,7 +30,11 @@ export type SalaryMonthRow = {
   conveyance: number;
   medical: number;
   otPayment: number;
+  /** Minutes behind approved OT amount is derived from — exact, not reverse-computed from the money. */
+  otMinutes: number;
   dueDeduction: number;
+  /** Minutes behind due deduction amount is derived from. */
+  dueMinutes: number;
   netAdjustment: number;
   recoveryTotal: number;
   final: number;
@@ -166,7 +170,8 @@ export const computeMonthlySalaryRows = async (
         month,
         gross,
         basic: breakdown.basic, houseRent: breakdown.houseRent, conveyance: breakdown.conveyance, medical: breakdown.medical,
-        otPayment, dueDeduction,
+        otPayment, otMinutes: approvedOTMinutes.get(key) || 0,
+        dueDeduction, dueMinutes: t.dueMinutes,
         netAdjustment: finalSalary.netAdjustment,
         recoveryTotal,
         final: finalSalary.final as number,
