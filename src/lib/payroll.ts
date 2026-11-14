@@ -1,6 +1,7 @@
 import { supabase } from "@/integrations/supabase/client";
 import type { Json } from "@/integrations/supabase/types";
 import jsPDF from "jspdf";
+import { humanMinutes } from "@/lib/officeTime";
 
 export interface PayrollProfile {
   id: string;
@@ -375,17 +376,19 @@ export function downloadPayslipPDF(args: {
 export function downloadPaymentReceiptPDF(args: {
   employeeName: string;
   monthLabel: string;
-  finalSalary: number;
-  netAdjustment: number;
-  finalSalaryNoExpense: number;
-  otPaid?: number;
+  grossSalary: number;
+  otApprovedMinutes: number;
+  otApprovedAmount: number;
+  dueMinutes: number;
+  dueAmount: number;
+  netOtAmount: number;
   expensePaid: number;
   loanPaid: number;
   netPayment: number;
   note?: string | null;
   companyName?: string;
 }) {
-  const { employeeName, monthLabel, finalSalary, netAdjustment, finalSalaryNoExpense, otPaid, expensePaid, loanPaid, netPayment, note } = args;
+  const { employeeName, monthLabel, grossSalary, otApprovedMinutes, otApprovedAmount, dueMinutes, dueAmount, netOtAmount, expensePaid, loanPaid, netPayment, note } = args;
   const company = args.companyName || "Workforce & Attendance Management System (WAMS)";
   const doc = new jsPDF({ unit: "pt", format: "a4" });
   const left = 48;
@@ -407,10 +410,10 @@ export function downloadPaymentReceiptPDF(args: {
   y += 18;
 
   const rows: Array<[string, string]> = [
-    ["Gross Salary", fmtMoney(finalSalary)],
-    ["Net Adjustment", fmtMoney(netAdjustment)],
-    ["Final Salary (without Expense)", fmtMoney(finalSalaryNoExpense)],
-    ...(otPaid !== undefined ? [["Overtime Paid", fmtMoney(otPaid)] as [string, string]] : []),
+    ["Gross Salary", fmtMoney(grossSalary)],
+    [`Approved Overtime (${humanMinutes(otApprovedMinutes)})`, fmtMoney(otApprovedAmount)],
+    [`Due (${humanMinutes(dueMinutes)})`, `- ${fmtMoney(dueAmount)}`],
+    ["Net Overtime", fmtMoney(netOtAmount)],
     ["Expense Paid", fmtMoney(expensePaid)],
     ["Loan Paid", fmtMoney(loanPaid)],
   ];
