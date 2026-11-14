@@ -642,7 +642,10 @@ const Approvals = () => {
                       <TableCell>
                         <Badge variant="outline">{req.request_type === "office_time_change" ? "Office time change" : "Late adjustment"}</Badge>
                       </TableCell>
-                      <TableCell className="whitespace-nowrap">{format(new Date(req.effective_date), "MMM d, yyyy")}</TableCell>
+                      <TableCell className="whitespace-nowrap">
+                        {format(new Date(req.effective_date), "MMM d, yyyy")}
+                        {req.effective_to && req.effective_to !== req.effective_date && ` – ${format(new Date(req.effective_to), "MMM d, yyyy")}`}
+                      </TableCell>
                       <TableCell className="text-xs whitespace-nowrap">
                         {req.request_type === "office_time_change"
                           ? `${String(req.requested_start_time).slice(0, 5)} – ${String(req.requested_end_time).slice(0, 5)}`
@@ -923,7 +926,10 @@ const Approvals = () => {
                       <TableCell>
                         <Badge variant="outline">{req.request_type === "office_time_change" ? "Office time change" : "Late adjustment"}</Badge>
                       </TableCell>
-                      <TableCell className="whitespace-nowrap">{format(new Date(req.effective_date), "MMM d, yyyy")}</TableCell>
+                      <TableCell className="whitespace-nowrap">
+                        {format(new Date(req.effective_date), "MMM d, yyyy")}
+                        {req.effective_to && req.effective_to !== req.effective_date && ` – ${format(new Date(req.effective_to), "MMM d, yyyy")}`}
+                      </TableCell>
                       <TableCell className="text-xs whitespace-nowrap">
                         {req.request_type === "office_time_change"
                           ? `${String(req.requested_start_time).slice(0, 5)} – ${String(req.requested_end_time).slice(0, 5)}`
