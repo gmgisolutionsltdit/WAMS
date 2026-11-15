@@ -1,11 +1,16 @@
--- Trash Bin: deleting an Overtime/Manual Time/Late Time/Leave/Loan/Expense
--- history row no longer destroys it immediately — the app moves a full
--- snapshot here first, restorable for 30 days by an admin from the Trash
--- page, after which it's gone for good (purged automatically, or the
--- moment an admin opens Trash past that window).
+-- Trash Bin: deleting an Overtime/Manual Time/Loan/Expense history row no
+-- longer destroys it immediately — the app moves a full snapshot here
+-- first, restorable for 30 days by an admin from the Trash page, after
+-- which it's gone for good (purged automatically, or the moment an admin
+-- opens Trash past that window). Late Time and Leave are deliberately
+-- excluded — restoring either would re-insert the row without replaying
+-- the attendance-stamp / leave-balance side effect that only fires
+-- through the real approval code path, never on a raw insert — so those
+-- two always go straight to a permanent delete instead (see
+-- Approvals.tsx's deleteLate/deleteLeave).
 CREATE TABLE IF NOT EXISTS public.trash_bin (
   id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
-  entity_type text NOT NULL CHECK (entity_type IN ('overtime','manual_time','late_time','leave','loan','expense')),
+  entity_type text NOT NULL CHECK (entity_type IN ('overtime','manual_time','loan','expense')),
   source_table text NOT NULL,
   original_id uuid NOT NULL,
   data jsonb NOT NULL,

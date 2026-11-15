@@ -23,7 +23,7 @@ type TrashRow = {
   expires_at: string;
 };
 
-const ENTITY_TABS: TrashEntityType[] = ["overtime", "manual_time", "late_time", "leave", "loan", "expense"];
+const ENTITY_TABS: TrashEntityType[] = ["overtime", "manual_time", "loan", "expense"];
 
 /** One short line describing the trashed row — pulled straight from its own
  *  jsonb snapshot, same fields each type's own history table already shows. */
@@ -34,10 +34,6 @@ const summarize = (row: TrashRow): string => {
       return `${d.requested_hours ?? "?"}h OT on ${d.date ? format(new Date(d.date), "MMM d, yyyy") : "—"}`;
     case "manual_time":
       return `${d.date ? format(new Date(d.date), "MMM d, yyyy") : "—"} — ${Number(d.total_hours ?? 0).toFixed(2)}h total, ${Number(d.overtime_hours ?? 0).toFixed(2)}h OT`;
-    case "late_time":
-      return `${d.request_type === "office_time_change" ? "Office time change" : "Late adjustment"} for ${d.effective_date ? format(new Date(d.effective_date), "MMM d, yyyy") : "—"}`;
-    case "leave":
-      return `${d.start_date ?? "—"} → ${d.end_date ?? "—"} (${d.total_days ?? "?"}d)`;
     case "loan":
       return `${Number(d.amount ?? 0).toLocaleString()} loan, ${Number(d.remaining_balance ?? 0).toLocaleString()} remaining`;
     case "expense":
@@ -111,7 +107,7 @@ const TrashBin = () => {
         <CardHeader>
           <CardTitle>Trash</CardTitle>
           <CardDescription>
-            Deleted Overtime, Manual Time, Late Time, Leave, Loan and Expense history lands here first — restorable for 30 days, then it's gone for good.
+            Deleted Overtime, Manual Time, Loan and Expense history lands here first — restorable for 30 days, then it's gone for good. Late Time and Leave deletes are permanent right away (restoring either wouldn't re-apply its attendance/balance effect).
           </CardDescription>
         </CardHeader>
         <CardContent>

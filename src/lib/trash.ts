@@ -1,12 +1,18 @@
 import { supabase } from "@/integrations/supabase/client";
 
-export type TrashEntityType = "overtime" | "manual_time" | "late_time" | "leave" | "loan" | "expense";
+// Late Time and Leave are deliberately excluded — deleting those always
+// goes straight to a permanent delete (see Approvals.tsx's deleteLate/
+// deleteLeave) instead of through Trash, because restoring either would
+// re-insert the row without replaying the attendance-stamp / leave-balance
+// side effect that only fires through the real approval code path
+// (a DB UPDATE trigger for Late Time, application code for Leave), never
+// on a raw insert — a "restored" row would misleadingly look approved
+// while that side effect stays missing.
+export type TrashEntityType = "overtime" | "manual_time" | "loan" | "expense";
 
 export const TRASH_SOURCE_TABLE: Record<TrashEntityType, string> = {
   overtime: "overtime_requests",
   manual_time: "manual_time_requests",
-  late_time: "late_time_requests",
-  leave: "leave_requests",
   loan: "personal_advances",
   expense: "expense_claims",
 };
@@ -14,8 +20,6 @@ export const TRASH_SOURCE_TABLE: Record<TrashEntityType, string> = {
 export const TRASH_LABEL: Record<TrashEntityType, string> = {
   overtime: "Overtime",
   manual_time: "Manual Time",
-  late_time: "Late Time",
-  leave: "Leave",
   loan: "Loan",
   expense: "Expense",
 };

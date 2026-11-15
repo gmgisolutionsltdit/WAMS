@@ -358,13 +358,12 @@ const Approvals = () => {
   };
 
   const deleteLeave = async (req: any, reason: string) => {
-    if (!user) return;
-    try {
-      await moveToTrash("leave", req, user.id, reason);
-    } catch (e) {
-      toast.error(e instanceof Error ? e.message : "Could not move this to Trash — delete cancelled.");
-      return;
-    }
+    // Deliberately bypasses Trash (unlike the other 5 types) — restoring a
+    // Leave row later would re-insert it without re-debiting
+    // leave_balances.used (that only happens via decideLeave's own
+    // approval code, never on a raw insert), so a "restored" leave would
+    // misleadingly look approved while never actually consuming the
+    // balance it originally did. Permanent delete avoids that mismatch.
     const { data, error } = await supabase.from("leave_requests").delete().eq("id", req.id).select("id");
     if (error) { toast.error(error.message); return; }
     if (!data?.length) { toast.error(NOT_ALLOWED); return; }
@@ -380,13 +379,13 @@ const Approvals = () => {
   };
 
   const deleteLate = async (req: any, reason: string) => {
-    if (!user) return;
-    try {
-      await moveToTrash("late_time", req, user.id, reason);
-    } catch (e) {
-      toast.error(e instanceof Error ? e.message : "Could not move this to Trash — delete cancelled.");
-      return;
-    }
+    // Deliberately bypasses Trash (unlike the other 5 types) — restoring a
+    // Late Time row later would re-insert it without re-stamping
+    // attendance_logs (apply_late_time_request() only fires on UPDATE to
+    // 'approved', never on a raw insert), so a "restored" late-time
+    // approval would misleadingly look approved while the attendance it
+    // originally changed stays untouched. Permanent delete avoids that
+    // mismatch.
     const { data, error } = await supabase.from("late_time_requests").delete().eq("id", req.id).select("id");
     if (error) { toast.error(error.message); return; }
     if (!data?.length) { toast.error(NOT_ALLOWED); return; }
