@@ -30,6 +30,7 @@ import { uploadAttachments } from "@/lib/attachments";
 import AttachmentsInput from "@/components/AttachmentsInput";
 import AttachmentThumbnails from "@/components/AttachmentThumbnails";
 import { DeleteReasonDialog } from "@/components/DeleteReasonDialog";
+import { moveToTrash } from "@/lib/trash";
 
 type PayrollSettlementRow = {
   id: string;
@@ -195,6 +196,13 @@ const Payment = () => {
   const isResigned = (loan: any) => loan.profiles?.employee_status === "Resigned";
 
   const deleteLoan = async (loan: { id: string; user_id: string; amount: number }, reason: string) => {
+    if (!user) return;
+    try {
+      await moveToTrash("loan", loan, user.id, reason);
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Could not move this to Trash — delete cancelled.");
+      return;
+    }
     // RLS blocking this doesn't error — it just matches 0 rows, which would
     // otherwise look like silent success while the row stays put.
     const { data, error } = await supabase.from("personal_advances").delete().eq("id", loan.id).select("id");
@@ -1150,7 +1158,7 @@ function MyPaymentsTab() {
                 <p className="text-xs text-muted-foreground">Gross Salary, paid in full — Overtime is settled separately.</p>
               </div>
               <div className="rounded-md border p-3 space-y-2">
-                <div className="text-sm font-medium">Overtime</div>
+                <div className="text-sm font-medium">Net Time Balance</div>
                 <div className="text-lg font-semibold">{fmtBDT(otOutstanding)}</div>
                 <p className="text-xs text-muted-foreground">
                   Approved OT {humanMinutes(otApprovedMinutes)} ({fmtBDT(otApprovedAmount)}) − Due {humanMinutes(dueMinutes)} ({fmtBDT(dueAmount)}) = Net {humanMinutes(otApprovedMinutes - dueMinutes)} ({fmtBDT(thisMonthNetOt)})
@@ -1471,7 +1479,7 @@ function MyPaymentsSummary() {
                 <Badge variant="outline">Always settled</Badge>
               </div>
               <div className="rounded-md border p-3 space-y-2">
-                <div className="text-sm font-medium">Overtime</div>
+                <div className="text-sm font-medium">Net Time Balance</div>
                 <div className="text-lg font-semibold">{fmtBDT(otOutstanding)}</div>
                 <p className="text-xs text-muted-foreground">
                   Approved OT {humanMinutes(otApprovedMinutes)} ({fmtBDT(otApprovedAmount)}) − Due {humanMinutes(dueMinutes)} ({fmtBDT(dueAmount)}) = Net {humanMinutes(otApprovedMinutes - dueMinutes)} ({fmtBDT(thisMonthNetOt)})
@@ -2046,6 +2054,13 @@ function ExpenseClaimsTab() {
     const claim = claims.find((c) => c.id === id);
     if (claim && Number(claim.recovered_amount) > 0) {
       toast.error("This claim has already been partially or fully recovered via My Payments and can't be deleted.");
+      return;
+    }
+    if (!user || !claim) return;
+    try {
+      await moveToTrash("expense", claim, user.id, reason);
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Could not move this to Trash — delete cancelled.");
       return;
     }
     // RLS blocking this doesn't error — it just matches 0 rows, which would

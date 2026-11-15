@@ -30,6 +30,7 @@ import NoticeBoard from "./pages/NoticeBoard";
 import SOP from "./pages/SOP";
 import TeamMemberDetails from "./pages/TeamMemberDetails";
 import PerformanceEvaluation from "./pages/PerformanceEvaluation";
+import TrashBin from "./pages/TrashBin";
 
 const queryClient = new QueryClient();
 
@@ -96,6 +97,7 @@ const AppRoutes = () => (
       <Route path="/tasks/:id" element={<ErrorBoundary fallbackTitle="Couldn't open this board"><TaskBoard /></ErrorBoundary>} />
       <Route path="/salary-increments" element={<RoleGate allow={["admin"]}><SalaryIncrements /></RoleGate>} />
       <Route path="/loans" element={<RoleGate allow={["admin"]}><Loans /></RoleGate>} />
+      <Route path="/trash" element={<RoleGate allow={["admin"]}><TrashBin /></RoleGate>} />
       <Route path="/payment" element={<Payment />} />
       <Route path="/notices" element={<NoticeBoard />} />
       <Route path="/sop" element={<SOP />} />
