@@ -1,4 +1,4 @@
-import { Clock, LayoutDashboard, CalendarDays, FileText, CheckSquare, BarChart3, LogOut, Users, CalendarHeart, FolderKanban, Megaphone, Banknote, TrendingUp, BookOpenCheck, IdCard, UserCircle, HandCoins, ClipboardList } from "lucide-react";
+import { Clock, LayoutDashboard, CalendarDays, FileText, CheckSquare, BarChart3, LogOut, Users, CalendarHeart, FolderKanban, Megaphone, Banknote, TrendingUp, BookOpenCheck, IdCard, UserCircle, HandCoins, ClipboardList, Trash2 } from "lucide-react";
 import { NavLink } from "@/components/NavLink";
 import { useLocation } from "react-router-dom";
 import { useAuth } from "@/contexts/AuthContext";
@@ -155,6 +155,14 @@ export function AppSidebar() {
                     <NavLink to="/salary-increments" end className="hover:bg-muted/50" activeClassName="bg-muted text-primary font-medium">
                       <TrendingUp className="mr-2 h-4 w-4" />
                       {!collapsed && <span>Salary Increments</span>}
+                    </NavLink>
+                  </SidebarMenuButton>
+                </SidebarMenuItem>
+                <SidebarMenuItem>
+                  <SidebarMenuButton asChild isActive={isActive("/trash")}>
+                    <NavLink to="/trash" end className="hover:bg-muted/50" activeClassName="bg-muted text-primary font-medium">
+                      <Trash2 className="mr-2 h-4 w-4" />
+                      {!collapsed && <span>Trash</span>}
                     </NavLink>
                   </SidebarMenuButton>
                 </SidebarMenuItem>

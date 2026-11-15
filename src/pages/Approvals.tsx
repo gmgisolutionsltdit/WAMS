@@ -19,6 +19,7 @@ import { humanMinutes } from "@/lib/officeTime";
 import { classifyDay, netRequiredHours, weekendDaysFor, type WorkSchedule } from "@/lib/workSchedule";
 import AttachmentThumbnails from "@/components/AttachmentThumbnails";
 import { DeleteReasonDialog } from "@/components/DeleteReasonDialog";
+import { moveToTrash } from "@/lib/trash";
 
 /** RLS blocks a disallowed update/delete without an error — it just matches 0 rows,
  *  which would otherwise look like silent success. */
@@ -313,6 +314,13 @@ const Approvals = () => {
   };
 
   const deleteOT = async (req: any, reason: string) => {
+    if (!user) return;
+    try {
+      await moveToTrash("overtime", req, user.id, reason);
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Could not move this to Trash — delete cancelled.");
+      return;
+    }
     const { data, error } = await supabase.from("overtime_requests").delete().eq("id", req.id).select("id");
     if (error) { toast.error(error.message); return; }
     if (!data?.length) { toast.error(NOT_ALLOWED); return; }
@@ -328,6 +336,13 @@ const Approvals = () => {
   };
 
   const deleteManual = async (req: { id: string; user_id: string; date: string }, reason: string) => {
+    if (!user) return;
+    try {
+      await moveToTrash("manual_time", req, user.id, reason);
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Could not move this to Trash — delete cancelled.");
+      return;
+    }
     const { data, error } = await supabase.from("manual_time_requests").delete().eq("id", req.id).select("id");
     if (error) { toast.error(error.message); return; }
     if (!data?.length) { toast.error(NOT_ALLOWED); return; }
@@ -343,6 +358,12 @@ const Approvals = () => {
   };
 
   const deleteLeave = async (req: any, reason: string) => {
+    // Deliberately bypasses Trash (unlike the other 5 types) — restoring a
+    // Leave row later would re-insert it without re-debiting
+    // leave_balances.used (that only happens via decideLeave's own
+    // approval code, never on a raw insert), so a "restored" leave would
+    // misleadingly look approved while never actually consuming the
+    // balance it originally did. Permanent delete avoids that mismatch.
     const { data, error } = await supabase.from("leave_requests").delete().eq("id", req.id).select("id");
     if (error) { toast.error(error.message); return; }
     if (!data?.length) { toast.error(NOT_ALLOWED); return; }
@@ -358,6 +379,13 @@ const Approvals = () => {
   };
 
   const deleteLate = async (req: any, reason: string) => {
+    // Deliberately bypasses Trash (unlike the other 5 types) — restoring a
+    // Late Time row later would re-insert it without re-stamping
+    // attendance_logs (apply_late_time_request() only fires on UPDATE to
+    // 'approved', never on a raw insert), so a "restored" late-time
+    // approval would misleadingly look approved while the attendance it
+    // originally changed stays untouched. Permanent delete avoids that
+    // mismatch.
     const { data, error } = await supabase.from("late_time_requests").delete().eq("id", req.id).select("id");
     if (error) { toast.error(error.message); return; }
     if (!data?.length) { toast.error(NOT_ALLOWED); return; }
@@ -401,6 +429,13 @@ const Approvals = () => {
   };
 
   const deleteLoanHistory = async (loan: any, reason: string) => {
+    if (!user) return;
+    try {
+      await moveToTrash("loan", loan, user.id, reason);
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Could not move this to Trash — delete cancelled.");
+      return;
+    }
     const { data, error } = await supabase.from("personal_advances").delete().eq("id", loan.id).select("id");
     if (error) { toast.error(error.message); return; }
     if (!data?.length) { toast.error(NOT_ALLOWED); return; }
@@ -443,6 +478,13 @@ const Approvals = () => {
     // would silently wipe ledger history rather than just the claim.
     if (Number(claim.recovered_amount) > 0) {
       toast.error("This claim has already been partially or fully recovered via My Payments and can't be deleted.");
+      return;
+    }
+    if (!user) return;
+    try {
+      await moveToTrash("expense", claim, user.id, reason);
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Could not move this to Trash — delete cancelled.");
       return;
     }
     const { data, error } = await supabase.from("expense_claims").delete().eq("id", claim.id).select("id");
