@@ -77,14 +77,13 @@ const TrashBin = () => {
   const restore = async (row: TrashRow) => {
     setBusyId(row.id);
     try {
-      // The snapshot carries its own id — upserting it back by id either
-      // recreates the row (the common case) or, if something else already
-      // reused the same id in the meantime, silently re-fills over it,
-      // which never happens in practice since ids are UUIDs.
-      const { error: insErr } = await supabase.from(row.source_table as any).upsert(row.data as any);
-      if (insErr) { toast.error(`Could not restore: ${insErr.message}`); return; }
-      const { error: delErr } = await supabase.from("trash_bin" as any).delete().eq("id", row.id);
-      if (delErr) { toast.error(delErr.message); return; }
+      // Runs as a SECURITY DEFINER function rather than a plain client
+      // upsert — most of these tables only let a user insert their own
+      // row (overtime_requests, expense_claims never got an admin-insert-
+      // for-anyone-else policy), so restoring someone else's trashed entry
+      // as an admin would otherwise be silently blocked by RLS.
+      const { error } = await supabase.rpc("restore_from_trash" as any, { _trash_id: row.id });
+      if (error) { toast.error(`Could not restore: ${error.message}`); return; }
       toast.success("Restored");
       fetchData();
     } finally {
