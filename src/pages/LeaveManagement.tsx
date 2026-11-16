@@ -359,7 +359,7 @@ const LeaveManagement = () => {
       <Card>
         <CardHeader>
           <CardTitle>{t("Apply for Leave")}</CardTitle>
-          <CardDescription>Weekends and holidays are excluded by default. Sandwich-leave types charge adjacent weekends/holidays.</CardDescription>
+          <CardDescription>{t("Weekends and holidays are excluded by default. Sandwich-leave types charge adjacent weekends/holidays.")}</CardDescription>
         </CardHeader>
         <CardContent className="space-y-3">
           <div>
@@ -460,8 +460,8 @@ const LeaveManagement = () => {
                   className="rounded-md border w-fit"
                 />
                 <div className="flex gap-3 mt-3 text-xs text-muted-foreground">
-                  <span className="flex items-center gap-1"><span className="w-3 h-3 rounded bg-brand/30" /> On leave</span>
-                  <span className="flex items-center gap-1"><span className="w-3 h-3 rounded bg-warning/30" /> Holiday</span>
+                  <span className="flex items-center gap-1"><span className="w-3 h-3 rounded bg-brand/30" /> {t("On leave")}</span>
+                  <span className="flex items-center gap-1"><span className="w-3 h-3 rounded bg-warning/30" /> {t("Holiday")}</span>
                 </div>
               </CardContent>
             </Card>
@@ -470,7 +470,7 @@ const LeaveManagement = () => {
               <CardHeader>
                 <CardTitle className="flex items-center gap-2">
                   <Users className="h-5 w-5" />
-                  {selectedDay ? format(selectedDay, "EEEE, MMM d, yyyy") : "Pick a date"}
+                  {selectedDay ? format(selectedDay, "EEEE, MMM d, yyyy") : t("Pick a date")}
                 </CardTitle>
               </CardHeader>
               <CardContent>
@@ -503,12 +503,12 @@ const LeaveManagement = () => {
               <Table>
                 <TableHeader>
                   <TableRow>
-                    <TableHead>Type</TableHead>
-                    <TableHead>From</TableHead>
-                    <TableHead>To</TableHead>
-                    <TableHead>Days</TableHead>
-                    <TableHead>Reason</TableHead>
-                    <TableHead>Status</TableHead>
+                    <TableHead>{t("Type")}</TableHead>
+                    <TableHead>{t("From")}</TableHead>
+                    <TableHead>{t("To")}</TableHead>
+                    <TableHead>{t("Days")}</TableHead>
+                    <TableHead>{t("Reason")}</TableHead>
+                    <TableHead>{t("Status")}</TableHead>
                     <TableHead></TableHead>
                   </TableRow>
                 </TableHeader>
@@ -561,13 +561,13 @@ const LeaveManagement = () => {
                 <Table>
                   <TableHeader>
                     <TableRow>
-                      <TableHead>Employee</TableHead>
-                      <TableHead>Type</TableHead>
-                      <TableHead>From</TableHead>
-                      <TableHead>To</TableHead>
-                      <TableHead>Days</TableHead>
-                      <TableHead>Reason</TableHead>
-                      <TableHead>Status</TableHead>
+                      <TableHead>{t("Employee")}</TableHead>
+                      <TableHead>{t("Type")}</TableHead>
+                      <TableHead>{t("From")}</TableHead>
+                      <TableHead>{t("To")}</TableHead>
+                      <TableHead>{t("Days")}</TableHead>
+                      <TableHead>{t("Reason")}</TableHead>
+                      <TableHead>{t("Status")}</TableHead>
                       <TableHead className="text-right">Actions</TableHead>
                     </TableRow>
                   </TableHeader>

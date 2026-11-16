@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
+import { useLanguage } from "@/contexts/LanguageContext";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Avatar, AvatarImage, AvatarFallback } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
@@ -205,6 +206,7 @@ const EmployeeProfile = () => {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
   const { user, role: viewerRole, signOut } = useAuth();
+  const { t } = useLanguage();
   const [profile, setProfile] = useState<Profile | null>(null);
   const [role, setRole] = useState<string>("employee");
   const [deleting, setDeleting] = useState(false);
@@ -813,7 +815,7 @@ const EmployeeProfile = () => {
               <CardHeader>
                 <div className="flex items-start justify-between gap-2 flex-wrap">
                   <div>
-                    <CardTitle className="text-base flex items-center gap-2"><Pencil className="h-4 w-4" /> Edit Profile</CardTitle>
+                    <CardTitle className="text-base flex items-center gap-2"><Pencil className="h-4 w-4" /> {t("Edit Profile")}</CardTitle>
                     <CardDescription>Basic info, role &amp; reporting. Work schedule is under the Setup tab.</CardDescription>
                   </div>
                 </div>
@@ -1137,7 +1139,7 @@ const EmployeeProfile = () => {
 
           <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
             <Card>
-              <CardHeader><CardTitle className="text-base">Contact</CardTitle></CardHeader>
+              <CardHeader><CardTitle className="text-base">{t("Contact")}</CardTitle></CardHeader>
               <CardContent className="space-y-4">
                 <Row icon={Mail} label="Email" value={fmt(profile.email)} />
                 <Row icon={Phone} label="Phone" value={fmt(profile.phone)} />
@@ -1145,7 +1147,7 @@ const EmployeeProfile = () => {
             </Card>
 
             <Card>
-              <CardHeader><CardTitle className="text-base">Employment</CardTitle></CardHeader>
+              <CardHeader><CardTitle className="text-base">{t("Employment")}</CardTitle></CardHeader>
               <CardContent className="space-y-4">
                 <Row icon={IdCard} label="Employee ID" value={<span className="font-mono text-xs">{profile.id}</span>} />
                 <Row icon={Briefcase} label="Designation" value={fmt(profile.designation)} />
@@ -1169,7 +1171,7 @@ const EmployeeProfile = () => {
             </Card>
 
             <Card>
-              <CardHeader><CardTitle className="text-base">Location</CardTitle></CardHeader>
+              <CardHeader><CardTitle className="text-base">{t("Location")}</CardTitle></CardHeader>
               <CardContent className="space-y-4">
                 <Row icon={Building2} label="Wing" value={
                   wingIds.length > 1
@@ -1186,8 +1188,8 @@ const EmployeeProfile = () => {
               <CardHeader>
                 <div className="flex items-start justify-between gap-2 flex-wrap">
                   <div>
-                    <CardTitle className="text-base flex items-center gap-2"><ShieldAlert className="h-4 w-4" /> Account Actions</CardTitle>
-                    <CardDescription>Change password or permanently remove this account.</CardDescription>
+                    <CardTitle className="text-base flex items-center gap-2"><ShieldAlert className="h-4 w-4" /> {t("Account Actions")}</CardTitle>
+                    <CardDescription>{t("Change password or permanently remove this account.")}</CardDescription>
                   </div>
                 </div>
               </CardHeader>
@@ -1251,7 +1253,7 @@ const EmployeeProfile = () => {
             <CardHeader>
               <div className="flex items-start justify-between gap-2 flex-wrap">
                 <div>
-                  <CardTitle className="text-base flex items-center gap-2"><ClipboardList className="h-4 w-4" /> Personal Information</CardTitle>
+                  <CardTitle className="text-base flex items-center gap-2"><ClipboardList className="h-4 w-4" /> {t("Personal Information")}</CardTitle>
                   <CardDescription>
                     {(isSelf || isAdmin)
                       ? "Personal Email, Official Gmail, Official OneDrive and Phone Number also appear in Team Member Details."
@@ -1293,7 +1295,7 @@ const EmployeeProfile = () => {
         <TabsContent value="financial" className="mt-4 space-y-4">
           <Card>
             <CardHeader className="pb-2">
-              <CardTitle className="text-sm text-muted-foreground flex items-center gap-2"><DollarSign className="h-4 w-4" /> Gross Salary</CardTitle>
+              <CardTitle className="text-sm text-muted-foreground flex items-center gap-2"><DollarSign className="h-4 w-4" /> {t("Gross Salary")}</CardTitle>
             </CardHeader>
             <CardContent>
               {isAdmin ? (
@@ -1317,7 +1319,7 @@ const EmployeeProfile = () => {
           </Card>
 
           <Card>
-            <CardHeader className="pb-2"><CardTitle className="text-base">Salary Breakdown</CardTitle></CardHeader>
+            <CardHeader className="pb-2"><CardTitle className="text-base">{t("Salary Breakdown")}</CardTitle></CardHeader>
             <CardContent>
               <ol className="space-y-2 list-decimal list-inside">
                 <li className="flex items-center justify-between gap-4">
@@ -1342,7 +1344,7 @@ const EmployeeProfile = () => {
 
           <Card>
             <CardHeader>
-              <CardTitle className="text-base flex items-center gap-2"><TrendingUp className="h-4 w-4" /> Promotion & Increment History</CardTitle>
+              <CardTitle className="text-base flex items-center gap-2"><TrendingUp className="h-4 w-4" /> {t("Promotion & Increment History")}</CardTitle>
             </CardHeader>
             <CardContent>
               {increments.length === 0 ? (
@@ -1352,9 +1354,9 @@ const EmployeeProfile = () => {
                   <Table>
                     <TableHeader>
                       <TableRow>
-                        <TableHead>Effective Date</TableHead>
-                        <TableHead>Effective Month</TableHead>
-                        <TableHead>Cycle</TableHead>
+                        <TableHead>{t("Effective Date")}</TableHead>
+                        <TableHead>{t("Effective Month")}</TableHead>
+                        <TableHead>{t("Cycle")}</TableHead>
                         <TableHead className="text-right">Previous Basic</TableHead>
                         <TableHead className="text-right">Increment %</TableHead>
                         <TableHead className="text-right">Increment Amount</TableHead>
@@ -1364,7 +1366,7 @@ const EmployeeProfile = () => {
                         <TableHead className="text-right">Retention Amount</TableHead>
                         <TableHead className="text-right">New Basic</TableHead>
                         <TableHead className="text-right">New Gross</TableHead>
-                        <TableHead>Reason</TableHead>
+                        <TableHead>{t("Reason")}</TableHead>
                       </TableRow>
                     </TableHeader>
                     <TableBody>
@@ -1415,8 +1417,8 @@ const EmployeeProfile = () => {
               <CardHeader>
                 <div className="flex items-start justify-between gap-2 flex-wrap">
                   <div>
-                    <CardTitle className="text-base">Assigned Projects</CardTitle>
-                    <CardDescription>Which projects this employee is a member of.</CardDescription>
+                    <CardTitle className="text-base">{t("Assigned Projects")}</CardTitle>
+                    <CardDescription>{t("Which projects this employee is a member of.")}</CardDescription>
                   </div>
                 </div>
               </CardHeader>
@@ -1454,7 +1456,7 @@ const EmployeeProfile = () => {
 
           <Card>
             <CardHeader>
-              <CardTitle className="text-base flex items-center gap-2"><FolderKanban className="h-4 w-4" /> Assigned Projects & Tasks</CardTitle>
+              <CardTitle className="text-base flex items-center gap-2"><FolderKanban className="h-4 w-4" /> {t("Assigned Projects & Tasks")}</CardTitle>
             </CardHeader>
             <CardContent>
               {tasks.length === 0 ? (
@@ -1464,11 +1466,11 @@ const EmployeeProfile = () => {
                   <Table>
                     <TableHeader>
                       <TableRow>
-                        <TableHead>Task</TableHead>
-                        <TableHead>Project</TableHead>
-                        <TableHead>Priority</TableHead>
-                        <TableHead>Due Date</TableHead>
-                        <TableHead>Status</TableHead>
+                        <TableHead>{t("Task")}</TableHead>
+                        <TableHead>{t("Project")}</TableHead>
+                        <TableHead>{t("Priority")}</TableHead>
+                        <TableHead>{t("Due Date")}</TableHead>
+                        <TableHead>{t("Status")}</TableHead>
                       </TableRow>
                     </TableHeader>
                     <TableBody>
@@ -1499,7 +1501,7 @@ const EmployeeProfile = () => {
         <TabsContent value="team" className="mt-4 space-y-4">
           <Card>
             <CardHeader>
-              <CardTitle className="text-base flex items-center gap-2"><UserCog className="h-4 w-4" /> Direct Reports ({reportCount})</CardTitle>
+              <CardTitle className="text-base flex items-center gap-2"><UserCog className="h-4 w-4" /> {t("Direct Reports")} ({reportCount})</CardTitle>
             </CardHeader>
             <CardContent>
               {reportCount === 0 ? (
@@ -1533,7 +1535,7 @@ const EmployeeProfile = () => {
           {canManageThisEmployee && (
             <Card>
               <CardHeader>
-                <CardTitle className="text-base flex items-center gap-2"><Clock3 className="h-4 w-4" /> Office Hours &amp; Work Schedule</CardTitle>
+                <CardTitle className="text-base flex items-center gap-2"><Clock3 className="h-4 w-4" /> {t("Office Hours & Work Schedule")}</CardTitle>
                 <CardDescription>
                   Attendance, late arrival, due time, overtime and leave are all calculated against these values.
                   {!isAdmin && " Admin only can edit — you can view these settings."}
@@ -1601,7 +1603,7 @@ const EmployeeProfile = () => {
               <CardHeader>
                 <div className="flex items-start justify-between gap-2 flex-wrap">
                   <div>
-                    <CardTitle className="text-base">Leave Defaults</CardTitle>
+                    <CardTitle className="text-base">{t("Leave Defaults")}</CardTitle>
                     <CardDescription>
                       Applies to every employee for each leave type — not just this one.
                       {!isAdmin && " Admin only can edit — you can view these settings."}

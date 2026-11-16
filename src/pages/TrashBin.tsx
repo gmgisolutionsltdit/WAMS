@@ -10,6 +10,7 @@ import { format, differenceInCalendarDays } from "date-fns";
 import { RotateCcw, Trash2 } from "lucide-react";
 import { PhraseConfirmDialog } from "@/components/PhraseConfirmDialog";
 import { TRASH_LABEL, restoreFromTrash, type TrashEntityType } from "@/lib/trash";
+import { useLanguage } from "@/contexts/LanguageContext";
 import { TableSkeletonRows } from "@/components/TableSkeleton";
 
 type TrashRow = {
@@ -45,6 +46,7 @@ const summarize = (row: TrashRow): string => {
 };
 
 const TrashBin = () => {
+  const { t: tr } = useLanguage();
   const [rows, setRows] = useState<TrashRow[]>([]);
   const [loading, setLoading] = useState(false);
   const [names, setNames] = useState<Record<string, string>>({});
@@ -118,7 +120,7 @@ const TrashBin = () => {
     <div className="space-y-4">
       <Card>
         <CardHeader>
-          <CardTitle>Trash</CardTitle>
+          <CardTitle>{tr("Trash")}</CardTitle>
           <CardDescription>
             Deleted Overtime, Manual Time, Loan and Expense history lands here first — restorable for 30 days, then it's gone for good. Late Time and Leave deletes are permanent right away (restoring either wouldn't re-apply its attendance/balance effect).
           </CardDescription>
@@ -151,13 +153,13 @@ const TrashBin = () => {
                 <Table>
                   <TableHeader>
                     <TableRow>
-                      <TableHead>Employee</TableHead>
-                      <TableHead>Details</TableHead>
-                      <TableHead>Deleted By</TableHead>
-                      <TableHead>Reason</TableHead>
-                      <TableHead>Deleted</TableHead>
-                      <TableHead>Days Left</TableHead>
-                      <TableHead>Actions</TableHead>
+                      <TableHead>{tr("Employee")}</TableHead>
+                      <TableHead>{tr("Details")}</TableHead>
+                      <TableHead>{tr("Deleted By")}</TableHead>
+                      <TableHead>{tr("Reason")}</TableHead>
+                      <TableHead>{tr("Deleted")}</TableHead>
+                      <TableHead>{tr("Days Left")}</TableHead>
+                      <TableHead>{tr("Actions")}</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>

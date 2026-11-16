@@ -1,5 +1,6 @@
 import { useEffect, useState, useCallback } from "react";
 import { useAuth } from "@/contexts/AuthContext";
+import { useLanguage } from "@/contexts/LanguageContext";
 import { supabase } from "@/integrations/supabase/client";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -43,6 +44,7 @@ const groupHolidays = (rows: any[]) => {
 
 const Holidays = () => {
   const { role } = useAuth();
+  const { t } = useLanguage();
   const [holidays, setHolidays] = useState<any[]>([]);
   const [wings, setWings] = useState<{ id: string; name: string; active: boolean }[]>([]);
   const [open, setOpen] = useState(false);
@@ -139,7 +141,7 @@ const Holidays = () => {
   return (
     <Card>
       <CardHeader className="flex flex-row items-center justify-between">
-        <CardTitle className="flex items-center gap-2"><Calendar className="h-5 w-5" /> Holidays</CardTitle>
+        <CardTitle className="flex items-center gap-2"><Calendar className="h-5 w-5" /> {t("Holidays")}</CardTitle>
         {isAdmin && (
         <div className="flex gap-2">
           <Dialog open={bulkOpen} onOpenChange={setBulkOpen}>
@@ -192,16 +194,16 @@ const Holidays = () => {
         <Table>
           <TableHeader>
             <TableRow>
-              <TableHead>Date</TableHead>
-              <TableHead>Day</TableHead>
-              <TableHead>Name</TableHead>
-              <TableHead>Wing</TableHead>
-              {isAdmin && <TableHead>Actions</TableHead>}
+              <TableHead>{t("Date")}</TableHead>
+              <TableHead>{t("Day")}</TableHead>
+              <TableHead>{t("Name")}</TableHead>
+              <TableHead>{t("Wing")}</TableHead>
+              {isAdmin && <TableHead>{t("Actions")}</TableHead>}
             </TableRow>
           </TableHeader>
           <TableBody>
             {holidays.length === 0 ? (
-              <TableRow><TableCell colSpan={isAdmin ? 5 : 4} className="text-center text-muted-foreground">No holidays declared</TableCell></TableRow>
+              <TableRow><TableCell colSpan={isAdmin ? 5 : 4} className="text-center text-muted-foreground">{t("No holidays declared")}</TableCell></TableRow>
             ) : groupHolidays(holidays).map((g) => (
               <TableRow key={g.ids[0]}>
                 <TableCell className="whitespace-nowrap">
@@ -218,7 +220,7 @@ const Holidays = () => {
                 <TableCell className="whitespace-nowrap">
                   {g.wing_names?.length
                     ? g.wing_names.map((w) => <Badge key={w} variant="secondary" className="mr-1">{w}</Badge>)
-                    : <Badge variant="outline">All</Badge>}
+                    : <Badge variant="outline">{t("All")}</Badge>}
                 </TableCell>
                 {isAdmin && (
                   <TableCell className="space-x-1">

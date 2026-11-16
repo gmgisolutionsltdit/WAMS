@@ -31,6 +31,7 @@ import AttachmentsInput from "@/components/AttachmentsInput";
 import AttachmentThumbnails from "@/components/AttachmentThumbnails";
 import { DeleteReasonDialog } from "@/components/DeleteReasonDialog";
 import { moveToTrash, toastDeletedWithUndo } from "@/lib/trash";
+import { useLanguage } from "@/contexts/LanguageContext";
 import { Skeleton } from "@/components/ui/skeleton";
 import { TableSkeletonRows } from "@/components/TableSkeleton";
 
@@ -321,9 +322,9 @@ const Payment = () => {
                 <Table>
                   <TableHeader>
                     <TableRow>
-                      {canApprove && <TableHead>Employee</TableHead>}
-                      <TableHead>Date</TableHead><TableHead>Amount</TableHead>
-                      <TableHead>Reason</TableHead><TableHead>Installments</TableHead><TableHead>Installment Month</TableHead><TableHead>Balance</TableHead><TableHead>Status</TableHead><TableHead></TableHead>
+                      {canApprove && <TableHead>{t("Employee")}</TableHead>}
+                      <TableHead>{t("Date")}</TableHead><TableHead>{t("Amount")}</TableHead>
+                      <TableHead>{t("Reason")}</TableHead><TableHead>{t("Installments")}</TableHead><TableHead>{t("Installment Month")}</TableHead><TableHead>{t("Balance")}</TableHead><TableHead>{t("Status")}</TableHead><TableHead></TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
@@ -378,6 +379,7 @@ export default Payment;
  * ===================================================================== */
 
 function AdminLoanPanel({ loans, renderRow }: { loans: any[]; renderRow: (loan: any, showEmployee: boolean) => JSX.Element }) {
+  const { t } = useLanguage();
   const [employees, setEmployees] = useState<{ id: string; full_name: string | null; email: string | null }[]>([]);
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const [monthFrom, setMonthFrom] = useState("");
@@ -439,7 +441,7 @@ function AdminLoanPanel({ loans, renderRow }: { loans: any[]; renderRow: (loan: 
     <div className="space-y-4">
       <Card>
         <CardHeader>
-          <CardTitle className="text-base">Filters</CardTitle>
+          <CardTitle className="text-base">{t("Filters")}</CardTitle>
           <div className="flex flex-wrap items-start gap-3 pt-2">
             <div className="space-y-1">
               <Label className="text-xs">Employees</Label>
@@ -480,19 +482,19 @@ function AdminLoanPanel({ loans, renderRow }: { loans: any[]; renderRow: (loan: 
       </Card>
 
       <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-        <Card><CardHeader className="pb-2"><CardDescription>Total Loan Balance</CardDescription><CardTitle>{summary.totalLoanBalance.toLocaleString()}</CardTitle></CardHeader></Card>
-        <Card><CardHeader className="pb-2"><CardDescription>Total Current Balance</CardDescription><CardTitle>{summary.totalCurrentBalance.toLocaleString()}</CardTitle></CardHeader></Card>
+        <Card><CardHeader className="pb-2"><CardDescription>{t("Total Loan Balance")}</CardDescription><CardTitle>{summary.totalLoanBalance.toLocaleString()}</CardTitle></CardHeader></Card>
+        <Card><CardHeader className="pb-2"><CardDescription>{t("Total Current Balance")}</CardDescription><CardTitle>{summary.totalCurrentBalance.toLocaleString()}</CardTitle></CardHeader></Card>
       </div>
 
       <Card>
-        <CardHeader><CardTitle className="text-base">Loan History</CardTitle></CardHeader>
+        <CardHeader><CardTitle className="text-base">{t("Loan History")}</CardTitle></CardHeader>
         <CardContent>
           <div className="overflow-x-auto">
             <Table>
               <TableHeader>
                 <TableRow>
-                  <TableHead>Employee</TableHead><TableHead>Date</TableHead><TableHead>Amount</TableHead>
-                  <TableHead>Reason</TableHead><TableHead>Installments</TableHead><TableHead>Installment Month</TableHead><TableHead>Balance</TableHead><TableHead>Status</TableHead><TableHead></TableHead>
+                  <TableHead>{t("Employee")}</TableHead><TableHead>{t("Date")}</TableHead><TableHead>{t("Amount")}</TableHead>
+                  <TableHead>{t("Reason")}</TableHead><TableHead>{t("Installments")}</TableHead><TableHead>{t("Installment Month")}</TableHead><TableHead>{t("Balance")}</TableHead><TableHead>{t("Status")}</TableHead><TableHead></TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -621,6 +623,7 @@ function PaymentHistoryTable({
   userId, canDelete, refreshKey,
 }: { userId: string; canDelete: boolean; refreshKey?: number }) {
   const { user } = useAuth();
+  const { t } = useLanguage();
   const [rows, setRows] = useState<PayrollSettlementRow[]>([]);
   const [loading, setLoading] = useState(false);
   const [deletingId, setDeletingId] = useState<string | null>(null);
@@ -664,19 +667,19 @@ function PaymentHistoryTable({
 
   return (
     <div className="space-y-2">
-      <p className="text-sm font-medium">Payment History</p>
+      <p className="text-sm font-medium">{t("Payment History")}</p>
       <div className="overflow-x-auto rounded-md border">
         <Table>
           <TableHeader>
             <TableRow>
-              <TableHead>Month</TableHead>
-              <TableHead className="text-right">Net Salary</TableHead>
-              <TableHead className="text-right">Net OT</TableHead>
-              <TableHead className="text-right">Expense Paid</TableHead>
-              <TableHead className="text-right">Loan Paid</TableHead>
-              <TableHead className="text-right">Net Payment</TableHead>
-              <TableHead>Status</TableHead>
-              {canDelete && <TableHead className="text-right">Action</TableHead>}
+              <TableHead>{t("Month")}</TableHead>
+              <TableHead className="text-right">{t("Net Salary")}</TableHead>
+              <TableHead className="text-right">{t("Net OT")}</TableHead>
+              <TableHead className="text-right">{t("Expense Paid")}</TableHead>
+              <TableHead className="text-right">{t("Loan Paid")}</TableHead>
+              <TableHead className="text-right">{t("Net Payment")}</TableHead>
+              <TableHead>{t("Status")}</TableHead>
+              {canDelete && <TableHead className="text-right">{t("Action")}</TableHead>}
             </TableRow>
           </TableHeader>
           <TableBody>
@@ -746,6 +749,7 @@ function PaymentHistoryTable({
 
 function MyPaymentsTab() {
   const { user } = useAuth();
+  const { t } = useLanguage();
   const [employees, setEmployees] = useState<{ id: string; full_name: string | null; email: string | null }[]>([]);
   const [selectedUserId, setSelectedUserId] = useState("");
   const [month, setMonth] = useState(() => format(new Date(), "yyyy-MM"));
@@ -1126,8 +1130,8 @@ function MyPaymentsTab() {
     <div className="space-y-4">
     <Card>
       <CardHeader>
-        <CardTitle>My Payments</CardTitle>
-        <CardDescription>Decide how much of this month's Overtime, Expense balance and Loan due to pay now. Due time is deducted from approved Overtime.</CardDescription>
+        <CardTitle>{t("My Payments")}</CardTitle>
+        <CardDescription>{t("Decide how much of this month's Overtime, Expense balance and Loan due to pay now. Due time is deducted from approved Overtime.")}</CardDescription>
         <div className="flex flex-wrap items-end gap-3 pt-2">
           <div className="space-y-1">
             <Label className="text-xs">Employee</Label>
@@ -1289,6 +1293,7 @@ function MyPaymentsTab() {
 
 function MyPaymentsSummary() {
   const { user } = useAuth();
+  const { t } = useLanguage();
   const [month, setMonth] = useState(() => format(new Date(), "yyyy-MM"));
   const [loading, setLoading] = useState(false);
   const [grossSalary, setGrossSalary] = useState(0);
@@ -1501,8 +1506,8 @@ function MyPaymentsSummary() {
   return (
     <Card>
       <CardHeader>
-        <CardTitle>My Payments</CardTitle>
-        <CardDescription>What's been recorded for your Net Salary, Overtime, Expense balance and Loan due — read only. Due time is deducted from approved Overtime.</CardDescription>
+        <CardTitle>{t("My Payments")}</CardTitle>
+        <CardDescription>{t("What's been recorded for your Net Salary, Overtime, Expense balance and Loan due — read only. Due time is deducted from approved Overtime.")}</CardDescription>
         <div className="flex flex-wrap items-end gap-3 pt-2">
           <div className="space-y-1">
             <Label className="text-xs">Month</Label>
@@ -1727,14 +1732,15 @@ function exportAdminSalaryCSV(rows: SalaryMonthRow[]) {
 }
 
 function SalaryMonthlyTableView({ rows, showEmployee, loading }: { rows: SalaryMonthRow[]; showEmployee: boolean; loading: boolean }) {
+  const { t } = useLanguage();
   const colCount = (showEmployee ? 12 : 10) + 2;
   return (
     <div className="overflow-x-auto">
       <Table>
         <TableHeader>
           <TableRow>
-            {showEmployee && <TableHead>Employee</TableHead>}
-            <TableHead>Month</TableHead>
+            {showEmployee && <TableHead>{t("Employee")}</TableHead>}
+            <TableHead>{t("Month")}</TableHead>
             {showEmployee && <TableHead className="text-right">Gross</TableHead>}
             <TableHead className="text-right">Basic (50%)</TableHead>
             <TableHead className="text-right">House Rent (35%)</TableHead>
@@ -1746,7 +1752,7 @@ function SalaryMonthlyTableView({ rows, showEmployee, loading }: { rows: SalaryM
             <TableHead className="text-right">- Expense</TableHead>
             <TableHead className="text-right">Loan</TableHead>
             <TableHead className="text-right">Final</TableHead>
-            <TableHead>Payment Status</TableHead>
+            <TableHead>{t("Payment Status")}</TableHead>
           </TableRow>
         </TableHeader>
         <TableBody>
@@ -1822,7 +1828,7 @@ function MySalaryMonthlyTable() {
   return (
     <Card>
       <CardHeader>
-        <CardTitle className="text-base">Monthly Salary Summary</CardTitle>
+        <CardTitle className="text-base">{t("Monthly Salary Summary")}</CardTitle>
         <CardDescription>Every month's breakdown — the same figures as Salary Summary above.</CardDescription>
         <div className="flex flex-wrap items-end gap-3 pt-2">
           <div className="space-y-1"><Label className="text-xs">Month From</Label><Input type="month" value={monthFrom} onChange={(e) => setMonthFrom(e.target.value)} /></div>
@@ -1838,6 +1844,7 @@ function MySalaryMonthlyTable() {
 }
 
 function AdminSalaryMonthlyTable() {
+  const { t } = useLanguage();
   const [employees, setEmployees] = useState<{ id: string; full_name: string | null; email: string | null }[]>([]);
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const [monthFrom, setMonthFrom] = useState(() => format(new Date(), "yyyy-MM"));
@@ -1880,7 +1887,7 @@ function AdminSalaryMonthlyTable() {
     <Card>
       <CardHeader>
         <div className="flex items-start justify-between gap-3">
-          <CardTitle className="text-base">Monthly Salary Summary — All Employees</CardTitle>
+          <CardTitle className="text-base">{t("Monthly Salary Summary — All Employees")}</CardTitle>
           <Button variant="outline" size="sm" className="shrink-0" onClick={() => exportAdminSalaryCSV(rows)}>
             <Download className="h-4 w-4 mr-2" /> Export CSV
           </Button>
@@ -1942,6 +1949,7 @@ type ExpenseType = { name: string; entry_type: "expense" | "advance" };
 
 function ExpenseClaimsTab() {
   const { user, role } = useAuth();
+  const { t } = useLanguage();
   const isAdmin = role === "admin";
   const canApprove = role === "admin" || role === "manager";
   const [claims, setClaims] = useState<any[]>([]);
@@ -2269,7 +2277,7 @@ function ExpenseClaimsTab() {
 
       <Card>
         <CardHeader>
-          <CardTitle className="text-base">Filter Options</CardTitle>
+          <CardTitle className="text-base">{t("Filter Options")}</CardTitle>
           <div className="flex flex-wrap items-end gap-3 pt-2">
             <div className="space-y-1">
               <Label className="text-xs">Employees</Label>
@@ -2309,9 +2317,9 @@ function ExpenseClaimsTab() {
       </Card>
 
       <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-        <Card><CardHeader className="pb-2"><CardDescription>Advance</CardDescription><CardTitle>{advanceTotal.toLocaleString()}</CardTitle></CardHeader></Card>
-        <Card><CardHeader className="pb-2"><CardDescription>Expense</CardDescription><CardTitle>{expenseTotal.toLocaleString()}</CardTitle></CardHeader></Card>
-        <Card><CardHeader className="pb-2"><CardDescription>Net Amount</CardDescription><CardTitle className={netAmount < 0 ? "text-destructive" : ""}>{netAmount.toLocaleString()}</CardTitle></CardHeader></Card>
+        <Card><CardHeader className="pb-2"><CardDescription>{t("Advance")}</CardDescription><CardTitle>{advanceTotal.toLocaleString()}</CardTitle></CardHeader></Card>
+        <Card><CardHeader className="pb-2"><CardDescription>{t("Expense")}</CardDescription><CardTitle>{expenseTotal.toLocaleString()}</CardTitle></CardHeader></Card>
+        <Card><CardHeader className="pb-2"><CardDescription>{t("Net Amount")}</CardDescription><CardTitle className={netAmount < 0 ? "text-destructive" : ""}>{netAmount.toLocaleString()}</CardTitle></CardHeader></Card>
       </div>
 
       <ClaimTable
@@ -2331,14 +2339,14 @@ function ExpenseClaimsTab() {
 
 const ClaimTable = ({ claims, showEmployee, onApprove, onReject, onTogglePaid, onDelete, isAdmin, canApprove, currentUserId }: any) => (
   <Card>
-    <CardHeader><CardTitle className="text-base">Claim History</CardTitle></CardHeader>
+    <CardHeader><CardTitle className="text-base">{t("Claim History")}</CardTitle></CardHeader>
     <CardContent>
       <div className="overflow-x-auto">
       <Table>
         <TableHeader>
           <TableRow>
-            {showEmployee && <TableHead>Employee</TableHead>}
-            <TableHead>Date</TableHead><TableHead>Category</TableHead><TableHead>Type</TableHead><TableHead>Direction</TableHead><TableHead>Amount</TableHead><TableHead>Description</TableHead><TableHead>Receipt</TableHead><TableHead>Status</TableHead><TableHead>Approved/Rejected By</TableHead>
+            {showEmployee && <TableHead>{t("Employee")}</TableHead>}
+            <TableHead>{t("Date")}</TableHead><TableHead>{t("Category")}</TableHead><TableHead>{t("Type")}</TableHead><TableHead>{t("Direction")}</TableHead><TableHead>{t("Amount")}</TableHead><TableHead>{t("Description")}</TableHead><TableHead>{t("Receipt")}</TableHead><TableHead>{t("Status")}</TableHead><TableHead>{t("Approved/Rejected By")}</TableHead>
             <TableHead></TableHead>
           </TableRow>
         </TableHeader>

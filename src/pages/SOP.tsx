@@ -1,5 +1,6 @@
 import { useEffect, useState, useCallback, useRef } from "react";
 import { useAuth } from "@/contexts/AuthContext";
+import { useLanguage } from "@/contexts/LanguageContext";
 import { supabase } from "@/integrations/supabase/client";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -35,6 +36,7 @@ type SopUpdate = {
 
 const SOP = () => {
   const { user, role } = useAuth();
+  const { t } = useLanguage();
   const isAdmin = role === "admin";
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -216,8 +218,8 @@ const SOP = () => {
 
       <Card>
         <CardHeader>
-          <CardTitle className="flex items-center gap-2"><FileText className="h-5 w-5" /> Current SOP</CardTitle>
-          <CardDescription>The active Standard Operating Procedure document(s).</CardDescription>
+          <CardTitle className="flex items-center gap-2"><FileText className="h-5 w-5" /> {t("Current SOP")}</CardTitle>
+          <CardDescription>{t("The active Standard Operating Procedure document(s).")}</CardDescription>
         </CardHeader>
         <CardContent>
           {current.length === 0 ? (
@@ -254,8 +256,8 @@ const SOP = () => {
       {history.length > 0 && (
         <Card>
           <CardHeader>
-            <CardTitle className="text-base">Version History</CardTitle>
-            <CardDescription>Previously published SOP versions, kept for reference.</CardDescription>
+            <CardTitle className="text-base">{t("Version History")}</CardTitle>
+            <CardDescription>{t("Previously published SOP versions, kept for reference.")}</CardDescription>
           </CardHeader>
           <CardContent className="space-y-2">
             {history.map((doc) => (
@@ -286,8 +288,8 @@ const SOP = () => {
 
       <Card>
         <CardHeader>
-          <CardTitle className="text-base flex items-center gap-2"><MessageSquareText className="h-4 w-4" /> Rule Updates</CardTitle>
-          <CardDescription>In-between changes shared as text, until the next SOP publication.</CardDescription>
+          <CardTitle className="text-base flex items-center gap-2"><MessageSquareText className="h-4 w-4" /> {t("Rule Updates")}</CardTitle>
+          <CardDescription>{t("In-between changes shared as text, until the next SOP publication.")}</CardDescription>
         </CardHeader>
         <CardContent className="space-y-3">
           {updates.length === 0 ? (

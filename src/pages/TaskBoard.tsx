@@ -1,6 +1,7 @@
 import { useEffect, useState, useCallback, useMemo, useRef } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { useAuth } from "@/contexts/AuthContext";
+import { useLanguage } from "@/contexts/LanguageContext";
 import { supabase } from "@/integrations/supabase/client";
 import type { Database } from "@/integrations/supabase/types";
 import { Button } from "@/components/ui/button";
@@ -60,6 +61,7 @@ const TaskBoard = () => {
   const { id: projectId } = useParams<{ id: string }>();
   const navigate = useNavigate();
   const { user, role } = useAuth();
+  const { t } = useLanguage();
 
   const [project, setProject] = useState<any>(null);
   const [boardId, setBoardId] = useState<string | null>(null);
@@ -692,7 +694,7 @@ const TaskBoard = () => {
           <BoardSearchCreate />
         </div>
         <div className="flex items-center gap-3 shrink-0">
-          <Button size="icon" variant="ghost" aria-label="Back to boards" onClick={() => navigate("/tasks")}>
+          <Button size="icon" variant="ghost" aria-label={t("Back to boards")} onClick={() => navigate("/tasks")}>
             <ArrowLeft className="h-4 w-4" />
           </Button>
           <div className="flex items-center gap-2 text-muted-foreground text-sm py-6">
@@ -748,7 +750,7 @@ const TaskBoard = () => {
       {/* Header */}
       <div className="flex items-center justify-between flex-wrap gap-2 shrink-0">
         <div className="flex items-center gap-3 min-w-0">
-          <Button size="icon" variant="ghost" aria-label="Back to boards" onClick={() => navigate("/tasks")}>
+          <Button size="icon" variant="ghost" aria-label={t("Back to boards")} onClick={() => navigate("/tasks")}>
             <ArrowLeft className="h-4 w-4" />
           </Button>
           <div className="min-w-0">
@@ -876,42 +878,42 @@ const TaskBoard = () => {
       <Dialog open={createOpen} onOpenChange={setCreateOpen}>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>Create Task</DialogTitle>
-            <DialogDescription>Add a new ticket to this column.</DialogDescription>
+            <DialogTitle>{t("Create Task")}</DialogTitle>
+            <DialogDescription>{t("Add a new ticket to this column.")}</DialogDescription>
           </DialogHeader>
           <div className="space-y-3">
             <div>
-              <Label>Title</Label>
+              <Label>{t("Title")}</Label>
               <Input value={form.title} onChange={(e) => setForm((f) => ({ ...f, title: e.target.value }))} />
             </div>
             <div>
-              <Label>Description</Label>
+              <Label>{t("Description")}</Label>
               <Textarea value={form.description} onChange={(e) => setForm((f) => ({ ...f, description: e.target.value }))} />
             </div>
             <div className="grid grid-cols-2 gap-3">
               <div>
-                <Label>Priority</Label>
+                <Label>{t("Priority")}</Label>
                 <Select value={form.priority} onValueChange={(v) => setForm((f) => ({ ...f, priority: v }))}>
                   <SelectTrigger><SelectValue /></SelectTrigger>
                   <SelectContent>{PRIORITIES.map((p) => <SelectItem key={p} value={p}>{p}</SelectItem>)}</SelectContent>
                 </Select>
               </div>
               <div>
-                <Label>Due Date</Label>
+                <Label>{t("Due Date")}</Label>
                 <Input type="date" value={form.due_date} onChange={(e) => setForm((f) => ({ ...f, due_date: e.target.value }))} />
               </div>
             </div>
             <div>
-              <Label>Assignee</Label>
+              <Label>{t("Assignee")}</Label>
               <EmployeePicker
                 value={form.assignee_id || null}
                 onChange={(id) => setForm((f) => ({ ...f, assignee_id: id || "" }))}
-                placeholder="Select assignee"
+                placeholder={t("Select assignee")}
                 restrictToIds={memberProfiles.map((p) => p.id)}
               />
             </div>
           </div>
-          <DialogFooter><Button onClick={submitCreate}>Create</Button></DialogFooter>
+          <DialogFooter><Button onClick={submitCreate}>{t("Create")}</Button></DialogFooter>
         </DialogContent>
       </Dialog>
 
@@ -1041,7 +1043,7 @@ const TaskBoard = () => {
               <div className="grid grid-cols-5 gap-4">
                 <div className="col-span-3 space-y-4">
                   <div>
-                    <Label>Description</Label>
+                    <Label>{t("Description")}</Label>
                     {editingDescription ? (
                       <div className="space-y-2 mt-1">
                         <Textarea
@@ -1100,7 +1102,7 @@ const TaskBoard = () => {
                     <Input
                       value={newComment}
                       onChange={(e) => setNewComment(e.target.value)}
-                      placeholder="Add a comment..."
+                      placeholder={t("Add a comment...")}
                       onKeyDown={(e) => e.key === "Enter" && addComment()}
                     />
                     <Button size="sm" onClick={addComment}>Post</Button>

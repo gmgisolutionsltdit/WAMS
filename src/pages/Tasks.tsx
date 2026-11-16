@@ -2,6 +2,7 @@ import { useEffect, useState, useCallback, useMemo } from "react";
 import { useNavigate } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
+import { useLanguage } from "@/contexts/LanguageContext";
 import { Plus, FolderKanban, Star, Clock, Users } from "lucide-react";
 import { useRealtimeSubscription } from "@/hooks/useRealtimeSubscription";
 import { colorForBoard, getStarredBoardIds, toggleStarredBoard, getRecentBoardIds } from "@/lib/boardPrefs";
@@ -43,6 +44,7 @@ const BoardTile = ({ board, starred, onToggleStar, onOpen }: {
 const Tasks = () => {
   const navigate = useNavigate();
   const { user } = useAuth();
+  const { t } = useLanguage();
   const [boards, setBoards] = useState<Board[]>([]);
   const [memberBoardIds, setMemberBoardIds] = useState<Set<string>>(new Set());
 
@@ -89,19 +91,19 @@ const Tasks = () => {
     <div className="space-y-6">
       <div className="flex items-center justify-between flex-wrap gap-2">
         <h2 className="text-2xl font-semibold flex items-center gap-2">
-          <FolderKanban className="h-6 w-6" /> Tasks
+          <FolderKanban className="h-6 w-6" /> {t("Tasks")}
         </h2>
         <BoardSearchCreate />
       </div>
 
       {boards.length === 0 && (
-        <p className="text-sm text-muted-foreground">No boards yet. Create your first board to start organizing tasks.</p>
+        <p className="text-sm text-muted-foreground">{t("No boards yet. Create your first board to start organizing tasks.")}</p>
       )}
 
       {starredBoards.length > 0 && (
         <section className="space-y-2">
           <h3 className="flex items-center gap-2 text-sm font-semibold text-muted-foreground">
-            <Star className="h-4 w-4" /> Starred boards
+            <Star className="h-4 w-4" /> {t("Starred boards")}
           </h3>
           <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-3">
             {starredBoards.map((b) => (
@@ -114,7 +116,7 @@ const Tasks = () => {
       {recentBoards.length > 0 && (
         <section className="space-y-2">
           <h3 className="flex items-center gap-2 text-sm font-semibold text-muted-foreground">
-            <Clock className="h-4 w-4" /> Recently viewed
+            <Clock className="h-4 w-4" /> {t("Recently viewed")}
           </h3>
           <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-3">
             {recentBoards.map((b) => (
@@ -125,7 +127,7 @@ const Tasks = () => {
       )}
 
       <section className="space-y-2">
-        <h3 className="text-sm font-semibold text-muted-foreground">YOUR WORKSPACES</h3>
+        <h3 className="text-sm font-semibold text-muted-foreground">{t("YOUR WORKSPACES")}</h3>
         <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-3">
           {yourBoards.map((b) => (
             <BoardTile key={b.id} board={b} starred={starredIds.includes(b.id)} onToggleStar={toggleStar} onOpen={() => navigate(`/tasks/${b.id}`)} />
@@ -136,7 +138,7 @@ const Tasks = () => {
                 type="button"
                 className="min-h-[7.5rem] rounded-md border border-dashed flex items-center justify-center text-sm text-muted-foreground hover:bg-accent hover:text-foreground transition-colors"
               >
-                <Plus className="h-4 w-4 mr-1" /> Create new board
+                <Plus className="h-4 w-4 mr-1" /> {t("Create new board")}
               </button>
             }
             align="start"
@@ -148,7 +150,7 @@ const Tasks = () => {
       {guestWorkspaceBoards.length > 0 && (
         <section className="space-y-2">
           <h3 className="flex items-center gap-2 text-sm font-semibold text-muted-foreground">
-            <Users className="h-4 w-4" /> GUEST WORKSPACE
+            <Users className="h-4 w-4" /> {t("GUEST WORKSPACE")}
           </h3>
           <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-3">
             {guestWorkspaceBoards.map((b) => (
