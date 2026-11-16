@@ -796,14 +796,14 @@ const EmployeeProfile = () => {
       </Card>
 
       <Tabs value={activeTab} onValueChange={handleTabChange} className="w-full">
-        <TabsList className="grid grid-cols-2 sm:grid-cols-7 w-full sm:w-auto">
-          <TabsTrigger value="overview">Overview</TabsTrigger>
-          <TabsTrigger value="personal">Personal Info</TabsTrigger>
-          <TabsTrigger value="financial">Financial</TabsTrigger>
-          <TabsTrigger value="tasks">Projects & Tasks</TabsTrigger>
-          <TabsTrigger value="team">Team</TabsTrigger>
-          <TabsTrigger value="setup">Setup</TabsTrigger>
-          <TabsTrigger value="documents">Contract Documents</TabsTrigger>
+        <TabsList className="grid h-auto grid-cols-2 gap-1 sm:grid-cols-7 w-full sm:w-auto">
+          <TabsTrigger value="overview" className="whitespace-normal">Overview</TabsTrigger>
+          <TabsTrigger value="personal" className="whitespace-normal">Personal Info</TabsTrigger>
+          <TabsTrigger value="financial" className="whitespace-normal">Financial</TabsTrigger>
+          <TabsTrigger value="tasks" className="whitespace-normal">Projects & Tasks</TabsTrigger>
+          <TabsTrigger value="team" className="whitespace-normal">Team</TabsTrigger>
+          <TabsTrigger value="setup" className="whitespace-normal">Setup</TabsTrigger>
+          <TabsTrigger value="documents" className="whitespace-normal">Contract Documents</TabsTrigger>
         </TabsList>
 
         {/* OVERVIEW */}

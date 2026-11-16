@@ -204,18 +204,18 @@ const Holidays = () => {
               <TableRow><TableCell colSpan={isAdmin ? 5 : 4} className="text-center text-muted-foreground">No holidays declared</TableCell></TableRow>
             ) : groupHolidays(holidays).map((g) => (
               <TableRow key={g.ids[0]}>
-                <TableCell>
+                <TableCell className="whitespace-nowrap">
                   {g.start_date === g.end_date
                     ? format(new Date(g.start_date), "EEE, MMM d, yyyy")
                     : `${format(new Date(g.start_date), "EEE, MMM d")} – ${format(new Date(g.end_date), "EEE, MMM d, yyyy")}`}
                 </TableCell>
-                <TableCell className="text-muted-foreground">
+                <TableCell className="text-muted-foreground whitespace-nowrap">
                   {g.start_date === g.end_date
                     ? format(new Date(g.start_date), "EEEE")
                     : `${format(new Date(g.start_date), "EEEE")} – ${format(new Date(g.end_date), "EEEE")}`}
                 </TableCell>
-                <TableCell className="font-medium">{g.name}</TableCell>
-                <TableCell>
+                <TableCell className="font-medium whitespace-nowrap">{g.name}</TableCell>
+                <TableCell className="whitespace-nowrap">
                   {g.wing_names?.length
                     ? g.wing_names.map((w) => <Badge key={w} variant="secondary" className="mr-1">{w}</Badge>)
                     : <Badge variant="outline">All</Badge>}

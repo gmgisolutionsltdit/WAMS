@@ -437,17 +437,17 @@ const NoticeBoard = () => {
               type="date"
               value={filterDate}
               onChange={(e) => { setFilterDate(e.target.value); setActivityPage(1); }}
-              className="w-auto"
+              className="w-full sm:w-auto sm:min-w-[9.5rem]"
             />
             <Select value={filterUser} onValueChange={(v) => { setFilterUser(v); setActivityPage(1); }}>
-              <SelectTrigger className="w-44"><SelectValue placeholder="Employee" /></SelectTrigger>
+              <SelectTrigger className="w-full sm:w-44"><SelectValue placeholder="Employee" /></SelectTrigger>
               <SelectContent>
                 <SelectItem value="all">All Employees</SelectItem>
                 {employeeOptions.map((e) => <SelectItem key={e.id} value={e.id}>{e.name}</SelectItem>)}
               </SelectContent>
             </Select>
             <Select value={filterType} onValueChange={(v) => { setFilterType(v); setActivityPage(1); }}>
-              <SelectTrigger className="w-40"><SelectValue placeholder="Type" /></SelectTrigger>
+              <SelectTrigger className="w-full sm:w-40"><SelectValue placeholder="Type" /></SelectTrigger>
               <SelectContent>
                 <SelectItem value="all">All Types</SelectItem>
                 {Object.entries(TYPE_LABELS).map(([v, label]) => <SelectItem key={v} value={v}>{label}</SelectItem>)}
