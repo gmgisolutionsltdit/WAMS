@@ -389,7 +389,7 @@ const NoticeBoard = () => {
       <div className="flex justify-between items-center flex-wrap gap-4">
         <div>
           <h1 className="text-2xl font-display font-bold">{t("Notice Board")}</h1>
-          <p className="text-sm text-muted-foreground">Company announcements and updates.</p>
+          <p className="text-sm text-muted-foreground">{t("Company announcements and updates.")}</p>
         </div>
         {canManage && (
           <Dialog open={open} onOpenChange={setOpen}>
@@ -428,8 +428,8 @@ const NoticeBoard = () => {
       {!showArchived && (
       <Card>
         <CardHeader>
-          <CardTitle className="text-base flex items-center gap-2"><CalendarClock className="h-4 w-4" /> Requests Activity</CardTitle>
-          <CardDescription>Requests and decisions you're involved in or can approve.</CardDescription>
+          <CardTitle className="text-base flex items-center gap-2"><CalendarClock className="h-4 w-4" /> {t("Requests Activity")}</CardTitle>
+          <CardDescription>{t("Requests and decisions you're involved in or can approve.")}</CardDescription>
         </CardHeader>
         <CardContent className="space-y-3">
           <div className="flex flex-wrap gap-2">

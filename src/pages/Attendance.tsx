@@ -484,20 +484,20 @@ const Attendance = () => {
             <TableHeader>
               <TableRow>
                 <TableHead className="w-8" />
-                <TableHead>Date</TableHead>
-                <TableHead>Status</TableHead>
-                <TableHead>Start</TableHead>
-                <TableHead>Approved Start Time</TableHead>
-                <TableHead>Close</TableHead>
-                <TableHead>Sessions</TableHead>
-                <TableHead>Work Time</TableHead>
-                <TableHead>Break Time</TableHead>
-                <TableHead>Total Time</TableHead>
-                <TableHead>Due Time</TableHead>
-                <TableHead>OVERTIME (OT)</TableHead>
-                <TableHead>Approved OT</TableHead>
-                <TableHead>GMGI Time</TableHead>
-                <TableHead>GM Time</TableHead>
+                <TableHead>{t("Date")}</TableHead>
+                <TableHead>{t("Status")}</TableHead>
+                <TableHead>{t("Start")}</TableHead>
+                <TableHead>{t("Approved Start Time")}</TableHead>
+                <TableHead>{t("Close")}</TableHead>
+                <TableHead>{t("Sessions")}</TableHead>
+                <TableHead>{t("Work Time")}</TableHead>
+                <TableHead>{t("Break Time")}</TableHead>
+                <TableHead>{t("Total Time")}</TableHead>
+                <TableHead>{t("Due Time")}</TableHead>
+                <TableHead>{t("OVERTIME (OT)")}</TableHead>
+                <TableHead>{t("Approved OT")}</TableHead>
+                <TableHead>{t("GMGI Time")}</TableHead>
+                <TableHead>{t("GM Time")}</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
@@ -637,17 +637,17 @@ const Attendance = () => {
                               <TableHeader>
                                 <TableRow>
                                   <TableHead>#</TableHead>
-                                  <TableHead>Start</TableHead>
-                                  <TableHead>Close</TableHead>
-                                  <TableHead>Work From</TableHead>
-                                  <TableHead>Break Time</TableHead>
-                                  <TableHead>Work Time</TableHead>
-                                  <TableHead>Total Time</TableHead>
-                                  <TableHead>Source</TableHead>
-                                  <TableHead>Task</TableHead>
-                                  <TableHead>GMGI Time</TableHead>
-                                  <TableHead>GM Time</TableHead>
-                                  <TableHead>Actions</TableHead>
+                                  <TableHead>{t("Start")}</TableHead>
+                                  <TableHead>{t("Close")}</TableHead>
+                                  <TableHead>{t("Work From")}</TableHead>
+                                  <TableHead>{t("Break Time")}</TableHead>
+                                  <TableHead>{t("Work Time")}</TableHead>
+                                  <TableHead>{t("Total Time")}</TableHead>
+                                  <TableHead>{t("Source")}</TableHead>
+                                  <TableHead>{t("Task")}</TableHead>
+                                  <TableHead>{t("GMGI Time")}</TableHead>
+                                  <TableHead>{t("GM Time")}</TableHead>
+                                  <TableHead>{t("Actions")}</TableHead>
                                 </TableRow>
                               </TableHeader>
                               <TableBody>

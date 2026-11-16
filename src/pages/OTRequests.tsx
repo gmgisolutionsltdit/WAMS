@@ -350,11 +350,11 @@ const OTRequests = () => {
                 <Table>
                   <TableHeader>
                     <TableRow>
-                      <TableHead>Employee</TableHead>
-                      <TableHead>Date</TableHead>
-                      <TableHead>Hours</TableHead>
-                      <TableHead>Reason</TableHead>
-                      <TableHead>Actions</TableHead>
+                      <TableHead>{t("Employee")}</TableHead>
+                      <TableHead>{t("Date")}</TableHead>
+                      <TableHead>{t("Hours")}</TableHead>
+                      <TableHead>{t("Reason")}</TableHead>
+                      <TableHead>{t("Actions")}</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
@@ -391,17 +391,17 @@ const OTRequests = () => {
           <Card>
             <CardHeader>
               <CardTitle>{t("Overtime Log")}</CardTitle>
-              <CardDescription>Every overtime request you've submitted.</CardDescription>
+              <CardDescription>{t("Every overtime request you've submitted.")}</CardDescription>
             </CardHeader>
             <CardContent>
               <Table>
                 <TableHeader>
                   <TableRow>
-                    <TableHead>Date</TableHead>
-                    <TableHead>Hours</TableHead>
-                    <TableHead>Reason</TableHead>
-                    <TableHead>Status</TableHead>
-                    <TableHead>Submitted</TableHead>
+                    <TableHead>{t("Date")}</TableHead>
+                    <TableHead>{t("Hours")}</TableHead>
+                    <TableHead>{t("Reason")}</TableHead>
+                    <TableHead>{t("Status")}</TableHead>
+                    <TableHead>{t("Submitted")}</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
@@ -450,17 +450,17 @@ const OTRequests = () => {
           <Card>
             <CardHeader>
               <CardTitle>{t("Late Time Log")}</CardTitle>
-              <CardDescription>Every office-time-change request you've submitted.</CardDescription>
+              <CardDescription>{t("Every office-time-change request you've submitted.")}</CardDescription>
             </CardHeader>
             <CardContent>
               <Table>
                 <TableHeader>
                   <TableRow>
-                    <TableHead>Effective</TableHead>
-                    <TableHead>New Hours</TableHead>
-                    <TableHead>Reason</TableHead>
-                    <TableHead>Status</TableHead>
-                    <TableHead>Submitted</TableHead>
+                    <TableHead>{t("Effective")}</TableHead>
+                    <TableHead>{t("New Hours")}</TableHead>
+                    <TableHead>{t("Reason")}</TableHead>
+                    <TableHead>{t("Status")}</TableHead>
+                    <TableHead>{t("Submitted")}</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
