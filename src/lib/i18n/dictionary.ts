@@ -167,6 +167,15 @@ export const bn: Record<string, string> = {
 
   // Employee Management
   "Add Employee": "কর্মচারী যোগ করুন",
+  "Employee Management": "কর্মচারী ব্যবস্থাপনা",
+  "My Team": "আমার টিম",
+  "Search name, email, department...": "নাম, ইমেইল, বিভাগ দিয়ে খুঁজুন...",
+  Wing: "উইং",
+  Projects: "প্রজেক্ট",
+  "Reporting Boss": "রিপোর্টিং বস",
+  Service: "সার্ভিস",
+  "OT Cap (D/M)": "ওটি সীমা (দৈ/মা)",
+  "Temp Password / Error": "অস্থায়ী পাসওয়ার্ড / ত্রুটি",
 
   // Holidays
   "Add Holiday": "ছুটি যোগ করুন",
@@ -191,6 +200,27 @@ export const bn: Record<string, string> = {
   "Record Payment": "পেমেন্ট রেকর্ড করুন",
   "Pay full": "পুরো পরিশোধ",
   "No active loan": "কোনো সক্রিয় ঋণ নেই",
+  Filters: "ফিল্টার",
+  "Filter Options": "ফিল্টার অপশন",
+  "Total Loan Balance": "মোট ঋণ ব্যালেন্স",
+  "Total Current Balance": "মোট বর্তমান ব্যালেন্স",
+  "Loan History": "ঋণের ইতিহাস",
+  "Payment History": "পেমেন্টের ইতিহাস",
+  "Net OT": "নেট ওটি",
+  "Expense Paid": "পরিশোধিত খরচ",
+  "Loan Paid": "পরিশোধিত ঋণ",
+  "Payment Status": "পেমেন্টের অবস্থা",
+  "My Payments": "আমার পেমেন্ট",
+  Month: "মাস",
+  Advance: "অগ্রিম",
+  "Net Amount": "নেট পরিমাণ",
+  "Claim History": "দাবির ইতিহাস",
+  Direction: "দিক",
+  Receipt: "রসিদ",
+  "Approved/Rejected By": "অনুমোদন/প্রত্যাখ্যানকারী",
+  "Monthly Salary Summary": "মাসিক বেতন সারসংক্ষেপ",
+  "Monthly Salary Summary — All Employees": "মাসিক বেতন সারসংক্ষেপ — সব কর্মচারী",
+  "Installment Month": "কিস্তির মাস",
 
   // Trash
   "Permanently Delete": "স্থায়ীভাবে মুছুন",

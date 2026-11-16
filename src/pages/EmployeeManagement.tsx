@@ -1,6 +1,7 @@
 import { invokeAdminUserManagement, edgeErrorMessage } from "@/lib/adminUsers";
 import { useEffect, useState, useCallback, useRef } from "react";
 import { useAuth } from "@/contexts/AuthContext";
+import { useLanguage } from "@/contexts/LanguageContext";
 import { supabase } from "@/integrations/supabase/client";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -69,6 +70,7 @@ type EmployeeRow = {
 
 const EmployeeManagement = () => {
   const { role, user } = useAuth();
+  const { t } = useLanguage();
   const navigate = useNavigate();
   const [employees, setEmployees] = useState<EmployeeRow[]>([]);
   const [managers, setManagers] = useState<{ id: string; full_name: string | null; email: string | null }[]>([]);
@@ -475,8 +477,8 @@ const EmployeeManagement = () => {
       <Card>
       <CardHeader className="flex flex-row items-center justify-between flex-wrap gap-2">
         <CardTitle className="flex items-center gap-2">
-          <Users className="h-5 w-5" /> Employee Management
-          {!isAdmin && <Badge variant="outline" className="ml-2 text-[10px]">My Team</Badge>}
+          <Users className="h-5 w-5" /> {t("Employee Management")}
+          {!isAdmin && <Badge variant="outline" className="ml-2 text-[10px]">{t("My Team")}</Badge>}
         </CardTitle>
         <div className="flex items-center gap-2">
           {isAdmin && (
@@ -781,7 +783,7 @@ const EmployeeManagement = () => {
         <div className="flex flex-col sm:flex-row gap-3">
           <div className="relative flex-1">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-            <Input placeholder="Search name, email, department..." value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} className="pl-9" />
+            <Input placeholder={t("Search name, email, department...")} value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} className="pl-9" />
           </div>
           <Select value={filterWing} onValueChange={setFilterWing}>
             <SelectTrigger className="w-[130px]"><SelectValue /></SelectTrigger>
@@ -811,16 +813,16 @@ const EmployeeManagement = () => {
         <Table>
           <TableHeader>
             <TableRow>
-              <TableHead>Employee</TableHead>
-              <TableHead>Wing</TableHead>
-              <TableHead>Projects</TableHead>
-              <TableHead>Department</TableHead>
-              <TableHead>Designation</TableHead>
-              <TableHead>Role</TableHead>
-              <TableHead>Reporting Boss</TableHead>
-              <TableHead>Service</TableHead>
-              <TableHead>Status</TableHead>
-              <TableHead>OT Cap (D/M)</TableHead>
+              <TableHead>{t("Employee")}</TableHead>
+              <TableHead>{t("Wing")}</TableHead>
+              <TableHead>{t("Projects")}</TableHead>
+              <TableHead>{t("Department")}</TableHead>
+              <TableHead>{t("Designation")}</TableHead>
+              <TableHead>{t("Role")}</TableHead>
+              <TableHead>{t("Reporting Boss")}</TableHead>
+              <TableHead>{t("Service")}</TableHead>
+              <TableHead>{t("Status")}</TableHead>
+              <TableHead>{t("OT Cap (D/M)")}</TableHead>
               <TableHead className="text-right">Actions</TableHead>
             </TableRow>
           </TableHeader>
@@ -912,9 +914,9 @@ const EmployeeManagement = () => {
             <Table>
               <TableHeader>
                 <TableRow>
-                  <TableHead>Email</TableHead>
-                  <TableHead>Status</TableHead>
-                  <TableHead>Temp Password / Error</TableHead>
+                  <TableHead>{t("Email")}</TableHead>
+                  <TableHead>{t("Status")}</TableHead>
+                  <TableHead>{t("Temp Password / Error")}</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
