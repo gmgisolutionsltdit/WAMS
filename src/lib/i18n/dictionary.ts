@@ -81,9 +81,6 @@ export const bn: Record<string, string> = {
   "Apply for Leave": "ছুটির জন্য আবেদন করুন",
   "Team Leave Calendar": "টিম ছুটির ক্যালেন্ডার",
 
-  // Notice Board
-  "Notice Board": "নোটিস বোর্ড",
-
   // Sidebar groups / roles (admin & manager areas)
   Management: "ম্যানেজমেন্ট",
   HR: "এইচআর",
@@ -180,7 +177,6 @@ export const bn: Record<string, string> = {
   // Holidays
   "Add Holiday": "ছুটি যোগ করুন",
   "Bulk Upload": "বাল্ক আপলোড",
-  Wing: "উইং",
   "No holidays declared": "কোনো ছুটি ঘোষণা করা হয়নি",
 
   // Loans / Payment
