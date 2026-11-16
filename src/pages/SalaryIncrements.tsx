@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useAuth } from "@/contexts/AuthContext";
+import { useLanguage } from "@/contexts/LanguageContext";
 import { supabase } from "@/integrations/supabase/client";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -57,6 +58,7 @@ const emptyForm = () => ({
 
 const SalaryIncrements = () => {
   const { user, role } = useAuth();
+  const { t } = useLanguage();
   const canManage = role === "admin";
 
   const [records, setRecords] = useState<Increment[]>([]);
@@ -266,8 +268,8 @@ const SalaryIncrements = () => {
 
       <Card>
         <CardHeader>
-          <CardTitle>Increment History</CardTitle>
-          <CardDescription>Overlapping cycles are supported.</CardDescription>
+          <CardTitle>{t("Increment History")}</CardTitle>
+          <CardDescription>{t("Overlapping cycles are supported.")}</CardDescription>
         </CardHeader>
         <CardContent className="space-y-3">
           <div className="max-w-xs">
@@ -287,10 +289,10 @@ const SalaryIncrements = () => {
           <Table>
             <TableHeader>
               <TableRow>
-                <TableHead>Employee</TableHead>
-                <TableHead>Effective Date</TableHead>
-                <TableHead>Effective Month</TableHead>
-                <TableHead>Cycle</TableHead>
+                <TableHead>{t("Employee")}</TableHead>
+                <TableHead>{t("Effective Date")}</TableHead>
+                <TableHead>{t("Effective Month")}</TableHead>
+                <TableHead>{t("Cycle")}</TableHead>
                 <TableHead className="text-right">Previous Basic</TableHead>
                 <TableHead className="text-right">Increment %</TableHead>
                 <TableHead className="text-right">Increment Amount</TableHead>
@@ -300,7 +302,7 @@ const SalaryIncrements = () => {
                 <TableHead className="text-right">Retention Amount</TableHead>
                 <TableHead className="text-right">New Basic</TableHead>
                 <TableHead className="text-right">New Gross</TableHead>
-                <TableHead>Reason</TableHead>
+                <TableHead>{t("Reason")}</TableHead>
                 {canManage && <TableHead></TableHead>}
               </TableRow>
             </TableHeader>
