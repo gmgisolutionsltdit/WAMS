@@ -30,7 +30,7 @@ import { uploadAttachments } from "@/lib/attachments";
 import AttachmentsInput from "@/components/AttachmentsInput";
 import AttachmentThumbnails from "@/components/AttachmentThumbnails";
 import { DeleteReasonDialog } from "@/components/DeleteReasonDialog";
-import { moveToTrash } from "@/lib/trash";
+import { moveToTrash, toastDeletedWithUndo } from "@/lib/trash";
 
 type PayrollSettlementRow = {
   id: string;
@@ -197,8 +197,9 @@ const Payment = () => {
 
   const deleteLoan = async (loan: { id: string; user_id: string; amount: number }, reason: string) => {
     if (!user) return;
+    let trashId: string;
     try {
-      await moveToTrash("loan", loan, user.id, reason);
+      trashId = await moveToTrash("loan", loan, user.id, reason);
     } catch (e) {
       toast.error(e instanceof Error ? e.message : "Could not move this to Trash — delete cancelled.");
       return;
@@ -208,7 +209,7 @@ const Payment = () => {
     const { data, error } = await supabase.from("personal_advances").delete().eq("id", loan.id).select("id");
     if (error) { toast.error(error.message); return; }
     if (!data?.length) { toast.error("Delete didn't go through — you may not have permission to delete this."); return; }
-    toast.success("Loan deleted");
+    toastDeletedWithUndo("Loan deleted", trashId, fetchAll);
     await notifyEmployee(
       loan.user_id,
       "Loan Request Deleted",
@@ -2056,8 +2057,9 @@ function ExpenseClaimsTab() {
       return;
     }
     if (!user || !claim) return;
+    let trashId: string;
     try {
-      await moveToTrash("expense", claim, user.id, reason);
+      trashId = await moveToTrash("expense", claim, user.id, reason);
     } catch (e) {
       toast.error(e instanceof Error ? e.message : "Could not move this to Trash — delete cancelled.");
       return;
@@ -2067,7 +2069,7 @@ function ExpenseClaimsTab() {
     const { data, error } = await supabase.from("expense_claims").delete().eq("id", id).select("id");
     if (error) { toast.error(error.message); return; }
     if (!data?.length) { toast.error("Delete didn't go through — you may not have permission to delete this."); return; }
-    toast.success("Claim deleted");
+    toastDeletedWithUndo("Claim deleted", trashId, fetchClaims);
     if (claim) {
       await notifyEmployee(
         claim.user_id,

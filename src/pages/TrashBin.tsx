@@ -9,7 +9,7 @@ import { toast } from "sonner";
 import { format, differenceInCalendarDays } from "date-fns";
 import { RotateCcw, Trash2 } from "lucide-react";
 import { PhraseConfirmDialog } from "@/components/PhraseConfirmDialog";
-import { TRASH_LABEL, type TrashEntityType } from "@/lib/trash";
+import { TRASH_LABEL, restoreFromTrash, type TrashEntityType } from "@/lib/trash";
 
 type TrashRow = {
   id: string;
@@ -87,10 +87,11 @@ const TrashBin = () => {
       // row (overtime_requests, expense_claims never got an admin-insert-
       // for-anyone-else policy), so restoring someone else's trashed entry
       // as an admin would otherwise be silently blocked by RLS.
-      const { error } = await supabase.rpc("restore_from_trash" as any, { _trash_id: row.id });
-      if (error) { toast.error(`Could not restore: ${error.message}`); return; }
+      await restoreFromTrash(row.id);
       toast.success("Restored");
       fetchData();
+    } catch (e) {
+      toast.error(e instanceof Error ? `Could not restore: ${e.message}` : "Could not restore.");
     } finally {
       setBusyId(null);
     }

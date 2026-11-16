@@ -19,7 +19,7 @@ import { humanMinutes } from "@/lib/officeTime";
 import { classifyDay, netRequiredHours, weekendDaysFor, type WorkSchedule } from "@/lib/workSchedule";
 import AttachmentThumbnails from "@/components/AttachmentThumbnails";
 import { DeleteReasonDialog } from "@/components/DeleteReasonDialog";
-import { moveToTrash } from "@/lib/trash";
+import { moveToTrash, toastDeletedWithUndo } from "@/lib/trash";
 
 /** RLS blocks a disallowed update/delete without an error — it just matches 0 rows,
  *  which would otherwise look like silent success. */
@@ -315,8 +315,9 @@ const Approvals = () => {
 
   const deleteOT = async (req: any, reason: string) => {
     if (!user) return;
+    let trashId: string;
     try {
-      await moveToTrash("overtime", req, user.id, reason);
+      trashId = await moveToTrash("overtime", req, user.id, reason);
     } catch (e) {
       toast.error(e instanceof Error ? e.message : "Could not move this to Trash — delete cancelled.");
       return;
@@ -324,7 +325,7 @@ const Approvals = () => {
     const { data, error } = await supabase.from("overtime_requests").delete().eq("id", req.id).select("id");
     if (error) { toast.error(error.message); return; }
     if (!data?.length) { toast.error(NOT_ALLOWED); return; }
-    toast.success("OT request deleted");
+    toastDeletedWithUndo("OT request deleted", trashId, fetchData);
     await notifyEmployee(
       req.user_id,
       "OT Request Deleted",
@@ -337,8 +338,9 @@ const Approvals = () => {
 
   const deleteManual = async (req: { id: string; user_id: string; date: string }, reason: string) => {
     if (!user) return;
+    let trashId: string;
     try {
-      await moveToTrash("manual_time", req, user.id, reason);
+      trashId = await moveToTrash("manual_time", req, user.id, reason);
     } catch (e) {
       toast.error(e instanceof Error ? e.message : "Could not move this to Trash — delete cancelled.");
       return;
@@ -346,7 +348,7 @@ const Approvals = () => {
     const { data, error } = await supabase.from("manual_time_requests").delete().eq("id", req.id).select("id");
     if (error) { toast.error(error.message); return; }
     if (!data?.length) { toast.error(NOT_ALLOWED); return; }
-    toast.success("Manual time request deleted");
+    toastDeletedWithUndo("Manual time request deleted", trashId, fetchData);
     await notifyEmployee(
       req.user_id,
       "Manual Time Request Deleted",
@@ -430,8 +432,9 @@ const Approvals = () => {
 
   const deleteLoanHistory = async (loan: any, reason: string) => {
     if (!user) return;
+    let trashId: string;
     try {
-      await moveToTrash("loan", loan, user.id, reason);
+      trashId = await moveToTrash("loan", loan, user.id, reason);
     } catch (e) {
       toast.error(e instanceof Error ? e.message : "Could not move this to Trash — delete cancelled.");
       return;
@@ -439,7 +442,7 @@ const Approvals = () => {
     const { data, error } = await supabase.from("personal_advances").delete().eq("id", loan.id).select("id");
     if (error) { toast.error(error.message); return; }
     if (!data?.length) { toast.error(NOT_ALLOWED); return; }
-    toast.success("Loan record deleted");
+    toastDeletedWithUndo("Loan record deleted", trashId, fetchData);
     await notifyEmployee(
       loan.user_id,
       "Loan Record Deleted",
@@ -481,8 +484,9 @@ const Approvals = () => {
       return;
     }
     if (!user) return;
+    let trashId: string;
     try {
-      await moveToTrash("expense", claim, user.id, reason);
+      trashId = await moveToTrash("expense", claim, user.id, reason);
     } catch (e) {
       toast.error(e instanceof Error ? e.message : "Could not move this to Trash — delete cancelled.");
       return;
@@ -490,7 +494,7 @@ const Approvals = () => {
     const { data, error } = await supabase.from("expense_claims").delete().eq("id", claim.id).select("id");
     if (error) { toast.error(error.message); return; }
     if (!data?.length) { toast.error(NOT_ALLOWED); return; }
-    toast.success("Expense claim deleted");
+    toastDeletedWithUndo("Expense claim deleted", trashId, fetchData);
     await notifyEmployee(
       claim.user_id,
       "Expense Claim Deleted",
