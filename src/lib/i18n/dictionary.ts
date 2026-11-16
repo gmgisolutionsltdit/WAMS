@@ -83,6 +83,131 @@ export const bn: Record<string, string> = {
 
   // Notice Board
   "Notice Board": "নোটিস বোর্ড",
+
+  // Sidebar groups / roles (admin & manager areas)
+  Management: "ম্যানেজমেন্ট",
+  HR: "এইচআর",
+  "Pending Approvals": "অপেক্ষমান অনুমোদন",
+  "Performance Evaluation": "পারফরম্যান্স মূল্যায়ন",
+  Employees: "কর্মচারীরা",
+
+  // Common actions (extended)
+  "Save Changes": "পরিবর্তন সেভ করুন",
+  Add: "যোগ করুন",
+  Update: "আপডেট",
+  Back: "পিছনে",
+  Next: "পরবর্তী",
+  Previous: "পূর্ববর্তী",
+  Download: "ডাউনলোড",
+  Upload: "আপলোড",
+  Confirm: "নিশ্চিত করুন",
+  Clear: "পরিষ্কার করুন",
+  "Clear filters": "ফিল্টার পরিষ্কার করুন",
+  View: "দেখুন",
+  "View All": "সব দেখুন",
+  Actions: "অ্যাকশন",
+  Filter: "ফিল্টার",
+  All: "সব",
+
+  // Common status/labels (extended)
+  Modified: "পরিবর্তিত",
+  Closed: "বন্ধ",
+  Active: "সক্রিয়",
+  Inactive: "নিষ্ক্রিয়",
+  "Decided By": "সিদ্ধান্তদাতা",
+  "Deleted By": "মুছেছেন",
+  Type: "ধরন",
+  Details: "বিস্তারিত",
+  Balance: "ব্যালেন্স",
+  Total: "মোট",
+  Day: "দিন",
+  Name: "নাম",
+  Email: "ইমেইল",
+  Phone: "ফোন",
+  Role: "ভূমিকা",
+  Department: "বিভাগ",
+  Designation: "পদবি",
+  "Deleted": "মুছে ফেলা হয়েছে",
+  "Days Left": "বাকি দিন",
+  "No data": "কোনো তথ্য নেই",
+
+  // Dashboard (Index) — stat cards
+  "Total OT This Month": "এই মাসের মোট ওভারটাইম",
+  "Pending Requests": "অপেক্ষমান রিকোয়েস্ট",
+  "Active Employees": "সক্রিয় কর্মচারী",
+
+  // Approvals page
+  "Everything waiting on a decision, grouped by type.": "সিদ্ধান্তের অপেক্ষায় থাকা সবকিছু, ধরন অনুযায়ী ভাগ করা।",
+  History: "ইতিহাস",
+  "Track every decided request and how it was resolved.": "প্রতিটি সিদ্ধান্ত হওয়া রিকোয়েস্ট এবং তা কীভাবে সমাধান হয়েছে তা ট্র্যাক করুন।",
+  Overtime: "ওভারটাইম",
+  "Manual Time": "ম্যানুয়াল টাইম",
+  "Late Time": "লেট টাইম",
+  Loan: "ঋণ",
+  Expense: "খরচ",
+  "No pending requests": "কোনো অপেক্ষমান রিকোয়েস্ট নেই",
+
+  // Performance Evaluation
+  Evaluations: "মূল্যায়ন",
+
+  // Employee Management
+  "Add Employee": "কর্মচারী যোগ করুন",
+
+  // Holidays
+  "Add Holiday": "ছুটি যোগ করুন",
+  "Bulk Upload": "বাল্ক আপলোড",
+  Wing: "উইং",
+  "No holidays declared": "কোনো ছুটি ঘোষণা করা হয়নি",
+
+  // Loans / Payment
+  "Net Salary": "নেট বেতন",
+  "Net Time Balance": "নেট সময় ব্যালেন্স",
+  "Expense Balance": "খরচের ব্যালেন্স",
+  "Loan Due": "ঋণ বকেয়া",
+  "Net Payment": "নেট পেমেন্ট",
+  "Record Payment": "পেমেন্ট রেকর্ড করুন",
+  "Pay full": "পুরো পরিশোধ",
+  "No active loan": "কোনো সক্রিয় ঋণ নেই",
+
+  // Trash
+  "Permanently Delete": "স্থায়ীভাবে মুছুন",
+  Restore: "পুনরুদ্ধার",
+  "Empty Trash": "ট্র্যাশ খালি করুন",
+  "Trash is empty": "ট্র্যাশ খালি",
+
+  // Team Member Details
+  "No team members found.": "কোনো টিম মেম্বার পাওয়া যায়নি।",
+
+  // Reports
+  "Filter by employee, date range, and type.": "কর্মচারী, তারিখের পরিসর এবং ধরন অনুযায়ী ফিল্টার করুন।",
+
+  // Tasks
+  "Add Task": "টাস্ক যোগ করুন",
+  "Add List": "তালিকা যোগ করুন",
+
+  // SOP (extended)
+  "Current SOP": "বর্তমান এসওপি",
+  "Version History": "সংস্করণের ইতিহাস",
+  "The active Standard Operating Procedure document(s).": "সক্রিয় স্ট্যান্ডার্ড অপারেটিং প্রসিডিউর ডকুমেন্ট।",
+  "Previously published SOP versions, kept for reference.": "আগে প্রকাশিত এসওপি সংস্করণ, রেফারেন্সের জন্য রাখা হয়েছে।",
+
+  // Approvals table headers
+  "In / Out": "ইন / আউট",
+  "Approve OT (h)": "ওটি অনুমোদন (ঘ)",
+  "Reason / Task": "কারণ / কাজ",
+  Effective: "কার্যকর",
+  Dates: "তারিখসমূহ",
+  Days: "দিন",
+  Installments: "কিস্তি",
+  Category: "ক্যাটাগরি",
+  Description: "বিবরণ",
+  From: "থেকে",
+  To: "পর্যন্ত",
+
+  // Login/misc
+  "Sign In": "সাইন ইন",
+  Password: "পাসওয়ার্ড",
+  "Forgot Password?": "পাসওয়ার্ড ভুলে গেছেন?",
 };
 
 export type Lang = "en" | "bn";

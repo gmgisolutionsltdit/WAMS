@@ -102,7 +102,7 @@ export function AppSidebar() {
 
         {isManagerOrAdmin && (
           <SidebarGroup>
-            <SidebarGroupLabel>{!collapsed && "Management"}</SidebarGroupLabel>
+            <SidebarGroupLabel>{!collapsed && t("Management")}</SidebarGroupLabel>
             <SidebarGroupContent>
               <SidebarMenu>
                 {managerItems.map((item) => (
@@ -122,7 +122,7 @@ export function AppSidebar() {
 
         {isAdmin && (
           <SidebarGroup>
-            <SidebarGroupLabel>{!collapsed && "Admin"}</SidebarGroupLabel>
+            <SidebarGroupLabel>{!collapsed && t("Admin")}</SidebarGroupLabel>
             <SidebarGroupContent>
               <SidebarMenu>
                 {adminItems.map((item) => (
@@ -142,7 +142,7 @@ export function AppSidebar() {
 
         {canPayroll && (
           <SidebarGroup>
-            <SidebarGroupLabel>{!collapsed && "HR"}</SidebarGroupLabel>
+            <SidebarGroupLabel>{!collapsed && t("HR")}</SidebarGroupLabel>
             <SidebarGroupContent>
               <SidebarMenu>
                 <SidebarMenuItem>

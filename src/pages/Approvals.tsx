@@ -1,5 +1,6 @@
 import { useEffect, useState, useCallback } from "react";
 import { useAuth } from "@/contexts/AuthContext";
+import { useLanguage } from "@/contexts/LanguageContext";
 import { supabase } from "@/integrations/supabase/client";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -45,6 +46,7 @@ const otStatusStyle = (status: string) => {
 
 const Approvals = () => {
   const { user } = useAuth();
+  const { t } = useLanguage();
   const [pending, setPending] = useState<any[]>([]);
   const [history, setHistory] = useState<any[]>([]);
   const [stats, setStats] = useState({ totalOT: 0, pendingCount: 0, activeEmployees: 0 });
@@ -564,45 +566,45 @@ const Approvals = () => {
     <div className="space-y-6">
       <div className="grid gap-4 md:grid-cols-3">
         <Card>
-          <CardHeader className="pb-2"><CardDescription>Total OT This Month</CardDescription></CardHeader>
+          <CardHeader className="pb-2"><CardDescription>{t("Total OT This Month")}</CardDescription></CardHeader>
           <CardContent><div className="flex items-center gap-2"><Timer className="h-5 w-5 text-primary" /><span className="text-2xl font-bold">{stats.totalOT}h</span></div></CardContent>
         </Card>
         <Card>
-          <CardHeader className="pb-2"><CardDescription>Pending Requests</CardDescription></CardHeader>
+          <CardHeader className="pb-2"><CardDescription>{t("Pending Requests")}</CardDescription></CardHeader>
           <CardContent><div className="flex items-center gap-2"><Clock className="h-5 w-5 text-destructive" /><span className="text-2xl font-bold">{stats.pendingCount}</span></div></CardContent>
         </Card>
         <Card>
-          <CardHeader className="pb-2"><CardDescription>Active Employees</CardDescription></CardHeader>
+          <CardHeader className="pb-2"><CardDescription>{t("Active Employees")}</CardDescription></CardHeader>
           <CardContent><div className="flex items-center gap-2"><Users className="h-5 w-5 text-primary" /><span className="text-2xl font-bold">{stats.activeEmployees}</span></div></CardContent>
         </Card>
       </div>
 
       <Card>
         <CardHeader>
-          <CardTitle>Pending Approvals</CardTitle>
-          <CardDescription>Everything waiting on a decision, grouped by type.</CardDescription>
+          <CardTitle>{t("Pending Approvals")}</CardTitle>
+          <CardDescription>{t("Everything waiting on a decision, grouped by type.")}</CardDescription>
         </CardHeader>
         <CardContent>
           <Tabs defaultValue="overtime">
             <TabsList className="flex-wrap h-auto">
-              <TabsTrigger value="overtime">Overtime ({pending.length})</TabsTrigger>
-              <TabsTrigger value="manual">Manual Time ({manualPending.length})</TabsTrigger>
-              <TabsTrigger value="late">Late Time ({latePending.length})</TabsTrigger>
-              <TabsTrigger value="leave">Leave ({leavePending.length})</TabsTrigger>
-              <TabsTrigger value="loan">Loan ({loanPending.length})</TabsTrigger>
-              <TabsTrigger value="expense">Expense ({expensePending.length})</TabsTrigger>
+              <TabsTrigger value="overtime">{t("Overtime")} ({pending.length})</TabsTrigger>
+              <TabsTrigger value="manual">{t("Manual Time")} ({manualPending.length})</TabsTrigger>
+              <TabsTrigger value="late">{t("Late Time")} ({latePending.length})</TabsTrigger>
+              <TabsTrigger value="leave">{t("Leave")} ({leavePending.length})</TabsTrigger>
+              <TabsTrigger value="loan">{t("Loan")} ({loanPending.length})</TabsTrigger>
+              <TabsTrigger value="expense">{t("Expense")} ({expensePending.length})</TabsTrigger>
             </TabsList>
 
             <TabsContent value="overtime">
               <Table>
                 <TableHeader>
                   <TableRow>
-                    <TableHead>Employee</TableHead>
-                    <TableHead>Date</TableHead>
-                    <TableHead>Hours</TableHead>
-                    <TableHead>Reason</TableHead>
-                    <TableHead>Note</TableHead>
-                    <TableHead>Actions</TableHead>
+                    <TableHead>{t("Employee")}</TableHead>
+                    <TableHead>{t("Date")}</TableHead>
+                    <TableHead>{t("Hours")}</TableHead>
+                    <TableHead>{t("Reason")}</TableHead>
+                    <TableHead>{t("Note")}</TableHead>
+                    <TableHead>{t("Actions")}</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
@@ -627,7 +629,7 @@ const Approvals = () => {
                       </TableCell>
                       <TableCell className="space-x-1">
                         <Button size="sm" className="bg-lime-500 hover:bg-lime-600 text-white" onClick={() => handleAction(req, "approved")}>
-                          <Check className="h-4 w-4 mr-1" /> Approve
+                          <Check className="h-4 w-4 mr-1" /> {t("Approve")}
                         </Button>
                         <Button
                           size="sm"
@@ -635,7 +637,7 @@ const Approvals = () => {
                           disabled={!notes[req.id]?.trim()}
                           onClick={() => handleAction(req, "rejected")}
                         >
-                          <X className="h-4 w-4 mr-1" /> Reject
+                          <X className="h-4 w-4 mr-1" /> {t("Reject")}
                         </Button>
                         <Button size="sm" variant="outline" onClick={() => openEdit(req)}>
                           <Pencil className="h-4 w-4 mr-1" /> Modify
@@ -662,14 +664,14 @@ const Approvals = () => {
               <Table>
                 <TableHeader>
                   <TableRow>
-                    <TableHead>Employee</TableHead>
-                    <TableHead>Date</TableHead>
-                    <TableHead>In / Out</TableHead>
-                    <TableHead>Total</TableHead>
-                    <TableHead>Approve OT (h)</TableHead>
-                    <TableHead>Reason / Task</TableHead>
-                    <TableHead>Note</TableHead>
-                    <TableHead>Actions</TableHead>
+                    <TableHead>{t("Employee")}</TableHead>
+                    <TableHead>{t("Date")}</TableHead>
+                    <TableHead>{t("In / Out")}</TableHead>
+                    <TableHead>{t("Total")}</TableHead>
+                    <TableHead>{t("Approve OT (h)")}</TableHead>
+                    <TableHead>{t("Reason / Task")}</TableHead>
+                    <TableHead>{t("Note")}</TableHead>
+                    <TableHead>{t("Actions")}</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
@@ -727,7 +729,7 @@ const Approvals = () => {
                       </TableCell>
                       <TableCell className="space-x-1 whitespace-nowrap">
                         <Button size="sm" className="bg-lime-500 hover:bg-lime-600 text-white" onClick={() => decideManual(req, "approved")}>
-                          <Check className="h-4 w-4 mr-1" /> Approve
+                          <Check className="h-4 w-4 mr-1" /> {t("Approve")}
                         </Button>
                         <Button
                           size="sm"
@@ -735,7 +737,7 @@ const Approvals = () => {
                           disabled={!notes[req.id]?.trim()}
                           onClick={() => decideManual(req, "rejected")}
                         >
-                          <X className="h-4 w-4 mr-1" /> Reject
+                          <X className="h-4 w-4 mr-1" /> {t("Reject")}
                         </Button>
                       </TableCell>
                     </TableRow>
@@ -749,13 +751,13 @@ const Approvals = () => {
               <Table>
                 <TableHeader>
                   <TableRow>
-                    <TableHead>Employee</TableHead>
-                    <TableHead>Type</TableHead>
-                    <TableHead>Effective</TableHead>
-                    <TableHead>Details</TableHead>
-                    <TableHead>Reason</TableHead>
-                    <TableHead>Note</TableHead>
-                    <TableHead>Actions</TableHead>
+                    <TableHead>{t("Employee")}</TableHead>
+                    <TableHead>{t("Type")}</TableHead>
+                    <TableHead>{t("Effective")}</TableHead>
+                    <TableHead>{t("Details")}</TableHead>
+                    <TableHead>{t("Reason")}</TableHead>
+                    <TableHead>{t("Note")}</TableHead>
+                    <TableHead>{t("Actions")}</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
@@ -790,7 +792,7 @@ const Approvals = () => {
                       </TableCell>
                       <TableCell className="space-x-1 whitespace-nowrap">
                         <Button size="sm" className="bg-lime-500 hover:bg-lime-600 text-white" onClick={() => decideLate(req, "approved")}>
-                          <Check className="h-4 w-4 mr-1" /> Approve
+                          <Check className="h-4 w-4 mr-1" /> {t("Approve")}
                         </Button>
                         <Button
                           size="sm"
@@ -798,7 +800,7 @@ const Approvals = () => {
                           disabled={!notes[req.id]?.trim()}
                           onClick={() => decideLate(req, "rejected")}
                         >
-                          <X className="h-4 w-4 mr-1" /> Reject
+                          <X className="h-4 w-4 mr-1" /> {t("Reject")}
                         </Button>
                       </TableCell>
                     </TableRow>
@@ -812,13 +814,13 @@ const Approvals = () => {
               <Table>
                 <TableHeader>
                   <TableRow>
-                    <TableHead>Employee</TableHead>
-                    <TableHead>Type</TableHead>
-                    <TableHead>Dates</TableHead>
-                    <TableHead>Days</TableHead>
-                    <TableHead>Reason</TableHead>
-                    <TableHead>Note</TableHead>
-                    <TableHead>Actions</TableHead>
+                    <TableHead>{t("Employee")}</TableHead>
+                    <TableHead>{t("Type")}</TableHead>
+                    <TableHead>{t("Dates")}</TableHead>
+                    <TableHead>{t("Days")}</TableHead>
+                    <TableHead>{t("Reason")}</TableHead>
+                    <TableHead>{t("Note")}</TableHead>
+                    <TableHead>{t("Actions")}</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
@@ -846,7 +848,7 @@ const Approvals = () => {
                       </TableCell>
                       <TableCell className="space-x-1 whitespace-nowrap">
                         <Button size="sm" className="bg-lime-500 hover:bg-lime-600 text-white" onClick={() => decideLeave(req, "approved")}>
-                          <Check className="h-4 w-4 mr-1" /> Approve
+                          <Check className="h-4 w-4 mr-1" /> {t("Approve")}
                         </Button>
                         <Button
                           size="sm"
@@ -854,7 +856,7 @@ const Approvals = () => {
                           disabled={!notes[req.id]?.trim()}
                           onClick={() => decideLeave(req, "rejected")}
                         >
-                          <X className="h-4 w-4 mr-1" /> Reject
+                          <X className="h-4 w-4 mr-1" /> {t("Reject")}
                         </Button>
                       </TableCell>
                     </TableRow>
@@ -867,13 +869,13 @@ const Approvals = () => {
               <Table>
                 <TableHeader>
                   <TableRow>
-                    <TableHead>Employee</TableHead>
-                    <TableHead>Date</TableHead>
-                    <TableHead>Amount</TableHead>
-                    <TableHead>Reason</TableHead>
-                    <TableHead>Installments</TableHead>
-                    <TableHead>Note</TableHead>
-                    <TableHead>Actions</TableHead>
+                    <TableHead>{t("Employee")}</TableHead>
+                    <TableHead>{t("Date")}</TableHead>
+                    <TableHead>{t("Amount")}</TableHead>
+                    <TableHead>{t("Reason")}</TableHead>
+                    <TableHead>{t("Installments")}</TableHead>
+                    <TableHead>{t("Note")}</TableHead>
+                    <TableHead>{t("Actions")}</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
@@ -896,7 +898,7 @@ const Approvals = () => {
                       </TableCell>
                       <TableCell className="space-x-1 whitespace-nowrap">
                         <Button size="sm" className="bg-lime-500 hover:bg-lime-600 text-white" onClick={() => decideLoan(loan, "approved")}>
-                          <Check className="h-4 w-4 mr-1" /> Approve
+                          <Check className="h-4 w-4 mr-1" /> {t("Approve")}
                         </Button>
                         <Button
                           size="sm"
@@ -904,7 +906,7 @@ const Approvals = () => {
                           disabled={!notes[loan.id]?.trim()}
                           onClick={() => decideLoan(loan, "rejected")}
                         >
-                          <X className="h-4 w-4 mr-1" /> Reject
+                          <X className="h-4 w-4 mr-1" /> {t("Reject")}
                         </Button>
                       </TableCell>
                     </TableRow>
@@ -917,13 +919,13 @@ const Approvals = () => {
               <Table>
                 <TableHeader>
                   <TableRow>
-                    <TableHead>Employee</TableHead>
-                    <TableHead>Date</TableHead>
-                    <TableHead>Category</TableHead>
-                    <TableHead>Amount</TableHead>
-                    <TableHead>Description</TableHead>
-                    <TableHead>Note</TableHead>
-                    <TableHead>Actions</TableHead>
+                    <TableHead>{t("Employee")}</TableHead>
+                    <TableHead>{t("Date")}</TableHead>
+                    <TableHead>{t("Category")}</TableHead>
+                    <TableHead>{t("Amount")}</TableHead>
+                    <TableHead>{t("Description")}</TableHead>
+                    <TableHead>{t("Note")}</TableHead>
+                    <TableHead>{t("Actions")}</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
@@ -946,7 +948,7 @@ const Approvals = () => {
                       </TableCell>
                       <TableCell className="space-x-1 whitespace-nowrap">
                         <Button size="sm" className="bg-lime-500 hover:bg-lime-600 text-white" onClick={() => decideExpense(claim, "approved")}>
-                          <Check className="h-4 w-4 mr-1" /> Approve
+                          <Check className="h-4 w-4 mr-1" /> {t("Approve")}
                         </Button>
                         <Button
                           size="sm"
@@ -954,7 +956,7 @@ const Approvals = () => {
                           disabled={!notes[claim.id]?.trim()}
                           onClick={() => decideExpense(claim, "rejected")}
                         >
-                          <X className="h-4 w-4 mr-1" /> Reject
+                          <X className="h-4 w-4 mr-1" /> {t("Reject")}
                         </Button>
                       </TableCell>
                     </TableRow>
@@ -1005,11 +1007,11 @@ const Approvals = () => {
         return (
       <Card>
         <CardHeader>
-          <CardTitle>History</CardTitle>
-          <CardDescription>Track every decided request and how it was resolved.</CardDescription>
+          <CardTitle>{t("History")}</CardTitle>
+          <CardDescription>{t("Track every decided request and how it was resolved.")}</CardDescription>
           <div className="flex flex-wrap items-end gap-2 pt-2">
             <div className="flex-1 min-w-[180px]">
-              <Label htmlFor="history-search" className="text-xs text-muted-foreground">Employee</Label>
+              <Label htmlFor="history-search" className="text-xs text-muted-foreground">{t("Employee")}</Label>
               <Input
                 id="history-search"
                 placeholder="Search by name or email"
@@ -1018,7 +1020,7 @@ const Approvals = () => {
               />
             </div>
             <div>
-              <Label htmlFor="history-from" className="text-xs text-muted-foreground">From</Label>
+              <Label htmlFor="history-from" className="text-xs text-muted-foreground">{t("From")}</Label>
               <Input
                 id="history-from"
                 type="date"
@@ -1027,7 +1029,7 @@ const Approvals = () => {
               />
             </div>
             <div>
-              <Label htmlFor="history-to" className="text-xs text-muted-foreground">To</Label>
+              <Label htmlFor="history-to" className="text-xs text-muted-foreground">{t("To")}</Label>
               <Input
                 id="history-to"
                 type="date"
@@ -1041,7 +1043,7 @@ const Approvals = () => {
                 size="sm"
                 onClick={() => { setHistorySearch(""); setHistoryFrom(""); setHistoryTo(""); setCurrentHistoryPageAll(1); }}
               >
-                Clear filters
+                {t("Clear filters")}
               </Button>
             )}
           </div>
@@ -1049,23 +1051,23 @@ const Approvals = () => {
         <CardContent>
           <Tabs value={historyTab} onValueChange={setHistoryTab}>
             <TabsList>
-              <TabsTrigger value="overtime">Overtime</TabsTrigger>
-              <TabsTrigger value="manual">Manual Time</TabsTrigger>
-              <TabsTrigger value="late">Late Time</TabsTrigger>
-              <TabsTrigger value="leave">Leave</TabsTrigger>
-              <TabsTrigger value="loan">Loan</TabsTrigger>
-              <TabsTrigger value="expense">Expense</TabsTrigger>
+              <TabsTrigger value="overtime">{t("Overtime")}</TabsTrigger>
+              <TabsTrigger value="manual">{t("Manual Time")}</TabsTrigger>
+              <TabsTrigger value="late">{t("Late Time")}</TabsTrigger>
+              <TabsTrigger value="leave">{t("Leave")}</TabsTrigger>
+              <TabsTrigger value="loan">{t("Loan")}</TabsTrigger>
+              <TabsTrigger value="expense">{t("Expense")}</TabsTrigger>
             </TabsList>
 
             <TabsContent value="overtime">
               <Table>
                 <TableHeader>
                   <TableRow>
-                    <TableHead>Employee</TableHead>
-                    <TableHead>Date</TableHead>
-                    <TableHead>Hours</TableHead>
-                    <TableHead>Status</TableHead>
-                    <TableHead>Actions</TableHead>
+                    <TableHead>{t("Employee")}</TableHead>
+                    <TableHead>{t("Date")}</TableHead>
+                    <TableHead>{t("Hours")}</TableHead>
+                    <TableHead>{t("Status")}</TableHead>
+                    <TableHead>{t("Actions")}</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
@@ -1103,15 +1105,15 @@ const Approvals = () => {
               <Table>
                 <TableHeader>
                   <TableRow>
-                    <TableHead>Employee</TableHead>
-                    <TableHead>Date</TableHead>
+                    <TableHead>{t("Employee")}</TableHead>
+                    <TableHead>{t("Date")}</TableHead>
                     <TableHead>Time</TableHead>
-                    <TableHead>Total</TableHead>
+                    <TableHead>{t("Total")}</TableHead>
                     <TableHead>OT</TableHead>
-                    <TableHead>Status</TableHead>
+                    <TableHead>{t("Status")}</TableHead>
                     <TableHead>Decided By</TableHead>
-                    <TableHead>Note</TableHead>
-                    <TableHead>Actions</TableHead>
+                    <TableHead>{t("Note")}</TableHead>
+                    <TableHead>{t("Actions")}</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
@@ -1153,14 +1155,14 @@ const Approvals = () => {
               <Table>
                 <TableHeader>
                   <TableRow>
-                    <TableHead>Employee</TableHead>
-                    <TableHead>Type</TableHead>
-                    <TableHead>Effective</TableHead>
-                    <TableHead>Details</TableHead>
-                    <TableHead>Status</TableHead>
+                    <TableHead>{t("Employee")}</TableHead>
+                    <TableHead>{t("Type")}</TableHead>
+                    <TableHead>{t("Effective")}</TableHead>
+                    <TableHead>{t("Details")}</TableHead>
+                    <TableHead>{t("Status")}</TableHead>
                     <TableHead>Decided By</TableHead>
-                    <TableHead>Note</TableHead>
-                    <TableHead>Actions</TableHead>
+                    <TableHead>{t("Note")}</TableHead>
+                    <TableHead>{t("Actions")}</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
@@ -1208,14 +1210,14 @@ const Approvals = () => {
               <Table>
                 <TableHeader>
                   <TableRow>
-                    <TableHead>Employee</TableHead>
-                    <TableHead>Type</TableHead>
-                    <TableHead>Dates</TableHead>
-                    <TableHead>Days</TableHead>
-                    <TableHead>Status</TableHead>
+                    <TableHead>{t("Employee")}</TableHead>
+                    <TableHead>{t("Type")}</TableHead>
+                    <TableHead>{t("Dates")}</TableHead>
+                    <TableHead>{t("Days")}</TableHead>
+                    <TableHead>{t("Status")}</TableHead>
                     <TableHead>Decided By</TableHead>
-                    <TableHead>Note</TableHead>
-                    <TableHead>Actions</TableHead>
+                    <TableHead>{t("Note")}</TableHead>
+                    <TableHead>{t("Actions")}</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
@@ -1256,13 +1258,13 @@ const Approvals = () => {
               <Table>
                 <TableHeader>
                   <TableRow>
-                    <TableHead>Employee</TableHead>
-                    <TableHead>Date</TableHead>
-                    <TableHead>Amount</TableHead>
+                    <TableHead>{t("Employee")}</TableHead>
+                    <TableHead>{t("Date")}</TableHead>
+                    <TableHead>{t("Amount")}</TableHead>
                     <TableHead>Balance</TableHead>
-                    <TableHead>Status</TableHead>
+                    <TableHead>{t("Status")}</TableHead>
                     <TableHead>Decided By</TableHead>
-                    <TableHead>Actions</TableHead>
+                    <TableHead>{t("Actions")}</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
@@ -1300,13 +1302,13 @@ const Approvals = () => {
               <Table>
                 <TableHeader>
                   <TableRow>
-                    <TableHead>Employee</TableHead>
-                    <TableHead>Date</TableHead>
-                    <TableHead>Category</TableHead>
-                    <TableHead>Amount</TableHead>
-                    <TableHead>Status</TableHead>
+                    <TableHead>{t("Employee")}</TableHead>
+                    <TableHead>{t("Date")}</TableHead>
+                    <TableHead>{t("Category")}</TableHead>
+                    <TableHead>{t("Amount")}</TableHead>
+                    <TableHead>{t("Status")}</TableHead>
                     <TableHead>Decided By</TableHead>
-                    <TableHead>Actions</TableHead>
+                    <TableHead>{t("Actions")}</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
@@ -1362,7 +1364,7 @@ const Approvals = () => {
           <DialogHeader><DialogTitle>Modify OT Hours</DialogTitle></DialogHeader>
           <div className="space-y-4">
             <div>
-              <Label>Employee</Label>
+              <Label>{t("Employee")}</Label>
               <p className="text-sm text-muted-foreground">{(editReq?.profiles as any)?.full_name || "Unknown"}</p>
             </div>
             <div>
