@@ -11,6 +11,7 @@ import { evaluateArrival, type OfficeTime } from "@/lib/officeTime";
 import { mergeDailySessions, type AttendanceSession } from "@/lib/attendance";
 import { salaryBreakdown, perMinuteRate, computeFinalSalary, fmtBDT } from "@/lib/payrollAdjustments";
 import { fetchApprovedOTHoursByUserMonth } from "@/lib/approvedOvertime";
+import { Skeleton } from "@/components/ui/skeleton";
 
 type Schedule = WorkSchedule & OfficeTime & { company_wing?: string | null; base_salary?: number | null };
 
@@ -199,7 +200,10 @@ export const PayrollAdjustments = ({ isAdmin }: { isAdmin: boolean }) => {
       </Card>
 
       {loading ? (
-        <p className="text-sm text-muted-foreground">Loading…</p>
+        <Card><CardContent className="p-6 space-y-3">
+          <Skeleton className="h-4 w-40" />
+          <Skeleton className="h-24 w-full" />
+        </CardContent></Card>
       ) : !targetUserId ? (
         <p className="text-sm text-muted-foreground">Select an employee.</p>
       ) : gross <= 0 ? (

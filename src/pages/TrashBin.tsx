@@ -10,6 +10,7 @@ import { format, differenceInCalendarDays } from "date-fns";
 import { RotateCcw, Trash2 } from "lucide-react";
 import { PhraseConfirmDialog } from "@/components/PhraseConfirmDialog";
 import { TRASH_LABEL, restoreFromTrash, type TrashEntityType } from "@/lib/trash";
+import { TableSkeletonRows } from "@/components/TableSkeleton";
 
 type TrashRow = {
   id: string;
@@ -161,9 +162,9 @@ const TrashBin = () => {
                   </TableHeader>
                   <TableBody>
                     {loading ? (
-                      <TableRow><TableCell colSpan={7} className="text-center text-muted-foreground">Loading…</TableCell></TableRow>
+                      <TableSkeletonRows cols={7} />
                     ) : byType(t).length === 0 ? (
-                      <TableRow><TableCell colSpan={7} className="text-center text-muted-foreground">Trash is empty</TableCell></TableRow>
+                      <TableRow><TableCell colSpan={7} className="text-center text-muted-foreground">Nothing in {TRASH_LABEL[t]} trash — deleted {TRASH_LABEL[t].toLowerCase()} records will show up here, restorable for 30 days.</TableCell></TableRow>
                     ) : byType(t).map((row) => {
                       const daysLeft = Math.max(0, differenceInCalendarDays(new Date(row.expires_at), new Date()));
                       return (

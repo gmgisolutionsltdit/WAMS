@@ -31,6 +31,8 @@ import AttachmentsInput from "@/components/AttachmentsInput";
 import AttachmentThumbnails from "@/components/AttachmentThumbnails";
 import { DeleteReasonDialog } from "@/components/DeleteReasonDialog";
 import { moveToTrash, toastDeletedWithUndo } from "@/lib/trash";
+import { Skeleton } from "@/components/ui/skeleton";
+import { TableSkeletonRows } from "@/components/TableSkeleton";
 
 type PayrollSettlementRow = {
   id: string;
@@ -679,9 +681,9 @@ function PaymentHistoryTable({
           </TableHeader>
           <TableBody>
             {loading ? (
-              <TableRow><TableCell colSpan={colCount} className="text-center text-muted-foreground py-6"><Loader2 className="h-4 w-4 animate-spin inline mr-2" />Loading…</TableCell></TableRow>
+              <TableSkeletonRows cols={colCount} />
             ) : rows.length === 0 ? (
-              <TableRow><TableCell colSpan={colCount} className="text-center text-muted-foreground py-6">No payment history yet</TableCell></TableRow>
+              <TableRow><TableCell colSpan={colCount} className="text-center text-muted-foreground py-6">No payment history yet — it'll show up here once a payment is recorded.</TableCell></TableRow>
             ) : rows.map((r) => (
               <TableRow key={r.id}>
                 <TableCell className="whitespace-nowrap">{format(new Date(r.month), "MMMM yyyy")}</TableCell>
@@ -1142,7 +1144,11 @@ function MyPaymentsTab() {
       </CardHeader>
       <CardContent>
         {loading ? (
-          <p className="text-sm text-muted-foreground">Loading…</p>
+          <div className="space-y-3">
+            <Skeleton className="h-4 w-48" />
+            <Skeleton className="h-24 w-full" />
+            <Skeleton className="h-24 w-full" />
+          </div>
         ) : !selectedUserId ? (
           <p className="text-sm text-muted-foreground">Select an employee.</p>
         ) : (
@@ -1470,7 +1476,9 @@ function MyPaymentsSummary() {
       </CardHeader>
       <CardContent className="space-y-4">
         {loading ? (
-          <p className="text-sm text-muted-foreground">Loading…</p>
+          <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-5">
+            {Array.from({ length: 5 }).map((_, i) => <Skeleton key={i} className="h-20 w-full" />)}
+          </div>
         ) : (
           <>
             <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-5">
@@ -1701,9 +1709,9 @@ function SalaryMonthlyTableView({ rows, showEmployee, loading }: { rows: SalaryM
         </TableHeader>
         <TableBody>
           {loading ? (
-            <TableRow><TableCell colSpan={colCount} className="text-center text-muted-foreground py-8"><Loader2 className="h-4 w-4 animate-spin inline mr-2" />Loading…</TableCell></TableRow>
+            <TableSkeletonRows cols={colCount} rows={4} />
           ) : rows.length === 0 ? (
-            <TableRow><TableCell colSpan={colCount} className="text-center text-muted-foreground py-8">No records</TableCell></TableRow>
+            <TableRow><TableCell colSpan={colCount} className="text-center text-muted-foreground py-8">No records for this month yet.</TableCell></TableRow>
           ) : rows.map((r) => (
             <TableRow key={`${r.userId}-${r.month}`}>
               {showEmployee && <TableCell className="font-medium whitespace-nowrap">{r.name}</TableCell>}
