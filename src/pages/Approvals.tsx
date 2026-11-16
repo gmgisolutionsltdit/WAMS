@@ -25,6 +25,16 @@ import { moveToTrash, toastDeletedWithUndo } from "@/lib/trash";
  *  which would otherwise look like silent success. */
 const NOT_ALLOWED = "You're not assigned as this employee's approver, so this action didn't go through.";
 const HISTORY_PAGE_SIZE = 5;
+// Raised from the old hard 20-row server cap — history is now filterable
+// (search + date range) and paginated client-side, so this just needs to
+// comfortably cover a type's resolved requests within the lookback window
+// most admins care about, without pulling the entire table on every load.
+const HISTORY_FETCH_LIMIT = 300;
+// Which date field each history row's own type uses for the date filter —
+// matches what each tab's "Date"/"Effective"/"Dates" column already shows.
+const HISTORY_DATE_FIELD: Record<string, string> = {
+  overtime: "date", manual: "date", late: "effective_date", leave: "start_date", loan: "created_at", expense: "claim_date",
+};
 
 const otStatusStyle = (status: string) => {
   if (status === "approved") return "bg-lime-500 text-white hover:bg-lime-600 border-lime-500";
@@ -55,6 +65,9 @@ const Approvals = () => {
   const [historyPage, setHistoryPage] = useState<Record<string, number>>({
     overtime: 1, manual: 1, late: 1, leave: 1, loan: 1, expense: 1,
   });
+  const [historySearch, setHistorySearch] = useState("");
+  const [historyFrom, setHistoryFrom] = useState("");
+  const [historyTo, setHistoryTo] = useState("");
   const [leaveTypeNames, setLeaveTypeNames] = useState<Record<string, string>>({});
   const [names, setNames] = useState<Record<string, string>>({});
   const [notes, setNotes] = useState<Record<string, string>>({});
@@ -82,18 +95,18 @@ const Approvals = () => {
         .select("*, profiles!overtime_requests_user_id_fkey(full_name, email)")
         .neq("status", "pending")
         .order("updated_at", { ascending: false })
-        .limit(20),
+        .limit(HISTORY_FETCH_LIMIT),
       supabase.from("manual_time_requests").select("*").eq("status", "pending").order("created_at", { ascending: false }),
-      supabase.from("manual_time_requests").select("*").neq("status", "pending").order("updated_at", { ascending: false }).limit(20),
+      supabase.from("manual_time_requests").select("*").neq("status", "pending").order("updated_at", { ascending: false }).limit(HISTORY_FETCH_LIMIT),
       supabase.from("late_time_requests").select("*").eq("status", "pending").order("created_at", { ascending: false }),
-      supabase.from("late_time_requests").select("*").neq("status", "pending").order("updated_at", { ascending: false }).limit(20),
+      supabase.from("late_time_requests").select("*").neq("status", "pending").order("updated_at", { ascending: false }).limit(HISTORY_FETCH_LIMIT),
       supabase.from("leave_requests").select("*").eq("status", "pending").order("created_at", { ascending: false }),
-      supabase.from("leave_requests").select("*").neq("status", "pending").order("updated_at", { ascending: false }).limit(20),
+      supabase.from("leave_requests").select("*").neq("status", "pending").order("updated_at", { ascending: false }).limit(HISTORY_FETCH_LIMIT),
       supabase.from("leave_types").select("id, name"),
       supabase.from("personal_advances").select("*").eq("status", "pending").order("created_at", { ascending: false }),
-      supabase.from("personal_advances").select("*").neq("status", "pending").order("approved_at", { ascending: false }).limit(20),
+      supabase.from("personal_advances").select("*").neq("status", "pending").order("approved_at", { ascending: false }).limit(HISTORY_FETCH_LIMIT),
       supabase.from("expense_claims").select("*").eq("status", "pending").order("created_at", { ascending: false }),
-      supabase.from("expense_claims").select("*").neq("status", "pending").order("approved_at", { ascending: false }).limit(20),
+      supabase.from("expense_claims").select("*").neq("status", "pending").order("approved_at", { ascending: false }).limit(HISTORY_FETCH_LIMIT),
     ]);
     setPending(requests || []);
     setHistory(resolved || []);
@@ -955,13 +968,38 @@ const Approvals = () => {
 
       {/* History — every decided request, grouped into tabs by type */}
       {(() => {
+        // Search matches the employee's name/email; date range matches each
+        // type's own "when it happened" field (see HISTORY_DATE_FIELD) — same
+        // fields each tab's own Date/Effective/Dates column already shows,
+        // so filtering never touches any stored value, only what's displayed.
+        const matchesHistoryFilter = (row: any, type: string) => {
+          if (historySearch.trim()) {
+            const name = (row.profiles?.full_name || row.profiles?.email || names[row.user_id] || "").toLowerCase();
+            if (!name.includes(historySearch.trim().toLowerCase())) return false;
+          }
+          const rawDate = row[HISTORY_DATE_FIELD[type]];
+          if (rawDate && (historyFrom || historyTo)) {
+            const d = format(new Date(rawDate), "yyyy-MM-dd");
+            if (historyFrom && d < historyFrom) return false;
+            if (historyTo && d > historyTo) return false;
+          }
+          return true;
+        };
         const historyData: Record<string, any[]> = {
-          overtime: history, manual: manualHistory, late: lateHistory, leave: leaveHistory, loan: loanHistory, expense: expenseHistory,
+          overtime: history.filter((r) => matchesHistoryFilter(r, "overtime")),
+          manual: manualHistory.filter((r) => matchesHistoryFilter(r, "manual")),
+          late: lateHistory.filter((r) => matchesHistoryFilter(r, "late")),
+          leave: leaveHistory.filter((r) => matchesHistoryFilter(r, "leave")),
+          loan: loanHistory.filter((r) => matchesHistoryFilter(r, "loan")),
+          expense: expenseHistory.filter((r) => matchesHistoryFilter(r, "expense")),
         };
         const activeHistory = historyData[historyTab] || [];
+        const hasFilter = historySearch.trim() !== "" || historyFrom !== "" || historyTo !== "";
         const historyPageCount = Math.max(1, Math.ceil(activeHistory.length / HISTORY_PAGE_SIZE));
         const currentHistoryPage = Math.min(historyPage[historyTab] || 1, historyPageCount);
         const setCurrentHistoryPage = (p: number) => setHistoryPage((prev) => ({ ...prev, [historyTab]: p }));
+        const setCurrentHistoryPageAll = (p: number) =>
+          setHistoryPage({ overtime: p, manual: p, late: p, leave: p, loan: p, expense: p });
         const pageSlice = (rows: any[]) =>
           rows.slice((currentHistoryPage - 1) * HISTORY_PAGE_SIZE, currentHistoryPage * HISTORY_PAGE_SIZE);
         return (
@@ -969,6 +1007,44 @@ const Approvals = () => {
         <CardHeader>
           <CardTitle>History</CardTitle>
           <CardDescription>Track every decided request and how it was resolved.</CardDescription>
+          <div className="flex flex-wrap items-end gap-2 pt-2">
+            <div className="flex-1 min-w-[180px]">
+              <Label htmlFor="history-search" className="text-xs text-muted-foreground">Employee</Label>
+              <Input
+                id="history-search"
+                placeholder="Search by name or email"
+                value={historySearch}
+                onChange={(e) => { setHistorySearch(e.target.value); setCurrentHistoryPageAll(1); }}
+              />
+            </div>
+            <div>
+              <Label htmlFor="history-from" className="text-xs text-muted-foreground">From</Label>
+              <Input
+                id="history-from"
+                type="date"
+                value={historyFrom}
+                onChange={(e) => { setHistoryFrom(e.target.value); setCurrentHistoryPageAll(1); }}
+              />
+            </div>
+            <div>
+              <Label htmlFor="history-to" className="text-xs text-muted-foreground">To</Label>
+              <Input
+                id="history-to"
+                type="date"
+                value={historyTo}
+                onChange={(e) => { setHistoryTo(e.target.value); setCurrentHistoryPageAll(1); }}
+              />
+            </div>
+            {hasFilter && (
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => { setHistorySearch(""); setHistoryFrom(""); setHistoryTo(""); setCurrentHistoryPageAll(1); }}
+              >
+                Clear filters
+              </Button>
+            )}
+          </div>
         </CardHeader>
         <CardContent>
           <Tabs value={historyTab} onValueChange={setHistoryTab}>
@@ -993,9 +1069,9 @@ const Approvals = () => {
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {history.length === 0 ? (
-                    <TableRow><TableCell colSpan={5} className="text-center text-muted-foreground">No history yet</TableCell></TableRow>
-                  ) : pageSlice(history).map((req) => (
+                  {historyData.overtime.length === 0 ? (
+                    <TableRow><TableCell colSpan={5} className="text-center text-muted-foreground">No matching history</TableCell></TableRow>
+                  ) : pageSlice(historyData.overtime).map((req) => (
                     <TableRow key={req.id}>
                       <TableCell>{(req.profiles as any)?.full_name || (req.profiles as any)?.email || "Unknown"}</TableCell>
                       <TableCell>{format(new Date(req.date), "MMM d, yyyy")}</TableCell>
@@ -1039,9 +1115,9 @@ const Approvals = () => {
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {manualHistory.length === 0 ? (
-                    <TableRow><TableCell colSpan={9} className="text-center text-muted-foreground">No manual time request history yet</TableCell></TableRow>
-                  ) : pageSlice(manualHistory).map((req) => (
+                  {historyData.manual.length === 0 ? (
+                    <TableRow><TableCell colSpan={9} className="text-center text-muted-foreground">No matching manual time request history</TableCell></TableRow>
+                  ) : pageSlice(historyData.manual).map((req) => (
                     <TableRow key={req.id}>
                       <TableCell className="font-medium">{names[req.user_id] || "Unknown"}</TableCell>
                       <TableCell className="whitespace-nowrap">{format(new Date(req.date), "MMM d, yyyy")}</TableCell>
@@ -1088,9 +1164,9 @@ const Approvals = () => {
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {lateHistory.length === 0 ? (
-                    <TableRow><TableCell colSpan={8} className="text-center text-muted-foreground">No late time request history yet</TableCell></TableRow>
-                  ) : pageSlice(lateHistory).map((req) => (
+                  {historyData.late.length === 0 ? (
+                    <TableRow><TableCell colSpan={8} className="text-center text-muted-foreground">No matching late time request history</TableCell></TableRow>
+                  ) : pageSlice(historyData.late).map((req) => (
                     <TableRow key={req.id}>
                       <TableCell className="font-medium">{names[req.user_id] || "Unknown"}</TableCell>
                       <TableCell>
@@ -1143,9 +1219,9 @@ const Approvals = () => {
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {leaveHistory.length === 0 ? (
-                    <TableRow><TableCell colSpan={8} className="text-center text-muted-foreground">No leave request history yet</TableCell></TableRow>
-                  ) : pageSlice(leaveHistory).map((req) => (
+                  {historyData.leave.length === 0 ? (
+                    <TableRow><TableCell colSpan={8} className="text-center text-muted-foreground">No matching leave request history</TableCell></TableRow>
+                  ) : pageSlice(historyData.leave).map((req) => (
                     <TableRow key={req.id}>
                       <TableCell className="font-medium">{names[req.user_id] || "Unknown"}</TableCell>
                       <TableCell><Badge variant="outline">{leaveTypeNames[req.leave_type_id] || "—"}</Badge></TableCell>
@@ -1190,9 +1266,9 @@ const Approvals = () => {
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {loanHistory.length === 0 ? (
-                    <TableRow><TableCell colSpan={7} className="text-center text-muted-foreground">No loan history yet</TableCell></TableRow>
-                  ) : pageSlice(loanHistory).map((loan) => (
+                  {historyData.loan.length === 0 ? (
+                    <TableRow><TableCell colSpan={7} className="text-center text-muted-foreground">No matching loan history</TableCell></TableRow>
+                  ) : pageSlice(historyData.loan).map((loan) => (
                     <TableRow key={loan.id}>
                       <TableCell className="font-medium">{names[loan.user_id] || "Unknown"}</TableCell>
                       <TableCell className="whitespace-nowrap">{format(new Date(loan.created_at), "MMM d, yyyy")}</TableCell>
@@ -1234,9 +1310,9 @@ const Approvals = () => {
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {expenseHistory.length === 0 ? (
-                    <TableRow><TableCell colSpan={7} className="text-center text-muted-foreground">No expense history yet</TableCell></TableRow>
-                  ) : pageSlice(expenseHistory).map((claim) => (
+                  {historyData.expense.length === 0 ? (
+                    <TableRow><TableCell colSpan={7} className="text-center text-muted-foreground">No matching expense history</TableCell></TableRow>
+                  ) : pageSlice(historyData.expense).map((claim) => (
                     <TableRow key={claim.id}>
                       <TableCell className="font-medium">{names[claim.user_id] || "Unknown"}</TableCell>
                       <TableCell className="whitespace-nowrap">{format(new Date(claim.claim_date), "MMM d, yyyy")}</TableCell>
