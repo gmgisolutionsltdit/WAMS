@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/button";
 import { IdCard, ChevronLeft, ChevronRight } from "lucide-react";
 import { useRealtimeSubscription } from "@/hooks/useRealtimeSubscription";
 import { Skeleton } from "@/components/ui/skeleton";
+import { useLanguage } from "@/contexts/LanguageContext";
 
 const PAGE_SIZE = 20;
 
@@ -29,6 +30,7 @@ const fmt = (v: string | null) => (v && v.trim() ? v : "—");
  * kept, so saving on the Personal Info tab is reflected here automatically.
  */
 const TeamMemberDetails = () => {
+  const { t } = useLanguage();
   const [rows, setRows] = useState<DirectoryRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [page, setPage] = useState(1);
@@ -50,7 +52,7 @@ const TeamMemberDetails = () => {
     <div className="space-y-4">
       <Card>
         <CardHeader>
-          <CardTitle className="flex items-center gap-2"><IdCard className="h-5 w-5" /> Team Member Details</CardTitle>
+          <CardTitle className="flex items-center gap-2"><IdCard className="h-5 w-5" /> {t("Team Member Details")}</CardTitle>
           <CardDescription>
             Name, designation and contact details for every employee, manager and admin. Read-only —
             each person's own Personal Info tab (or an admin, for anyone) is where this is edited.
@@ -62,19 +64,19 @@ const TeamMemberDetails = () => {
               {Array.from({ length: 6 }).map((_, i) => <Skeleton key={i} className="h-10 w-full" />)}
             </div>
           ) : rows.length === 0 ? (
-            <p className="text-sm text-muted-foreground text-center py-8">No team members found.</p>
+            <p className="text-sm text-muted-foreground text-center py-8">{t("No team members found.")}</p>
           ) : (
             <div className="overflow-x-auto">
               <Table>
                 <TableHeader>
                   <TableRow>
                     <TableHead className="w-12">SL. No.</TableHead>
-                    <TableHead>Employee Name</TableHead>
-                    <TableHead>Designation</TableHead>
-                    <TableHead>Personal Email</TableHead>
-                    <TableHead>Official Gmail</TableHead>
-                    <TableHead>Official OneDrive</TableHead>
-                    <TableHead>Phone Number</TableHead>
+                    <TableHead>{t("Employee Name")}</TableHead>
+                    <TableHead>{t("Designation")}</TableHead>
+                    <TableHead>{t("Personal Email")}</TableHead>
+                    <TableHead>{t("Official Gmail")}</TableHead>
+                    <TableHead>{t("Official OneDrive")}</TableHead>
+                    <TableHead>{t("Phone Number")}</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>

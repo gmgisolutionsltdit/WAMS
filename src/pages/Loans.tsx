@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
+import { useLanguage } from "@/contexts/LanguageContext";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -24,6 +25,7 @@ import { format } from "date-fns";
 // once an admin/manager approves it from the Payment > Loans tab.
 const Loans = () => {
   const { user, role } = useAuth();
+  const { t } = useLanguage();
   const canManage = role === "admin";
   const [loans, setLoans] = useState<any[]>([]);
   const [employees, setEmployees] = useState<any[]>([]);
@@ -123,18 +125,18 @@ const Loans = () => {
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-        <Card><CardHeader className="pb-2"><CardDescription>Active Loans</CardDescription><CardTitle className="text-2xl">{loans.filter(l => l.status === "approved").length}</CardTitle></CardHeader></Card>
-        <Card><CardHeader className="pb-2"><CardDescription>Outstanding Balance</CardDescription><CardTitle className="text-2xl">{totalActive.toLocaleString()}</CardTitle></CardHeader></Card>
-        <Card><CardHeader className="pb-2"><CardDescription>Next Payroll Deduction</CardDescription><CardTitle className="text-2xl text-warning">{monthlyDeduction.toLocaleString()}</CardTitle></CardHeader></Card>
+        <Card><CardHeader className="pb-2"><CardDescription>{t("Active Loans")}</CardDescription><CardTitle className="text-2xl">{loans.filter(l => l.status === "approved").length}</CardTitle></CardHeader></Card>
+        <Card><CardHeader className="pb-2"><CardDescription>{t("Outstanding Balance")}</CardDescription><CardTitle className="text-2xl">{totalActive.toLocaleString()}</CardTitle></CardHeader></Card>
+        <Card><CardHeader className="pb-2"><CardDescription>{t("Next Payroll Deduction")}</CardDescription><CardTitle className="text-2xl text-warning">{monthlyDeduction.toLocaleString()}</CardTitle></CardHeader></Card>
       </div>
 
       <Card>
-        <CardHeader><CardTitle className="flex items-center gap-2"><Banknote className="h-5 w-5 text-primary" />Loan Ledger</CardTitle></CardHeader>
+        <CardHeader><CardTitle className="flex items-center gap-2"><Banknote className="h-5 w-5 text-primary" />{t("Loan Ledger")}</CardTitle></CardHeader>
         <CardContent>
           <Table>
             <TableHeader>
               <TableRow>
-                <TableHead>Employee</TableHead><TableHead>Principal</TableHead><TableHead>Remaining</TableHead><TableHead>Monthly</TableHead><TableHead>Progress</TableHead><TableHead>Status</TableHead><TableHead></TableHead>
+                <TableHead>{t("Employee")}</TableHead><TableHead>{t("Principal")}</TableHead><TableHead>{t("Remaining")}</TableHead><TableHead>{t("Monthly")}</TableHead><TableHead>{t("Progress")}</TableHead><TableHead>{t("Status")}</TableHead><TableHead></TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>

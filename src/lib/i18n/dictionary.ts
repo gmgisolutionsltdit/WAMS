@@ -149,6 +149,21 @@ export const bn: Record<string, string> = {
 
   // Performance Evaluation
   Evaluations: "মূল্যায়ন",
+  Score: "স্কোর",
+  Meaning: "অর্থ",
+  Period: "মেয়াদ",
+  Requested: "অনুরোধকৃত",
+  Action: "অ্যাকশন",
+  Evaluator: "মূল্যায়নকারী",
+  "Average Score": "গড় স্কোর",
+  Weight: "ওজন",
+  "Employee Category": "কর্মচারী ক্যাটাগরি",
+  "Salary Range (BDT)": "বেতন পরিসর (টাকা)",
+  "Performance Category": "পারফরম্যান্স ক্যাটাগরি",
+  "Minimum Average Score": "সর্বনিম্ন গড় স্কোর",
+  "Evaluations Requested of You": "আপনার কাছে অনুরোধকৃত মূল্যায়ন",
+  "Your Submitted Evaluations": "আপনার জমা দেওয়া মূল্যায়ন",
+  "Evaluations by Employee": "কর্মচারী অনুযায়ী মূল্যায়ন",
 
   // Employee Management
   "Add Employee": "কর্মচারী যোগ করুন",
@@ -161,6 +176,14 @@ export const bn: Record<string, string> = {
 
   // Loans / Payment
   "Net Salary": "নেট বেতন",
+  "Active Loans": "সক্রিয় ঋণ",
+  "Outstanding Balance": "বকেয়া ব্যালেন্স",
+  "Next Payroll Deduction": "পরবর্তী বেতন থেকে কর্তন",
+  "Loan Ledger": "ঋণের হিসাব",
+  Principal: "মূল পরিমাণ",
+  Remaining: "অবশিষ্ট",
+  Monthly: "মাসিক",
+  Progress: "অগ্রগতি",
   "Net Time Balance": "নেট সময় ব্যালেন্স",
   "Expense Balance": "খরচের ব্যালেন্স",
   "Loan Due": "ঋণ বকেয়া",
@@ -177,6 +200,11 @@ export const bn: Record<string, string> = {
 
   // Team Member Details
   "No team members found.": "কোনো টিম মেম্বার পাওয়া যায়নি।",
+  "Employee Name": "কর্মচারীর নাম",
+  "Personal Email": "ব্যক্তিগত ইমেইল",
+  "Official Gmail": "অফিসিয়াল জিমেইল",
+  "Official OneDrive": "অফিসিয়াল ওয়ানড্রাইভ",
+  "Phone Number": "ফোন নম্বর",
 
   // Reports
   "Filter by employee, date range, and type.": "কর্মচারী, তারিখের পরিসর এবং ধরন অনুযায়ী ফিল্টার করুন।",

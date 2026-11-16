@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useAuth } from "@/contexts/AuthContext";
+import { useLanguage } from "@/contexts/LanguageContext";
 import { supabase } from "@/integrations/supabase/client";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -116,6 +117,7 @@ const emptyAnswerForm = (defaultScore = 3): { scores: CriterionScore[]; justific
 
 const PerformanceEvaluation = () => {
   const { user, role } = useAuth();
+  const { t } = useLanguage();
   const isAdmin = role === "admin";
   const isManagerOrAdmin = ["manager", "admin"].includes(role);
 
@@ -605,7 +607,7 @@ const PerformanceEvaluation = () => {
               <div className="overflow-x-auto mt-1">
                 <Table>
                   <TableHeader>
-                    <TableRow><TableHead>Employee Category</TableHead><TableHead>Salary Range (BDT)</TableHead></TableRow>
+                    <TableRow><TableHead>{t("Employee Category")}</TableHead><TableHead>{t("Salary Range (BDT)")}</TableHead></TableRow>
                   </TableHeader>
                   <TableBody>
                     <TableRow>
@@ -635,7 +637,7 @@ const PerformanceEvaluation = () => {
               <div className="overflow-x-auto mt-1">
                 <Table>
                   <TableHeader>
-                    <TableRow><TableHead>Performance Category</TableHead><TableHead>Minimum Average Score</TableHead></TableRow>
+                    <TableRow><TableHead>{t("Performance Category")}</TableHead><TableHead>{t("Minimum Average Score")}</TableHead></TableRow>
                   </TableHeader>
                   <TableBody>
                     <TableRow>
@@ -665,7 +667,7 @@ const PerformanceEvaluation = () => {
               <div className="overflow-x-auto mt-1">
                 <Table>
                   <TableHeader>
-                    <TableRow><TableHead className="w-16">Score</TableHead><TableHead className="w-40">Meaning</TableHead><TableHead>Description</TableHead></TableRow>
+                    <TableRow><TableHead className="w-16">{t("Score")}</TableHead><TableHead className="w-40">{t("Meaning")}</TableHead><TableHead>{t("Description")}</TableHead></TableRow>
                   </TableHeader>
                   <TableBody>
                     {scoreScaleForm.map((row) => (
@@ -691,7 +693,7 @@ const PerformanceEvaluation = () => {
                 <Table>
                   <TableHeader>
                     <TableRow>
-                      <TableHead>Category</TableHead>
+                      <TableHead>{t("Category")}</TableHead>
                       {PERFORMANCE_CATEGORIES.map((pc) => <TableHead key={pc}>{pc}</TableHead>)}
                     </TableRow>
                   </TableHeader>
@@ -737,17 +739,17 @@ const PerformanceEvaluation = () => {
       {pendingForMe.length > 0 && (
         <Card>
           <CardHeader>
-            <CardTitle className="text-base">Evaluations Requested of You</CardTitle>
+            <CardTitle className="text-base">{t("Evaluations Requested of You")}</CardTitle>
             <CardDescription>Score each criterion 1–5; the total, average and category are calculated for you.</CardDescription>
           </CardHeader>
           <CardContent>
             <Table>
               <TableHeader>
                 <TableRow>
-                  <TableHead>Employee</TableHead>
-                  <TableHead>Period</TableHead>
-                  <TableHead>Requested</TableHead>
-                  <TableHead>Action</TableHead>
+                  <TableHead>{t("Employee")}</TableHead>
+                  <TableHead>{t("Period")}</TableHead>
+                  <TableHead>{t("Requested")}</TableHead>
+                  <TableHead>{t("Action")}</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -769,14 +771,14 @@ const PerformanceEvaluation = () => {
 
       {!isAdmin && submittedByMe.length > 0 && (
         <Card>
-          <CardHeader><CardTitle className="text-base">Your Submitted Evaluations</CardTitle></CardHeader>
+          <CardHeader><CardTitle className="text-base">{t("Your Submitted Evaluations")}</CardTitle></CardHeader>
           <CardContent>
             <Table>
               <TableHeader>
                 <TableRow>
-                  <TableHead>Employee</TableHead>
-                  <TableHead>Average Score</TableHead>
-                  <TableHead>Category</TableHead>
+                  <TableHead>{t("Employee")}</TableHead>
+                  <TableHead>{t("Average Score")}</TableHead>
+                  <TableHead>{t("Category")}</TableHead>
                   <TableHead></TableHead>
                 </TableRow>
               </TableHeader>
@@ -807,7 +809,7 @@ const PerformanceEvaluation = () => {
       {isAdmin && (
         <Card>
           <CardHeader>
-            <CardTitle className="text-base">Evaluations by Employee</CardTitle>
+            <CardTitle className="text-base">{t("Evaluations by Employee")}</CardTitle>
             <CardDescription>
               When more than one evaluator covers the same employee, set each evaluator's weight — the final category
               is their weighted-average score.
@@ -877,11 +879,11 @@ const PerformanceEvaluation = () => {
                 <Table>
                   <TableHeader>
                     <TableRow>
-                      <TableHead>Evaluator</TableHead>
-                      <TableHead>Status</TableHead>
-                      <TableHead>Average Score</TableHead>
-                      <TableHead>Category</TableHead>
-                      <TableHead>Weight</TableHead>
+                      <TableHead>{t("Evaluator")}</TableHead>
+                      <TableHead>{t("Status")}</TableHead>
+                      <TableHead>{t("Average Score")}</TableHead>
+                      <TableHead>{t("Category")}</TableHead>
+                      <TableHead>{t("Weight")}</TableHead>
                       <TableHead></TableHead>
                     </TableRow>
                   </TableHeader>
@@ -964,7 +966,7 @@ const PerformanceEvaluation = () => {
           <div className="space-y-5">
             <Table>
               <TableHeader>
-                <TableRow><TableHead className="w-12">Score</TableHead><TableHead className="w-40">Meaning</TableHead><TableHead>Description</TableHead></TableRow>
+                <TableRow><TableHead className="w-12">{t("Score")}</TableHead><TableHead className="w-40">{t("Meaning")}</TableHead><TableHead>{t("Description")}</TableHead></TableRow>
               </TableHeader>
               <TableBody>
                 {scoreScale.map((s) => (
@@ -1053,7 +1055,7 @@ const PerformanceEvaluation = () => {
 
               <Table>
                 <TableHeader>
-                  <TableRow><TableHead className="w-12">Score</TableHead><TableHead className="w-40">Meaning</TableHead><TableHead>Description</TableHead></TableRow>
+                  <TableRow><TableHead className="w-12">{t("Score")}</TableHead><TableHead className="w-40">{t("Meaning")}</TableHead><TableHead>{t("Description")}</TableHead></TableRow>
                 </TableHeader>
                 <TableBody>
                   {scoreScale.map((s) => (
@@ -1268,6 +1270,7 @@ const IncrementEvaluationDialog = ({
   onSaved: () => void;
 }) => {
   const { user } = useAuth();
+  const { t } = useLanguage();
   const [form, setForm] = useState(() => emptyIncrementForm(finalization, existing, existingEffectiveFrom));
   const [saving, setSaving] = useState(false);
   const [scenarioRanges, setScenarioRanges] = useState<CompanyScenarioRanges>(DEFAULT_COMPANY_SCENARIO_RANGES);
