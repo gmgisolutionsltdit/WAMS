@@ -227,8 +227,9 @@ const SOP = () => {
               {current.map((doc) => (
                 <div key={doc.id} className="flex items-center justify-between gap-3 rounded-lg border p-4">
                   <div className="min-w-0">
-                    <div className="font-medium truncate flex items-center gap-2">
-                      {doc.title} <Badge>{doc.version_label}</Badge>
+                    <div className="font-medium flex items-center gap-2 min-w-0">
+                      <span className="truncate min-w-0">{doc.title}</span>
+                      <Badge className="shrink-0">{doc.version_label}</Badge>
                     </div>
                     <div className="text-xs text-muted-foreground mt-1">
                       Published {format(new Date(doc.created_at), "MMM d, yyyy")}
@@ -260,8 +261,9 @@ const SOP = () => {
             {history.map((doc) => (
               <div key={doc.id} className="flex items-center justify-between gap-3 rounded-lg border p-3">
                 <div className="min-w-0">
-                  <div className="text-sm font-medium truncate flex items-center gap-2">
-                    {doc.title} <Badge variant="outline">{doc.version_label}</Badge>
+                  <div className="text-sm font-medium flex items-center gap-2 min-w-0">
+                    <span className="truncate min-w-0">{doc.title}</span>
+                    <Badge variant="outline" className="shrink-0">{doc.version_label}</Badge>
                   </div>
                   <div className="text-xs text-muted-foreground mt-0.5">
                     {format(new Date(doc.created_at), "MMM d, yyyy")}
