@@ -30,7 +30,9 @@ import { uploadAttachments } from "@/lib/attachments";
 import AttachmentsInput from "@/components/AttachmentsInput";
 import AttachmentThumbnails from "@/components/AttachmentThumbnails";
 import { DeleteReasonDialog } from "@/components/DeleteReasonDialog";
-import { moveToTrash } from "@/lib/trash";
+import { moveToTrash, toastDeletedWithUndo } from "@/lib/trash";
+import { Skeleton } from "@/components/ui/skeleton";
+import { TableSkeletonRows } from "@/components/TableSkeleton";
 
 type PayrollSettlementRow = {
   id: string;
@@ -197,8 +199,9 @@ const Payment = () => {
 
   const deleteLoan = async (loan: { id: string; user_id: string; amount: number }, reason: string) => {
     if (!user) return;
+    let trashId: string;
     try {
-      await moveToTrash("loan", loan, user.id, reason);
+      trashId = await moveToTrash("loan", loan, user.id, reason);
     } catch (e) {
       toast.error(e instanceof Error ? e.message : "Could not move this to Trash — delete cancelled.");
       return;
@@ -208,7 +211,7 @@ const Payment = () => {
     const { data, error } = await supabase.from("personal_advances").delete().eq("id", loan.id).select("id");
     if (error) { toast.error(error.message); return; }
     if (!data?.length) { toast.error("Delete didn't go through — you may not have permission to delete this."); return; }
-    toast.success("Loan deleted");
+    toastDeletedWithUndo("Loan deleted", trashId, fetchAll);
     await notifyEmployee(
       loan.user_id,
       "Loan Request Deleted",
@@ -678,9 +681,9 @@ function PaymentHistoryTable({
           </TableHeader>
           <TableBody>
             {loading ? (
-              <TableRow><TableCell colSpan={colCount} className="text-center text-muted-foreground py-6"><Loader2 className="h-4 w-4 animate-spin inline mr-2" />Loading…</TableCell></TableRow>
+              <TableSkeletonRows cols={colCount} />
             ) : rows.length === 0 ? (
-              <TableRow><TableCell colSpan={colCount} className="text-center text-muted-foreground py-6">No payment history yet</TableCell></TableRow>
+              <TableRow><TableCell colSpan={colCount} className="text-center text-muted-foreground py-6">No payment history yet — it'll show up here once a payment is recorded.</TableCell></TableRow>
             ) : rows.map((r) => (
               <TableRow key={r.id}>
                 <TableCell className="whitespace-nowrap">{format(new Date(r.month), "MMMM yyyy")}</TableCell>
@@ -1141,7 +1144,11 @@ function MyPaymentsTab() {
       </CardHeader>
       <CardContent>
         {loading ? (
-          <p className="text-sm text-muted-foreground">Loading…</p>
+          <div className="space-y-3">
+            <Skeleton className="h-4 w-48" />
+            <Skeleton className="h-24 w-full" />
+            <Skeleton className="h-24 w-full" />
+          </div>
         ) : !selectedUserId ? (
           <p className="text-sm text-muted-foreground">Select an employee.</p>
         ) : (
@@ -1178,7 +1185,19 @@ function MyPaymentsTab() {
                   <Checkbox checked={otPaidNow} onCheckedChange={(v) => setOtPaidNow(!!v)} />
                   Adjust Now (unchecked = carry to next month)
                 </label>
-                <Input type="number" value={otAmount} onChange={(e) => { setOtAmount(e.target.value); setOtAmountTouched(true); }} disabled={!otPaidNow} />
+                <div className="flex gap-1">
+                  <Input type="number" value={otAmount} onChange={(e) => { setOtAmount(e.target.value); setOtAmountTouched(true); }} disabled={!otPaidNow} />
+                  <Button
+                    type="button" variant="outline" size="sm" className="shrink-0"
+                    disabled={!otPaidNow || otOutstanding <= 0}
+                    onClick={() => { setOtAmount(String(otOutstanding)); setOtAmountTouched(true); }}
+                  >
+                    Pay full
+                  </Button>
+                </div>
+                {otPaidNow && otOutstanding > (Number(otAmount) || 0) && (
+                  <p className="text-xs text-muted-foreground">Carrying forward: {fmtBDT(otOutstanding - (Number(otAmount) || 0))}</p>
+                )}
               </div>
               <div className="rounded-md border p-3 space-y-2">
                 <div className="text-sm font-medium">Expense Balance</div>
@@ -1187,7 +1206,19 @@ function MyPaymentsTab() {
                   <Checkbox checked={expensePaidNow} onCheckedChange={(v) => setExpensePaidNow(!!v)} />
                   Adjust Now (unchecked = carry to next month)
                 </label>
-                <Input type="number" value={expenseAmount} onChange={(e) => { setExpenseAmount(e.target.value); setExpenseAmountTouched(true); }} disabled={!expensePaidNow} />
+                <div className="flex gap-1">
+                  <Input type="number" value={expenseAmount} onChange={(e) => { setExpenseAmount(e.target.value); setExpenseAmountTouched(true); }} disabled={!expensePaidNow} />
+                  <Button
+                    type="button" variant="outline" size="sm" className="shrink-0"
+                    disabled={!expensePaidNow || expenseOutstanding <= 0}
+                    onClick={() => { setExpenseAmount(String(expenseOutstanding)); setExpenseAmountTouched(true); }}
+                  >
+                    Pay full
+                  </Button>
+                </div>
+                {expensePaidNow && expenseOutstanding > (Number(expenseAmount) || 0) && (
+                  <p className="text-xs text-muted-foreground">Carrying forward: {fmtBDT(expenseOutstanding - (Number(expenseAmount) || 0))}</p>
+                )}
               </div>
               <div className="rounded-md border p-3 space-y-2">
                 <div className="text-sm font-medium">Loan Due</div>
@@ -1198,7 +1229,19 @@ function MyPaymentsTab() {
                   <Checkbox checked={loanPaidNow} onCheckedChange={(v) => setLoanPaidNow(!!v)} disabled={!loan} />
                   Adjust Now (unchecked = carry to next month)
                 </label>
-                <Input type="number" value={loanAmount} onChange={(e) => { setLoanAmount(e.target.value); setLoanAmountTouched(true); }} disabled={!loan || !loanPaidNow || loanDue <= 0} />
+                <div className="flex gap-1">
+                  <Input type="number" value={loanAmount} onChange={(e) => { setLoanAmount(e.target.value); setLoanAmountTouched(true); }} disabled={!loan || !loanPaidNow || loanDue <= 0} />
+                  <Button
+                    type="button" variant="outline" size="sm" className="shrink-0"
+                    disabled={!loan || !loanPaidNow || loanDue <= 0}
+                    onClick={() => { setLoanAmount(String(loanDue)); setLoanAmountTouched(true); }}
+                  >
+                    Pay full
+                  </Button>
+                </div>
+                {loan && loanPaidNow && loanDue > Math.abs(Number(loanAmount) || 0) && (
+                  <p className="text-xs text-muted-foreground">Carrying forward: {fmtBDT(loanDue - Math.abs(Number(loanAmount) || 0))} of this month's due</p>
+                )}
                 {loan && <p className="text-xs text-muted-foreground">{fmtBDT(loan.remaining_balance)} remaining balance</p>}
               </div>
               <div className="rounded-md border p-3 space-y-2">
@@ -1469,7 +1512,9 @@ function MyPaymentsSummary() {
       </CardHeader>
       <CardContent className="space-y-4">
         {loading ? (
-          <p className="text-sm text-muted-foreground">Loading…</p>
+          <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-5">
+            {Array.from({ length: 5 }).map((_, i) => <Skeleton key={i} className="h-20 w-full" />)}
+          </div>
         ) : (
           <>
             <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-5">
@@ -1491,11 +1536,17 @@ function MyPaymentsSummary() {
                   </div>
                 )}
                 <Badge variant="outline">Paid {fmtBDT(otTotalPaid)}</Badge>
+                {otOutstanding > 0 && (
+                  <p className="text-xs text-muted-foreground">Will carry to next month unless settled.</p>
+                )}
               </div>
               <div className="rounded-md border p-3 space-y-2">
                 <div className="text-sm font-medium">Expense Balance</div>
                 <div className="text-lg font-semibold">{fmtBDT(expenseOutstanding)}</div>
                 <Badge variant="outline">Paid {fmtBDT(expenseTotalPaid)}</Badge>
+                {expenseOutstanding > 0 && (
+                  <p className="text-xs text-muted-foreground">Will carry to next month unless settled.</p>
+                )}
               </div>
               <div className="rounded-md border p-3 space-y-2">
                 <div className="text-sm font-medium">Loan Due</div>
@@ -1700,9 +1751,9 @@ function SalaryMonthlyTableView({ rows, showEmployee, loading }: { rows: SalaryM
         </TableHeader>
         <TableBody>
           {loading ? (
-            <TableRow><TableCell colSpan={colCount} className="text-center text-muted-foreground py-8"><Loader2 className="h-4 w-4 animate-spin inline mr-2" />Loading…</TableCell></TableRow>
+            <TableSkeletonRows cols={colCount} rows={4} />
           ) : rows.length === 0 ? (
-            <TableRow><TableCell colSpan={colCount} className="text-center text-muted-foreground py-8">No records</TableCell></TableRow>
+            <TableRow><TableCell colSpan={colCount} className="text-center text-muted-foreground py-8">No records for this month yet.</TableCell></TableRow>
           ) : rows.map((r) => (
             <TableRow key={`${r.userId}-${r.month}`}>
               {showEmployee && <TableCell className="font-medium whitespace-nowrap">{r.name}</TableCell>}
@@ -2056,8 +2107,9 @@ function ExpenseClaimsTab() {
       return;
     }
     if (!user || !claim) return;
+    let trashId: string;
     try {
-      await moveToTrash("expense", claim, user.id, reason);
+      trashId = await moveToTrash("expense", claim, user.id, reason);
     } catch (e) {
       toast.error(e instanceof Error ? e.message : "Could not move this to Trash — delete cancelled.");
       return;
@@ -2067,7 +2119,7 @@ function ExpenseClaimsTab() {
     const { data, error } = await supabase.from("expense_claims").delete().eq("id", id).select("id");
     if (error) { toast.error(error.message); return; }
     if (!data?.length) { toast.error("Delete didn't go through — you may not have permission to delete this."); return; }
-    toast.success("Claim deleted");
+    toastDeletedWithUndo("Claim deleted", trashId, fetchClaims);
     if (claim) {
       await notifyEmployee(
         claim.user_id,

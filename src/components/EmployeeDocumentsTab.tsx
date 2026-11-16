@@ -9,6 +9,7 @@ import {
 import { Upload, Download, Trash2, FileText } from "lucide-react";
 import { toast } from "sonner";
 import { format } from "date-fns";
+import { Skeleton } from "@/components/ui/skeleton";
 
 type DocRow = {
   id: string;
@@ -159,9 +160,12 @@ export const EmployeeDocumentsTab = ({ userId, canManage, editing }: Props) => {
             </CardHeader>
             <CardContent>
               {loading ? (
-                <p className="text-xs text-muted-foreground">Loading…</p>
+                <div className="space-y-2">
+                  <Skeleton className="h-8 w-full" />
+                  <Skeleton className="h-8 w-full" />
+                </div>
               ) : rows.length === 0 ? (
-                <p className="text-xs text-muted-foreground">No files uploaded yet.</p>
+                <p className="text-xs text-muted-foreground">No files uploaded yet — use Upload above to add one.</p>
               ) : (
                 <div className="space-y-2">
                   {rows.map((doc) => (

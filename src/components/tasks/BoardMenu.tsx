@@ -8,10 +8,11 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { toast } from "sonner";
 import {
-  MoreHorizontal, X, UserPlus, Info, Lock, Star, Archive, ArchiveRestore, Loader2, ChevronLeft,
+  MoreHorizontal, X, UserPlus, Info, Lock, Star, Archive, ArchiveRestore, ChevronLeft,
 } from "lucide-react";
 import { isBoardStarred, toggleStarredBoard } from "@/lib/boardPrefs";
 import { cn } from "@/lib/utils";
+import { Skeleton } from "@/components/ui/skeleton";
 
 type ArchivedTask = { id: string; ticket_key: string | null; title: string };
 type ArchivedColumn = { id: string; name: string };
@@ -289,8 +290,10 @@ export const BoardMenu = ({ project, canEdit, onOpenMembers, onProjectUpdated, o
             </div>
 
             {archivedLoading ? (
-              <div className="flex items-center justify-center py-6 text-sm text-muted-foreground">
-                <Loader2 className="h-4 w-4 mr-2 animate-spin" /> Loading…
+              <div className="space-y-2 py-2">
+                <Skeleton className="h-8 w-full" />
+                <Skeleton className="h-8 w-full" />
+                <Skeleton className="h-8 w-full" />
               </div>
             ) : archivedTab === "cards" ? (
               (() => {

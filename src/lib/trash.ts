@@ -1,4 +1,5 @@
 import { supabase } from "@/integrations/supabase/client";
+import { toast } from "sonner";
 
 // Late Time and Leave are deliberately excluded — deleting those always
 // goes straight to a permanent delete (see Approvals.tsx's deleteLate/
@@ -37,21 +38,54 @@ export const TRASH_LABEL: Record<TrashEntityType, string> = {
 // write a non-existent column.
 const NON_COLUMN_KEYS = ["profiles", "approver"];
 
+/** Returns the new trash_bin row's id — callers use it to offer "Undo"
+ *  (restore_from_trash) right on the delete's own success toast. */
 export async function moveToTrash(
   entityType: TrashEntityType,
   row: Record<string, unknown> & { id: string },
   deletedBy: string,
   reason: string,
-) {
+): Promise<string> {
   const data = { ...row };
   NON_COLUMN_KEYS.forEach((k) => delete data[k]);
-  const { error } = await supabase.from("trash_bin" as any).insert({
+  const { data: inserted, error } = await supabase.from("trash_bin" as any).insert({
     entity_type: entityType,
     source_table: TRASH_SOURCE_TABLE[entityType],
     original_id: row.id,
     data,
     deleted_by: deletedBy,
     deleted_reason: reason,
-  });
+  }).select("id").single();
   if (error) throw error;
+  return (inserted as any).id as string;
+}
+
+/** Restores a trash_bin row by id — the same RPC Trash's own Restore button
+ *  uses, shared here so a delete's "Undo" toast action can call it too. */
+export async function restoreFromTrash(trashId: string): Promise<void> {
+  const { error } = await supabase.rpc("restore_from_trash" as any, { _trash_id: trashId });
+  if (error) throw error;
+}
+
+/**
+ * Shows the standard "X deleted" success toast with an Undo button that
+ * restores the row straight out of Trash — called right after a successful
+ * moveToTrash()+delete(), passing the trashId moveToTrash returned.
+ * `onRestored` lets the caller refresh its own list once Undo completes.
+ */
+export function toastDeletedWithUndo(message: string, trashId: string, onRestored?: () => void) {
+  toast.success(message, {
+    action: {
+      label: "Undo",
+      onClick: async () => {
+        try {
+          await restoreFromTrash(trashId);
+          toast.success("Restored");
+          onRestored?.();
+        } catch (e) {
+          toast.error(e instanceof Error ? `Could not undo: ${e.message}` : "Could not undo.");
+        }
+      },
+    },
+  });
 }

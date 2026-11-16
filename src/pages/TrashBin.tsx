@@ -9,7 +9,8 @@ import { toast } from "sonner";
 import { format, differenceInCalendarDays } from "date-fns";
 import { RotateCcw, Trash2 } from "lucide-react";
 import { PhraseConfirmDialog } from "@/components/PhraseConfirmDialog";
-import { TRASH_LABEL, type TrashEntityType } from "@/lib/trash";
+import { TRASH_LABEL, restoreFromTrash, type TrashEntityType } from "@/lib/trash";
+import { TableSkeletonRows } from "@/components/TableSkeleton";
 
 type TrashRow = {
   id: string;
@@ -87,10 +88,11 @@ const TrashBin = () => {
       // row (overtime_requests, expense_claims never got an admin-insert-
       // for-anyone-else policy), so restoring someone else's trashed entry
       // as an admin would otherwise be silently blocked by RLS.
-      const { error } = await supabase.rpc("restore_from_trash" as any, { _trash_id: row.id });
-      if (error) { toast.error(`Could not restore: ${error.message}`); return; }
+      await restoreFromTrash(row.id);
       toast.success("Restored");
       fetchData();
+    } catch (e) {
+      toast.error(e instanceof Error ? `Could not restore: ${e.message}` : "Could not restore.");
     } finally {
       setBusyId(null);
     }
@@ -160,9 +162,9 @@ const TrashBin = () => {
                   </TableHeader>
                   <TableBody>
                     {loading ? (
-                      <TableRow><TableCell colSpan={7} className="text-center text-muted-foreground">Loading…</TableCell></TableRow>
+                      <TableSkeletonRows cols={7} />
                     ) : byType(t).length === 0 ? (
-                      <TableRow><TableCell colSpan={7} className="text-center text-muted-foreground">Trash is empty</TableCell></TableRow>
+                      <TableRow><TableCell colSpan={7} className="text-center text-muted-foreground">Nothing in {TRASH_LABEL[t]} trash — deleted {TRASH_LABEL[t].toLowerCase()} records will show up here, restorable for 30 days.</TableCell></TableRow>
                     ) : byType(t).map((row) => {
                       const daysLeft = Math.max(0, differenceInCalendarDays(new Date(row.expires_at), new Date()));
                       return (

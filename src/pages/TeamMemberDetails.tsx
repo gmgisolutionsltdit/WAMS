@@ -5,6 +5,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Button } from "@/components/ui/button";
 import { IdCard, ChevronLeft, ChevronRight } from "lucide-react";
 import { useRealtimeSubscription } from "@/hooks/useRealtimeSubscription";
+import { Skeleton } from "@/components/ui/skeleton";
 
 const PAGE_SIZE = 20;
 
@@ -57,7 +58,9 @@ const TeamMemberDetails = () => {
         </CardHeader>
         <CardContent>
           {loading ? (
-            <p className="text-sm text-muted-foreground">Loading…</p>
+            <div className="space-y-2">
+              {Array.from({ length: 6 }).map((_, i) => <Skeleton key={i} className="h-10 w-full" />)}
+            </div>
           ) : rows.length === 0 ? (
             <p className="text-sm text-muted-foreground text-center py-8">No team members found.</p>
           ) : (

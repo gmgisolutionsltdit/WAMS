@@ -13,6 +13,7 @@ import { format } from "date-fns";
 import { classifyDay, netRequiredHours, weekendDaysFor, type WorkSchedule } from "@/lib/workSchedule";
 import { evaluateArrival, humanMinutes, type OfficeTime } from "@/lib/officeTime";
 import { mergeDailySessions, type AttendanceSession } from "@/lib/attendance";
+import { Skeleton } from "@/components/ui/skeleton";
 
 type Schedule = WorkSchedule & OfficeTime & { company_wing?: string | null };
 
@@ -448,7 +449,9 @@ const ReportsSummary = () => {
           </div>
 
           {loading ? (
-            <p className="text-sm text-muted-foreground">Loading…</p>
+            <div className="space-y-2">
+              {Array.from({ length: 5 }).map((_, i) => <Skeleton key={i} className="h-10 w-full" />)}
+            </div>
           ) : isAdmin ? (
             <div className="space-y-3">
               <div className="overflow-x-auto">

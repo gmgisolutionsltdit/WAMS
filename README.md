@@ -4,6 +4,8 @@ WAMS manages employees, attendance, overtime, leave, projects, expenses, and pay
 
 Repository: https://github.com/gmgisolutionsltdit/WAMS
 
+See [`docs/REQUESTS_AND_PAYMENTS.md`](docs/REQUESTS_AND_PAYMENTS.md) for the request types, approval tiers, and payment calculation rules — read it before touching approval RLS policies, Payment's math, or the Trash/delete flow.
+
 ## Local development
 
 Requires Node.js 22 and npm.

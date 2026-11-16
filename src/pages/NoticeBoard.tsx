@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
+import { useLanguage } from "@/contexts/LanguageContext";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -30,6 +31,7 @@ const emptyForm = { title: "", body: "", category: "general", priority: "normal"
 
 const NoticeBoard = () => {
   const { user, role } = useAuth();
+  const { t } = useLanguage();
   const canManage = role === "admin";
   const [allNotices, setAllNotices] = useState<any[]>([]);
   const [open, setOpen] = useState(false);
@@ -386,7 +388,7 @@ const NoticeBoard = () => {
     <div className="space-y-6">
       <div className="flex justify-between items-center flex-wrap gap-4">
         <div>
-          <h1 className="text-2xl font-display font-bold">Notice Board</h1>
+          <h1 className="text-2xl font-display font-bold">{t("Notice Board")}</h1>
           <p className="text-sm text-muted-foreground">Company announcements and updates.</p>
         </div>
         {canManage && (
