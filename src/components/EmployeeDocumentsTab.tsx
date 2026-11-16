@@ -2,6 +2,10 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
+import {
+  AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription,
+  AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger,
+} from "@/components/ui/alert-dialog";
 import { Upload, Download, Trash2, FileText } from "lucide-react";
 import { toast } from "sonner";
 import { format } from "date-fns";
@@ -107,7 +111,6 @@ export const EmployeeDocumentsTab = ({ userId, canManage, editing }: Props) => {
   };
 
   const handleDelete = async (doc: DocRow) => {
-    if (!window.confirm(`Delete "${doc.file_name}"? This cannot be undone.`)) return;
     await supabase.storage.from(BUCKET).remove([doc.file_path]);
     const { error } = await supabase.from("employee_documents").delete().eq("id", doc.id);
     if (error) { toast.error(error.message); return; }
@@ -177,9 +180,23 @@ export const EmployeeDocumentsTab = ({ userId, canManage, editing }: Props) => {
                           <Download className="h-4 w-4" />
                         </Button>
                         {canManage && (
-                          <Button size="icon" variant="ghost" title="Delete" disabled={!canEdit} onClick={() => handleDelete(doc)}>
-                            <Trash2 className="h-4 w-4 text-destructive" />
-                          </Button>
+                          <AlertDialog>
+                            <AlertDialogTrigger asChild>
+                              <Button size="icon" variant="ghost" title="Delete" disabled={!canEdit}>
+                                <Trash2 className="h-4 w-4 text-destructive" />
+                              </Button>
+                            </AlertDialogTrigger>
+                            <AlertDialogContent>
+                              <AlertDialogHeader>
+                                <AlertDialogTitle>Delete "{doc.file_name}"?</AlertDialogTitle>
+                                <AlertDialogDescription>This cannot be undone.</AlertDialogDescription>
+                              </AlertDialogHeader>
+                              <AlertDialogFooter>
+                                <AlertDialogCancel>Cancel</AlertDialogCancel>
+                                <AlertDialogAction onClick={() => handleDelete(doc)}>Delete</AlertDialogAction>
+                              </AlertDialogFooter>
+                            </AlertDialogContent>
+                          </AlertDialog>
                         )}
                       </div>
                     </div>

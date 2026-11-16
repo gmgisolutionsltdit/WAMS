@@ -62,7 +62,12 @@ const TrashBin = () => {
     if (error) { toast.error(error.message); setLoading(false); return; }
     const list = (data || []) as unknown as TrashRow[];
     setRows(list);
-    const ids = Array.from(new Set(list.map((r) => r.deleted_by).filter(Boolean)));
+    // Both who deleted it and whose record it is (data.user_id — every one
+    // of these 4 row shapes carries that field) need a name looked up.
+    const ids = Array.from(new Set([
+      ...list.map((r) => r.deleted_by),
+      ...list.map((r) => r.data?.user_id),
+    ].filter(Boolean)));
     if (ids.length) {
       const { data: profs } = await supabase.from("profiles").select("id, full_name, email").in("id", ids);
       const map: Record<string, string> = {};
@@ -98,6 +103,13 @@ const TrashBin = () => {
     fetchData();
   };
 
+  const emptyTab = async (type: TrashEntityType) => {
+    const { error } = await supabase.from("trash_bin" as any).delete().eq("entity_type", type);
+    if (error) { toast.error(error.message); return; }
+    toast.success(`${TRASH_LABEL[type]} trash emptied`);
+    fetchData();
+  };
+
   const byType = (type: TrashEntityType) => rows.filter((r) => r.entity_type === type);
 
   return (
@@ -117,10 +129,27 @@ const TrashBin = () => {
               ))}
             </TabsList>
             {ENTITY_TABS.map((t) => (
-              <TabsContent key={t} value={t}>
+              <TabsContent key={t} value={t} className="space-y-2">
+                {byType(t).length > 0 && (
+                  <div className="flex justify-end">
+                    <PhraseConfirmDialog
+                      title={`Empty ${TRASH_LABEL[t]} trash?`}
+                      description={`Permanently deletes all ${byType(t).length} ${TRASH_LABEL[t]} item(s) in Trash — none of them can be restored afterward.`}
+                      phrase="permanently delete"
+                      confirmLabel="Empty Trash"
+                      onConfirm={() => emptyTab(t)}
+                      trigger={
+                        <Button size="sm" variant="outline" className="text-destructive hover:text-destructive">
+                          <Trash2 className="h-4 w-4 mr-1" /> Empty Trash
+                        </Button>
+                      }
+                    />
+                  </div>
+                )}
                 <Table>
                   <TableHeader>
                     <TableRow>
+                      <TableHead>Employee</TableHead>
                       <TableHead>Details</TableHead>
                       <TableHead>Deleted By</TableHead>
                       <TableHead>Reason</TableHead>
@@ -131,13 +160,14 @@ const TrashBin = () => {
                   </TableHeader>
                   <TableBody>
                     {loading ? (
-                      <TableRow><TableCell colSpan={6} className="text-center text-muted-foreground">Loading…</TableCell></TableRow>
+                      <TableRow><TableCell colSpan={7} className="text-center text-muted-foreground">Loading…</TableCell></TableRow>
                     ) : byType(t).length === 0 ? (
-                      <TableRow><TableCell colSpan={6} className="text-center text-muted-foreground">Trash is empty</TableCell></TableRow>
+                      <TableRow><TableCell colSpan={7} className="text-center text-muted-foreground">Trash is empty</TableCell></TableRow>
                     ) : byType(t).map((row) => {
                       const daysLeft = Math.max(0, differenceInCalendarDays(new Date(row.expires_at), new Date()));
                       return (
                         <TableRow key={row.id}>
+                          <TableCell className="text-sm font-medium">{names[row.data?.user_id] || "—"}</TableCell>
                           <TableCell className="text-sm">{summarize(row)}</TableCell>
                           <TableCell className="text-xs text-muted-foreground">{names[row.deleted_by] || "—"}</TableCell>
                           <TableCell className="max-w-56 truncate text-xs text-muted-foreground">{row.deleted_reason}</TableCell>

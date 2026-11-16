@@ -350,8 +350,8 @@ const SalaryIncrements = () => {
                     {canManage && (
                       <TableCell>
                         <div className="flex gap-1">
-                          <Button size="icon" variant="ghost" onClick={() => openEdit(r)}><Pencil className="h-3.5 w-3.5" /></Button>
-                          <Button size="icon" variant="ghost" onClick={() => remove(r.id)}><Trash2 className="h-3.5 w-3.5 text-destructive" /></Button>
+                          <Button size="icon" variant="ghost" aria-label="Edit increment" onClick={() => openEdit(r)}><Pencil className="h-3.5 w-3.5" /></Button>
+                          <Button size="icon" variant="ghost" aria-label="Delete increment" onClick={() => remove(r.id)}><Trash2 className="h-3.5 w-3.5 text-destructive" /></Button>
                         </div>
                       </TableCell>
                     )}

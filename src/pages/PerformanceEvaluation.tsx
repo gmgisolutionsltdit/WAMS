@@ -10,6 +10,10 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
+import {
+  AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription,
+  AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger,
+} from "@/components/ui/alert-dialog";
 import { Checkbox } from "@/components/ui/checkbox";
 import { ClipboardList, Plus, TrendingUp, Trash2 } from "lucide-react";
 import { toast } from "sonner";
@@ -397,7 +401,6 @@ const PerformanceEvaluation = () => {
   };
 
   const deleteRequest = async (requestId: string) => {
-    if (!window.confirm("Delete this evaluation? This also removes the evaluator's submitted answers, if any, and cannot be undone.")) return;
     const { error } = await supabase.from("performance_evaluation_requests").delete().eq("id", requestId);
     if (error) { toast.error(error.message); return; }
     toast.success("Evaluation deleted");
@@ -411,7 +414,6 @@ const PerformanceEvaluation = () => {
   // See Details keeps showing old data after evaluations were deleted and
   // redone — the performance_evaluation_finalizations row itself wasn't.
   const deleteFinalization = async (finalizationId: string) => {
-    if (!window.confirm("Delete this finalization? This also removes any increment decision made from it (but not the salary increment ledger entry it may have created) and cannot be undone.")) return;
     // RLS blocking this (e.g. a stale session role) doesn't error — it just
     // matches 0 rows, which would otherwise look like silent success while
     // the stale row (and the stuck Finalize button) stays put.
@@ -849,9 +851,25 @@ const PerformanceEvaluation = () => {
                       {" "}
                       <Button size="sm" variant="outline" className="h-6" onClick={() => setViewFinalizationDetails(finalization)}>See Details</Button>
                       {" "}
-                      <Button size="sm" variant="ghost" className="h-6 text-destructive hover:text-destructive" onClick={() => deleteFinalization(finalization.id)}>
-                        <Trash2 className="h-3 w-3" />
-                      </Button>
+                      <AlertDialog>
+                        <AlertDialogTrigger asChild>
+                          <Button size="sm" variant="ghost" className="h-6 text-destructive hover:text-destructive" aria-label="Delete this finalization">
+                            <Trash2 className="h-3 w-3" />
+                          </Button>
+                        </AlertDialogTrigger>
+                        <AlertDialogContent>
+                          <AlertDialogHeader>
+                            <AlertDialogTitle>Delete this finalization?</AlertDialogTitle>
+                            <AlertDialogDescription>
+                              This also removes any increment decision made from it (but not the salary increment ledger entry it may have created) and cannot be undone.
+                            </AlertDialogDescription>
+                          </AlertDialogHeader>
+                          <AlertDialogFooter>
+                            <AlertDialogCancel>Cancel</AlertDialogCancel>
+                            <AlertDialogAction onClick={() => deleteFinalization(finalization.id)}>Delete</AlertDialogAction>
+                          </AlertDialogFooter>
+                        </AlertDialogContent>
+                      </AlertDialog>
                     </p>
                   </div>
                 )}
@@ -898,13 +916,28 @@ const PerformanceEvaluation = () => {
                                   <Button size="sm" variant="outline" onClick={() => openEditAnswer(ev)}>Edit</Button>
                                 </>
                               )}
+                              <AlertDialog>
+                              <AlertDialogTrigger asChild>
                               <Button
                                 variant="ghost" size="icon" className="h-7 w-7 text-destructive hover:text-destructive"
                                 aria-label="Delete this evaluation"
-                                onClick={() => deleteRequest(r.id)}
                               >
                                 <Trash2 className="h-3.5 w-3.5" />
                               </Button>
+                              </AlertDialogTrigger>
+                              <AlertDialogContent>
+                                <AlertDialogHeader>
+                                  <AlertDialogTitle>Delete this evaluation?</AlertDialogTitle>
+                                  <AlertDialogDescription>
+                                    This also removes the evaluator's submitted answers, if any, and cannot be undone.
+                                  </AlertDialogDescription>
+                                </AlertDialogHeader>
+                                <AlertDialogFooter>
+                                  <AlertDialogCancel>Cancel</AlertDialogCancel>
+                                  <AlertDialogAction onClick={() => deleteRequest(r.id)}>Delete</AlertDialogAction>
+                                </AlertDialogFooter>
+                              </AlertDialogContent>
+                              </AlertDialog>
                             </div>
                           </TableCell>
                         </TableRow>

@@ -230,7 +230,7 @@ export function KanbanColumn({
           {canDelete && (onDeleteColumn || onArchiveColumn) && (
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
-                <Button size="icon" variant="ghost" className="h-7 w-7 shrink-0" onPointerDown={(e) => e.stopPropagation()}>
+                <Button size="icon" variant="ghost" className="h-7 w-7 shrink-0" aria-label="Column menu" onPointerDown={(e) => e.stopPropagation()}>
                   <MoreVertical className="h-3.5 w-3.5" />
                 </Button>
               </DropdownMenuTrigger>
