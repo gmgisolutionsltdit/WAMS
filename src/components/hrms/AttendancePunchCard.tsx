@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
+import { useLanguage } from "@/contexts/LanguageContext";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Switch } from "@/components/ui/switch";
@@ -23,6 +24,7 @@ type AttendanceRow = {
 
 export function AttendancePunchCard() {
   const { user, profile } = useAuth();
+  const { t } = useLanguage();
   const [faceMode, setFaceMode] = useState(false);
   const [scanning, setScanning] = useState(false);
   const [now, setNow] = useState(new Date());
@@ -158,7 +160,7 @@ export function AttendancePunchCard() {
   };
 
   const isOpen = !!(todayLog?.clock_in && !todayLog?.clock_out);
-  const buttonLabel = busy ? "Saving…" : scanning ? "Verifying…" : isOpen ? "Close" : "Start";
+  const buttonLabel = busy ? t("Saving…") : scanning ? t("Verifying…") : isOpen ? t("Close") : t("Start");
 
   return (
     <Card className="shadow-card border-slate-200 overflow-hidden">
@@ -166,7 +168,7 @@ export function AttendancePunchCard() {
         <div className="flex items-start justify-between">
           <div>
             <CardTitle className="flex items-center gap-2 text-slate-800">
-              <Fingerprint className="h-5 w-5 text-emerald-600" /> Attendance Punch Card
+              <Fingerprint className="h-5 w-5 text-emerald-600" /> {t("Attendance Punch Card")}
             </CardTitle>
             <CardDescription>{profile.full_name ?? user?.email ?? "Employee"} · {now.toLocaleDateString()}</CardDescription>
           </div>

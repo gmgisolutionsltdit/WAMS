@@ -15,6 +15,7 @@ import {
   useSidebar,
 } from "@/components/ui/sidebar";
 import { Button } from "@/components/ui/button";
+import { useLanguage } from "@/contexts/LanguageContext";
 
 const employeeItems = [
   { title: "Dashboard", url: "/", icon: LayoutDashboard },
@@ -47,6 +48,7 @@ export function AppSidebar() {
   const collapsed = state === "collapsed";
   const location = useLocation();
   const { user, role, profile, signOut } = useAuth();
+  const { t } = useLanguage();
 
   const isActive = (path: string) => location.pathname === path;
   const isManagerOrAdmin = ["manager", "admin"].includes(role);
@@ -69,7 +71,7 @@ export function AppSidebar() {
                   <SidebarMenuButton asChild isActive={isActive(item.url)}>
                     <NavLink to={item.url} end className="hover:bg-muted/50" activeClassName="bg-muted text-primary font-medium">
                       <item.icon className="mr-2 h-4 w-4" />
-                      {!collapsed && <span>{item.title}</span>}
+                      {!collapsed && <span>{t(item.title)}</span>}
                     </NavLink>
                   </SidebarMenuButton>
                 </SidebarMenuItem>
@@ -79,7 +81,7 @@ export function AppSidebar() {
                   <SidebarMenuButton asChild isActive={isActive(holidaysItem.url)}>
                     <NavLink to={holidaysItem.url} end className="hover:bg-muted/50" activeClassName="bg-muted text-primary font-medium">
                       <holidaysItem.icon className="mr-2 h-4 w-4" />
-                      {!collapsed && <span>{holidaysItem.title}</span>}
+                      {!collapsed && <span>{t(holidaysItem.title)}</span>}
                     </NavLink>
                   </SidebarMenuButton>
                 </SidebarMenuItem>
@@ -89,7 +91,7 @@ export function AppSidebar() {
                   <SidebarMenuButton asChild isActive={isActive(profileUrl)}>
                     <NavLink to={profileUrl} end className="hover:bg-muted/50" activeClassName="bg-muted text-primary font-medium">
                       <UserCircle className="mr-2 h-4 w-4" />
-                      {!collapsed && <span>Profile</span>}
+                      {!collapsed && <span>{t("Profile")}</span>}
                     </NavLink>
                   </SidebarMenuButton>
                 </SidebarMenuItem>
@@ -108,7 +110,7 @@ export function AppSidebar() {
                     <SidebarMenuButton asChild isActive={isActive(item.url)}>
                       <NavLink to={item.url} end className="hover:bg-muted/50" activeClassName="bg-muted text-primary font-medium">
                         <item.icon className="mr-2 h-4 w-4" />
-                        {!collapsed && <span>{item.title}</span>}
+                        {!collapsed && <span>{t(item.title)}</span>}
                       </NavLink>
                     </SidebarMenuButton>
                   </SidebarMenuItem>
@@ -128,7 +130,7 @@ export function AppSidebar() {
                     <SidebarMenuButton asChild isActive={isActive(item.url)}>
                       <NavLink to={item.url} end className="hover:bg-muted/50" activeClassName="bg-muted text-primary font-medium">
                         <item.icon className="mr-2 h-4 w-4" />
-                        {!collapsed && <span>{item.title}</span>}
+                        {!collapsed && <span>{t(item.title)}</span>}
                       </NavLink>
                     </SidebarMenuButton>
                   </SidebarMenuItem>
@@ -147,7 +149,7 @@ export function AppSidebar() {
                   <SidebarMenuButton asChild isActive={isActive("/loans")}>
                     <NavLink to="/loans" end className="hover:bg-muted/50" activeClassName="bg-muted text-primary font-medium">
                       <Banknote className="mr-2 h-4 w-4" />
-                      {!collapsed && <span>Loans</span>}
+                      {!collapsed && <span>{t("Loans")}</span>}
                     </NavLink>
                   </SidebarMenuButton>
                 </SidebarMenuItem>
@@ -155,7 +157,7 @@ export function AppSidebar() {
                   <SidebarMenuButton asChild isActive={isActive("/salary-increments")}>
                     <NavLink to="/salary-increments" end className="hover:bg-muted/50" activeClassName="bg-muted text-primary font-medium">
                       <TrendingUp className="mr-2 h-4 w-4" />
-                      {!collapsed && <span>Salary Increments</span>}
+                      {!collapsed && <span>{t("Salary Increments")}</span>}
                     </NavLink>
                   </SidebarMenuButton>
                 </SidebarMenuItem>
@@ -163,7 +165,7 @@ export function AppSidebar() {
                   <SidebarMenuButton asChild isActive={isActive("/trash")}>
                     <NavLink to="/trash" end className="hover:bg-muted/50" activeClassName="bg-muted text-primary font-medium">
                       <Trash2 className="mr-2 h-4 w-4" />
-                      {!collapsed && <span>Trash</span>}
+                      {!collapsed && <span>{t("Trash")}</span>}
                     </NavLink>
                   </SidebarMenuButton>
                 </SidebarMenuItem>
@@ -180,7 +182,7 @@ export function AppSidebar() {
           )}
           <Button variant="ghost" size={collapsed ? "icon" : "sm"} className="w-full" onClick={signOut}>
             <LogOut className="h-4 w-4" />
-            {!collapsed && <span className="ml-2">Sign Out</span>}
+            {!collapsed && <span className="ml-2">{t("Sign Out")}</span>}
           </Button>
         </div>
       </SidebarFooter>

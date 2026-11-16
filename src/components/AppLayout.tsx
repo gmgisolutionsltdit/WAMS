@@ -3,12 +3,15 @@ import { SidebarProvider, SidebarTrigger } from "@/components/ui/sidebar";
 import { AppSidebar } from "@/components/AppSidebar";
 import { NotificationBell } from "@/components/NotificationBell";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import { useAuth } from "@/contexts/AuthContext";
+import { useLanguage } from "@/contexts/LanguageContext";
 
-const roleLabel: Record<string, string> = { admin: "Admin", manager: "Manager", employee: "Employee" };
+const roleLabelKey: Record<string, string> = { admin: "Admin", manager: "Manager", employee: "Employee" };
 
 export function AppLayout({ children }: { children: ReactNode }) {
   const { profile, role } = useAuth();
+  const { lang, setLang, t } = useLanguage();
   return (
     <SidebarProvider>
       <div className="min-h-screen flex w-full overflow-x-hidden">
@@ -21,11 +24,19 @@ export function AppLayout({ children }: { children: ReactNode }) {
               {profile.id && (
                 <div className="hidden md:flex items-center gap-2">
                   <Badge variant="secondary" className="text-xs">{profile.company_wing}</Badge>
-                  <Badge variant="outline" className="text-xs capitalize">{roleLabel[role] ?? "Employee"}</Badge>
+                  <Badge variant="outline" className="text-xs capitalize">{t(roleLabelKey[role] ?? "Employee")}</Badge>
                 </div>
               )}
             </div>
             <div className="flex items-center gap-1 sm:gap-2 shrink-0">
+              <Button
+                variant="ghost"
+                size="sm"
+                aria-label="Switch language / ভাষা পরিবর্তন করুন"
+                onClick={() => setLang(lang === "en" ? "bn" : "en")}
+              >
+                {lang === "en" ? "বাং" : "EN"}
+              </Button>
               <NotificationBell />
             </div>
           </header>

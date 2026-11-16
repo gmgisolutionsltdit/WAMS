@@ -1,5 +1,6 @@
 import { Fragment, useEffect, useRef, useState } from "react";
 import { useAuth } from "@/contexts/AuthContext";
+import { useLanguage } from "@/contexts/LanguageContext";
 import { supabase } from "@/integrations/supabase/client";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { LogIn, LogOut, Pause, Play, Timer, ListTodo } from "lucide-react";
@@ -34,6 +35,7 @@ const localToday = () => format(new Date(), "yyyy-MM-dd");
 
 const Attendance = () => {
   const { user, role } = useAuth();
+  const { t } = useLanguage();
   const [logs, setLogs] = useState<AttendanceSession[]>([]);
   const [expanded, setExpanded] = useState<Record<string, boolean>>({});
   const [historyMonth, setHistoryMonth] = useState(() => startOfMonth(new Date()));
@@ -471,7 +473,7 @@ const Attendance = () => {
 
       <Card>
       <CardHeader>
-        <CardTitle className="text-green-600">My Attendance History</CardTitle>
+        <CardTitle className="text-green-600">{t("My Attendance History")}</CardTitle>
         <p className="text-xs text-muted-foreground">
           Multiple punches on the same day are merged into one record — expand a row to see each session.
         </p>

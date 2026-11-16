@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState, useCallback } from "react";
 import { useAuth } from "@/contexts/AuthContext";
+import { useLanguage } from "@/contexts/LanguageContext";
 import { supabase } from "@/integrations/supabase/client";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -49,6 +50,7 @@ type Holiday = { id: string; holiday_date: string; name: string; wing: string | 
 
 const LeaveManagement = () => {
   const { user, role } = useAuth();
+  const { t } = useLanguage();
   const [leaveTypes, setLeaveTypes] = useState<LeaveType[]>([]);
   const [requests, setRequests] = useState<LeaveRequest[]>([]);
   const [balances, setBalances] = useState<Balance[]>([]);
@@ -356,7 +358,7 @@ const LeaveManagement = () => {
 
       <Card>
         <CardHeader>
-          <CardTitle>Apply for Leave</CardTitle>
+          <CardTitle>{t("Apply for Leave")}</CardTitle>
           <CardDescription>Weekends and holidays are excluded by default. Sandwich-leave types charge adjacent weekends/holidays.</CardDescription>
         </CardHeader>
         <CardContent className="space-y-3">
@@ -443,7 +445,7 @@ const LeaveManagement = () => {
           <div className="grid lg:grid-cols-2 gap-4">
             <Card>
               <CardHeader>
-                <CardTitle>Team Leave Calendar</CardTitle>
+                <CardTitle>{t("Team Leave Calendar")}</CardTitle>
               </CardHeader>
               <CardContent>
                 <Calendar

@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback, useRef } from "react";
 import { useAuth } from "@/contexts/AuthContext";
+import { useLanguage } from "@/contexts/LanguageContext";
 import { useRealtimeSubscription } from "@/hooks/useRealtimeSubscription";
 import { supabase } from "@/integrations/supabase/client";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -36,6 +37,7 @@ const toStoredMinutes = (minutes: number) => Math.round(minutes * 10000) / 10000
 
 const Dashboard = () => {
   const { user, role } = useAuth();
+  const { t } = useLanguage();
   const [currentTime, setCurrentTime] = useState(new Date());
   const [todayLog, setTodayLog] = useState<any>(null);
   const [recentLogs, setRecentLogs] = useState<any[]>([]);
@@ -401,7 +403,7 @@ const Dashboard = () => {
             <h1 className="text-2xl md:text-3xl font-semibold mt-1 text-white">
               {(() => {
                 const h = currentTime.getHours();
-                const greet = h < 12 ? "Good morning" : h < 18 ? "Good afternoon" : "Good evening";
+                const greet = t(h < 12 ? "Good morning" : h < 18 ? "Good afternoon" : "Good evening");
                 const name = (user?.user_metadata as any)?.full_name || user?.email?.split("@")[0] || "there";
                 return `${greet}, ${name} 👋`;
               })()}
@@ -449,9 +451,9 @@ const Dashboard = () => {
             {isClockedIn ? (
               <>
                 {isOnBreak ? (
-                  <Badge variant="secondary" className="text-sm"><Pause className="mr-1 h-3 w-3" /> On Break</Badge>
+                  <Badge variant="secondary" className="text-sm"><Pause className="mr-1 h-3 w-3" /> {t("On Break")}</Badge>
                 ) : (
-                  <Badge className="bg-success text-success-foreground hover:bg-success/90 text-sm"><Timer className="mr-1 h-3 w-3" /> Working</Badge>
+                  <Badge className="bg-success text-success-foreground hover:bg-success/90 text-sm"><Timer className="mr-1 h-3 w-3" /> {t("Working")}</Badge>
                 )}
                 <div className="text-3xl font-mono font-bold">
                   {getRunningDuration(todayLog.clock_in, todayLog.break_minutes || 0, isOnBreak ? todayLog.break_start : null)}

@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback, useMemo } from "react";
 import { useAuth } from "@/contexts/AuthContext";
+import { useLanguage } from "@/contexts/LanguageContext";
 import { supabase } from "@/integrations/supabase/client";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -38,6 +39,7 @@ const otStatusStyle = (status: string) => {
 
 const OTRequests = () => {
   const { user, role } = useAuth();
+  const { t } = useLanguage();
   const isManagerOrAdmin = ["manager", "admin"].includes(role);
 
   const [requests, setRequests] = useState<any[]>([]);
@@ -265,7 +267,7 @@ const OTRequests = () => {
         {/* ===== Overtime segment ===== */}
         <TabsContent value="overtime" className="space-y-6">
           <Card>
-            <CardHeader><CardTitle>Submit Overtime Request</CardTitle></CardHeader>
+            <CardHeader><CardTitle>{t("Submit Overtime Request")}</CardTitle></CardHeader>
             <CardContent>
               <form onSubmit={handleSubmit} className="space-y-4">
                 <div className="grid gap-4 md:grid-cols-2">
@@ -343,7 +345,7 @@ const OTRequests = () => {
 
           {isManagerOrAdmin && (
             <Card>
-              <CardHeader><CardTitle>Pending OT Requests</CardTitle></CardHeader>
+              <CardHeader><CardTitle>{t("Pending OT Requests")}</CardTitle></CardHeader>
               <CardContent>
                 <Table>
                   <TableHeader>
@@ -388,7 +390,7 @@ const OTRequests = () => {
 
           <Card>
             <CardHeader>
-              <CardTitle>Overtime Log</CardTitle>
+              <CardTitle>{t("Overtime Log")}</CardTitle>
               <CardDescription>Every overtime request you've submitted.</CardDescription>
             </CardHeader>
             <CardContent>
@@ -447,7 +449,7 @@ const OTRequests = () => {
 
           <Card>
             <CardHeader>
-              <CardTitle>Late Time Log</CardTitle>
+              <CardTitle>{t("Late Time Log")}</CardTitle>
               <CardDescription>Every office-time-change request you've submitted.</CardDescription>
             </CardHeader>
             <CardContent>
