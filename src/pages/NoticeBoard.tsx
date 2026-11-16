@@ -644,7 +644,7 @@ const NoticeBoard = () => {
                         <div className="flex gap-1">
                           {!showArchived && canManage && (
                             <>
-                              <Button size="icon" variant="ghost" onClick={()=>togglePin(n)}><Pin className={`h-4 w-4 ${n.pinned ? "fill-primary text-primary" : ""}`} /></Button>
+                              <Button size="icon" variant="ghost" aria-label={n.pinned ? "Unpin notice" : "Pin notice"} onClick={()=>togglePin(n)}><Pin className={`h-4 w-4 ${n.pinned ? "fill-primary text-primary" : ""}`} /></Button>
                               <Button size="icon" variant="ghost" onClick={()=>openEdit(n)} aria-label="Edit notice"><Pencil className="h-4 w-4 text-muted-foreground" /></Button>
                             </>
                           )}

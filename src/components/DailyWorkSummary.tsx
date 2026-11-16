@@ -315,13 +315,13 @@ const DailyWorkSummary = () => {
           </div>
         )}
         <div className="flex items-center justify-center gap-1 sm:gap-2 pt-3">
-          <Button variant="outline" size="icon" className="h-8 w-8" onClick={() => setMonth((m) => addMonths(m, -1))}>
+          <Button variant="outline" size="icon" className="h-8 w-8" aria-label="Previous month" onClick={() => setMonth((m) => addMonths(m, -1))}>
             <ChevronLeft className="h-4 w-4" />
           </Button>
           <div className="min-w-[110px] text-center text-sm font-medium tabular-nums">
             {format(month, "MMMM yyyy")}
           </div>
-          <Button variant="outline" size="icon" className="h-8 w-8" onClick={() => setMonth((m) => addMonths(m, 1))}>
+          <Button variant="outline" size="icon" className="h-8 w-8" aria-label="Next month" onClick={() => setMonth((m) => addMonths(m, 1))}>
             <ChevronRight className="h-4 w-4" />
           </Button>
           <Button variant="ghost" size="sm" className="h-8" onClick={() => setMonth(startOfMonth(new Date()))}>

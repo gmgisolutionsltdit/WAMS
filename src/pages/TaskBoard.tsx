@@ -692,7 +692,7 @@ const TaskBoard = () => {
           <BoardSearchCreate />
         </div>
         <div className="flex items-center gap-3 shrink-0">
-          <Button size="icon" variant="ghost" onClick={() => navigate("/tasks")}>
+          <Button size="icon" variant="ghost" aria-label="Back to boards" onClick={() => navigate("/tasks")}>
             <ArrowLeft className="h-4 w-4" />
           </Button>
           <div className="flex items-center gap-2 text-muted-foreground text-sm py-6">
@@ -748,7 +748,7 @@ const TaskBoard = () => {
       {/* Header */}
       <div className="flex items-center justify-between flex-wrap gap-2 shrink-0">
         <div className="flex items-center gap-3 min-w-0">
-          <Button size="icon" variant="ghost" onClick={() => navigate("/tasks")}>
+          <Button size="icon" variant="ghost" aria-label="Back to boards" onClick={() => navigate("/tasks")}>
             <ArrowLeft className="h-4 w-4" />
           </Button>
           <div className="min-w-0">

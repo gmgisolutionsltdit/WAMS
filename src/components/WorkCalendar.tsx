@@ -173,13 +173,13 @@ export default function WorkCalendar() {
             Work Calendar
           </CardTitle>
           <div className="flex items-center gap-1 sm:gap-2">
-            <Button variant="outline" size="icon" className="h-8 w-8" onClick={() => setCursor(addMonths(cursor, -1))}>
+            <Button variant="outline" size="icon" className="h-8 w-8" aria-label="Previous month" onClick={() => setCursor(addMonths(cursor, -1))}>
               <ChevronLeft className="h-4 w-4" />
             </Button>
             <div className="min-w-[110px] text-center text-sm font-medium tabular-nums">
               {format(cursor, "MMMM yyyy")}
             </div>
-            <Button variant="outline" size="icon" className="h-8 w-8" onClick={() => setCursor(addMonths(cursor, 1))}>
+            <Button variant="outline" size="icon" className="h-8 w-8" aria-label="Next month" onClick={() => setCursor(addMonths(cursor, 1))}>
               <ChevronRight className="h-4 w-4" />
             </Button>
             <Button variant="ghost" size="sm" className="hidden sm:inline-flex h-8" onClick={() => { const t = new Date(); setCursor(startOfMonth(t)); setSelected(t); }}>

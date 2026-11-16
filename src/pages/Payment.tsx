@@ -248,8 +248,8 @@ const Payment = () => {
         <div className="flex gap-1">
           {canApprove && loan.status === "pending" && loan.user_id !== user?.id && (
             <>
-              <Button size="icon" variant="outline" onClick={() => decide(loan, "approved")}><Check className="h-4 w-4 text-success" /></Button>
-              <Button size="icon" variant="outline" onClick={() => decide(loan, "rejected")}><X className="h-4 w-4 text-destructive" /></Button>
+              <Button size="icon" variant="outline" aria-label="Approve loan" onClick={() => decide(loan, "approved")}><Check className="h-4 w-4 text-success" /></Button>
+              <Button size="icon" variant="outline" aria-label="Reject loan" onClick={() => decide(loan, "rejected")}><X className="h-4 w-4 text-destructive" /></Button>
             </>
           )}
           {loan.status === "approved" && Number(loan.remaining_balance) > 0 && canApprove && loan.user_id !== user?.id && (
@@ -261,7 +261,7 @@ const Payment = () => {
               description="This cannot be undone."
               onConfirm={(reason) => deleteLoan(loan, reason)}
               trigger={
-                <Button size="icon" variant="ghost" className="text-destructive hover:text-destructive">
+                <Button size="icon" variant="ghost" className="text-destructive hover:text-destructive" aria-label="Delete loan request">
                   <Trash2 className="h-4 w-4" />
                 </Button>
               }
@@ -1946,7 +1946,6 @@ function ExpenseClaimsTab() {
   // text snapshot, not a foreign key, so past claims keep their category
   // text unaffected.
   const deleteCategory = async (name: string) => {
-    if (!window.confirm(`Delete category "${name}"? Past claims already using it keep showing it.`)) return;
     const { error } = await supabase.from("expense_types").delete().eq("name", name);
     if (error) { toast.error(error.message); return; }
     toast.success("Category deleted");
@@ -2139,14 +2138,27 @@ function ExpenseClaimsTab() {
                         {allCategories.map((c) => (
                           <div key={c} className="flex items-center justify-between gap-2 rounded-sm px-1 py-1 text-sm hover:bg-muted/60">
                             <span className="truncate">{c}</span>
-                            <button
-                              type="button"
-                              onClick={() => deleteCategory(c)}
-                              className="shrink-0 rounded p-1 text-muted-foreground hover:bg-destructive/10 hover:text-destructive"
-                              aria-label={`Delete ${c}`}
-                            >
-                              <Trash2 className="h-3.5 w-3.5" />
-                            </button>
+                            <AlertDialog>
+                              <AlertDialogTrigger asChild>
+                                <button
+                                  type="button"
+                                  className="shrink-0 rounded p-1 text-muted-foreground hover:bg-destructive/10 hover:text-destructive"
+                                  aria-label={`Delete ${c}`}
+                                >
+                                  <Trash2 className="h-3.5 w-3.5" />
+                                </button>
+                              </AlertDialogTrigger>
+                              <AlertDialogContent>
+                                <AlertDialogHeader>
+                                  <AlertDialogTitle>Delete category "{c}"?</AlertDialogTitle>
+                                  <AlertDialogDescription>Past claims already using it keep showing it.</AlertDialogDescription>
+                                </AlertDialogHeader>
+                                <AlertDialogFooter>
+                                  <AlertDialogCancel>Cancel</AlertDialogCancel>
+                                  <AlertDialogAction onClick={() => deleteCategory(c)}>Delete</AlertDialogAction>
+                                </AlertDialogFooter>
+                              </AlertDialogContent>
+                            </AlertDialog>
                           </div>
                         ))}
                       </div>
@@ -2313,8 +2325,8 @@ const ClaimTable = ({ claims, showEmployee, onApprove, onReject, onTogglePaid, o
                   <div className="flex gap-1">
                     {canDecide && (
                       <>
-                        <Button size="icon" variant="outline" onClick={()=>onApprove?.(c.id)}><Check className="h-4 w-4 text-success" /></Button>
-                        <Button size="icon" variant="outline" onClick={()=>onReject?.(c.id)}><X className="h-4 w-4 text-destructive" /></Button>
+                        <Button size="icon" variant="outline" aria-label="Approve claim" onClick={()=>onApprove?.(c.id)}><Check className="h-4 w-4 text-success" /></Button>
+                        <Button size="icon" variant="outline" aria-label="Reject claim" onClick={()=>onReject?.(c.id)}><X className="h-4 w-4 text-destructive" /></Button>
                       </>
                     )}
                     {isAdmin && (
@@ -2323,7 +2335,7 @@ const ClaimTable = ({ claims, showEmployee, onApprove, onReject, onTogglePaid, o
                         description="This cannot be undone."
                         onConfirm={(reason) => onDelete?.(c.id, reason)}
                         trigger={
-                          <Button size="icon" variant="ghost" className="text-destructive hover:text-destructive"><Trash2 className="h-4 w-4" /></Button>
+                          <Button size="icon" variant="ghost" className="text-destructive hover:text-destructive" aria-label="Delete claim"><Trash2 className="h-4 w-4" /></Button>
                         }
                       />
                     )}

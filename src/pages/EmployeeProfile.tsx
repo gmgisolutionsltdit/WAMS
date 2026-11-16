@@ -1079,7 +1079,7 @@ const EmployeeProfile = () => {
                               value={d}
                               onChange={(e) => setExtraJoiningDates((arr) => arr.map((v, i) => (i === idx ? e.target.value : v)))}
                             />
-                            <Button type="button" variant="ghost" size="icon" className="h-8 w-8 shrink-0" onClick={() => setExtraJoiningDates((arr) => arr.filter((_, i) => i !== idx))}>
+                            <Button type="button" variant="ghost" size="icon" className="h-8 w-8 shrink-0" aria-label="Remove this joining date" onClick={() => setExtraJoiningDates((arr) => arr.filter((_, i) => i !== idx))}>
                               <Trash2 className="h-3.5 w-3.5 text-destructive" />
                             </Button>
                           </>
@@ -1108,7 +1108,7 @@ const EmployeeProfile = () => {
                               value={d}
                               onChange={(e) => setExtraPromotionDates((arr) => arr.map((v, i) => (i === idx ? e.target.value : v)))}
                             />
-                            <Button type="button" variant="ghost" size="icon" className="h-8 w-8 shrink-0" onClick={() => setExtraPromotionDates((arr) => arr.filter((_, i) => i !== idx))}>
+                            <Button type="button" variant="ghost" size="icon" className="h-8 w-8 shrink-0" aria-label="Remove this promotion date" onClick={() => setExtraPromotionDates((arr) => arr.filter((_, i) => i !== idx))}>
                               <Trash2 className="h-3.5 w-3.5 text-destructive" />
                             </Button>
                           </>
