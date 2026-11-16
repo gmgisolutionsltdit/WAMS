@@ -296,6 +296,16 @@ export const bn: Record<string, string> = {
   "Work From": "কাজের স্থান",
   Source: "উৎস",
 
+  // Task Board
+  "Create Task": "টাস্ক তৈরি করুন",
+  "Add a new ticket to this column.": "এই কলামে একটি নতুন টিকেট যোগ করুন।",
+  Title: "শিরোনাম",
+  Assignee: "দায়িত্বপ্রাপ্ত",
+  "Select assignee": "দায়িত্বপ্রাপ্ত নির্বাচন করুন",
+  Create: "তৈরি করুন",
+  "Back to boards": "বোর্ডে ফিরে যান",
+  "Add a comment...": "একটি মন্তব্য যোগ করুন...",
+
   // Reports
   "Filter by employee, date range, and type.": "কর্মচারী, তারিখের পরিসর এবং ধরন অনুযায়ী ফিল্টার করুন।",
 
