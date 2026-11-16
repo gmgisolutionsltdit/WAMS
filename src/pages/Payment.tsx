@@ -1185,7 +1185,19 @@ function MyPaymentsTab() {
                   <Checkbox checked={otPaidNow} onCheckedChange={(v) => setOtPaidNow(!!v)} />
                   Adjust Now (unchecked = carry to next month)
                 </label>
-                <Input type="number" value={otAmount} onChange={(e) => { setOtAmount(e.target.value); setOtAmountTouched(true); }} disabled={!otPaidNow} />
+                <div className="flex gap-1">
+                  <Input type="number" value={otAmount} onChange={(e) => { setOtAmount(e.target.value); setOtAmountTouched(true); }} disabled={!otPaidNow} />
+                  <Button
+                    type="button" variant="outline" size="sm" className="shrink-0"
+                    disabled={!otPaidNow || otOutstanding <= 0}
+                    onClick={() => { setOtAmount(String(otOutstanding)); setOtAmountTouched(true); }}
+                  >
+                    Pay full
+                  </Button>
+                </div>
+                {otPaidNow && otOutstanding > (Number(otAmount) || 0) && (
+                  <p className="text-xs text-muted-foreground">Carrying forward: {fmtBDT(otOutstanding - (Number(otAmount) || 0))}</p>
+                )}
               </div>
               <div className="rounded-md border p-3 space-y-2">
                 <div className="text-sm font-medium">Expense Balance</div>
@@ -1194,7 +1206,19 @@ function MyPaymentsTab() {
                   <Checkbox checked={expensePaidNow} onCheckedChange={(v) => setExpensePaidNow(!!v)} />
                   Adjust Now (unchecked = carry to next month)
                 </label>
-                <Input type="number" value={expenseAmount} onChange={(e) => { setExpenseAmount(e.target.value); setExpenseAmountTouched(true); }} disabled={!expensePaidNow} />
+                <div className="flex gap-1">
+                  <Input type="number" value={expenseAmount} onChange={(e) => { setExpenseAmount(e.target.value); setExpenseAmountTouched(true); }} disabled={!expensePaidNow} />
+                  <Button
+                    type="button" variant="outline" size="sm" className="shrink-0"
+                    disabled={!expensePaidNow || expenseOutstanding <= 0}
+                    onClick={() => { setExpenseAmount(String(expenseOutstanding)); setExpenseAmountTouched(true); }}
+                  >
+                    Pay full
+                  </Button>
+                </div>
+                {expensePaidNow && expenseOutstanding > (Number(expenseAmount) || 0) && (
+                  <p className="text-xs text-muted-foreground">Carrying forward: {fmtBDT(expenseOutstanding - (Number(expenseAmount) || 0))}</p>
+                )}
               </div>
               <div className="rounded-md border p-3 space-y-2">
                 <div className="text-sm font-medium">Loan Due</div>
@@ -1205,7 +1229,19 @@ function MyPaymentsTab() {
                   <Checkbox checked={loanPaidNow} onCheckedChange={(v) => setLoanPaidNow(!!v)} disabled={!loan} />
                   Adjust Now (unchecked = carry to next month)
                 </label>
-                <Input type="number" value={loanAmount} onChange={(e) => { setLoanAmount(e.target.value); setLoanAmountTouched(true); }} disabled={!loan || !loanPaidNow || loanDue <= 0} />
+                <div className="flex gap-1">
+                  <Input type="number" value={loanAmount} onChange={(e) => { setLoanAmount(e.target.value); setLoanAmountTouched(true); }} disabled={!loan || !loanPaidNow || loanDue <= 0} />
+                  <Button
+                    type="button" variant="outline" size="sm" className="shrink-0"
+                    disabled={!loan || !loanPaidNow || loanDue <= 0}
+                    onClick={() => { setLoanAmount(String(loanDue)); setLoanAmountTouched(true); }}
+                  >
+                    Pay full
+                  </Button>
+                </div>
+                {loan && loanPaidNow && loanDue > Math.abs(Number(loanAmount) || 0) && (
+                  <p className="text-xs text-muted-foreground">Carrying forward: {fmtBDT(loanDue - Math.abs(Number(loanAmount) || 0))} of this month's due</p>
+                )}
                 {loan && <p className="text-xs text-muted-foreground">{fmtBDT(loan.remaining_balance)} remaining balance</p>}
               </div>
               <div className="rounded-md border p-3 space-y-2">
@@ -1500,11 +1536,17 @@ function MyPaymentsSummary() {
                   </div>
                 )}
                 <Badge variant="outline">Paid {fmtBDT(otTotalPaid)}</Badge>
+                {otOutstanding > 0 && (
+                  <p className="text-xs text-muted-foreground">Will carry to next month unless settled.</p>
+                )}
               </div>
               <div className="rounded-md border p-3 space-y-2">
                 <div className="text-sm font-medium">Expense Balance</div>
                 <div className="text-lg font-semibold">{fmtBDT(expenseOutstanding)}</div>
                 <Badge variant="outline">Paid {fmtBDT(expenseTotalPaid)}</Badge>
+                {expenseOutstanding > 0 && (
+                  <p className="text-xs text-muted-foreground">Will carry to next month unless settled.</p>
+                )}
               </div>
               <div className="rounded-md border p-3 space-y-2">
                 <div className="text-sm font-medium">Loan Due</div>
