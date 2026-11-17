@@ -902,10 +902,25 @@ function MyPaymentsTab() {
   // The Overtime box can be negative (deducting a shortfall from this
   // month's base salary now instead of carrying it forward), same
   // convention Loan's box already uses.
+  // Same "untouched box falls back to what's already recorded" rule submit()
+  // applies when actually saving (see its own comment above loanPaid/otPaid/
+  // expensePaid) — reused here so Net Payment and the confirmation preview
+  // always show what a save without retyping the amount would actually
+  // record, instead of showing 0 for an untouched box. Kept signed (not
+  // Math.abs'd) to match how otAmount/expenseAmount/loanAmount are added
+  // directly below — submit() only takes the abs value for loan when
+  // writing the ledger's stored magnitude, separately from this math.
+  const effectiveOtAmount = otAmountTouched ? (Number(otAmount) || 0) : (Number(existingSettlement?.ot_amount_paid) || 0);
+  const effectiveExpenseAmount = expenseAmountTouched ? (Number(expenseAmount) || 0) : (Number(existingSettlement?.expense_amount_paid) || 0);
+  // Loan is always a deduction once recorded, but the stored figure is an
+  // unsigned magnitude — so an untouched box falls back to that magnitude
+  // negated, same convention a freshly-typed deduction already uses.
+  const effectiveLoanAmount = loanAmountTouched ? (Number(loanAmount) || 0) : -Math.abs(Number(existingSettlement?.loan_amount_paid) || 0);
+
   const netPayment = grossSalary
-    + (otPaidNow ? (Number(otAmount) || 0) : 0)
-    + (expensePaidNow ? (Number(expenseAmount) || 0) : 0)
-    + (loanPaidNow ? (Number(loanAmount) || 0) : 0);
+    + (otPaidNow ? effectiveOtAmount : 0)
+    + (expensePaidNow ? effectiveExpenseAmount : 0)
+    + (loanPaidNow ? effectiveLoanAmount : 0);
 
   const submit = async () => {
     if (!user || !selectedUserId) return;
@@ -1268,15 +1283,15 @@ function MyPaymentsTab() {
                     </div>
                     <div className="flex items-center justify-between px-3 py-2">
                       <span>Overtime {otPaidNow ? "" : "(carried to next month)"}</span>
-                      <span className="font-medium">{otPaidNow ? fmtBDT(Number(otAmount) || 0) : fmtBDT(0)}</span>
+                      <span className="font-medium">{otPaidNow ? fmtBDT(effectiveOtAmount) : fmtBDT(0)}</span>
                     </div>
                     <div className="flex items-center justify-between px-3 py-2">
                       <span>Expense {expensePaidNow ? "" : "(carried to next month)"}</span>
-                      <span className="font-medium">{expensePaidNow ? fmtBDT(Number(expenseAmount) || 0) : fmtBDT(0)}</span>
+                      <span className="font-medium">{expensePaidNow ? fmtBDT(effectiveExpenseAmount) : fmtBDT(0)}</span>
                     </div>
                     <div className="flex items-center justify-between px-3 py-2">
                       <span>Loan {loanPaidNow ? "" : "(carried to next month)"}</span>
-                      <span className="font-medium">{loanPaidNow ? fmtBDT(Number(loanAmount) || 0) : fmtBDT(0)}</span>
+                      <span className="font-medium">{loanPaidNow ? fmtBDT(effectiveLoanAmount) : fmtBDT(0)}</span>
                     </div>
                     <div className="flex items-center justify-between px-3 py-2 bg-muted/50">
                       <span className="font-semibold">Net Payment</span>
