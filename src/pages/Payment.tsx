@@ -60,6 +60,7 @@ type PayrollSettlementRow = {
 
 const Payment = () => {
   const { user, role } = useAuth();
+  const { t } = useLanguage();
   const isAdmin = role === "admin";
   // canApprove per-row is determined by can_approve() via RLS visibility — for
   // showing approve/reject buttons client-side, treat any row visible in the
@@ -1832,6 +1833,7 @@ const monthFilterToRange = (monthFrom: string, monthTo: string): { from: string;
 
 function MySalaryMonthlyTable() {
   const { user } = useAuth();
+  const { t } = useLanguage();
   const [monthFrom, setMonthFrom] = useState("");
   const [monthTo, setMonthTo] = useState("");
   const [rows, setRows] = useState<SalaryMonthRow[]>([]);
@@ -2371,7 +2373,9 @@ function ExpenseClaimsTab() {
   );
 }
 
-const ClaimTable = ({ claims, showEmployee, onApprove, onReject, onTogglePaid, onDelete, isAdmin, canApprove, currentUserId }: any) => (
+const ClaimTable = ({ claims, showEmployee, onApprove, onReject, onTogglePaid, onDelete, isAdmin, canApprove, currentUserId }: any) => {
+  const { t } = useLanguage();
+  return (
   <Card>
     <CardHeader><CardTitle className="text-base">{t("Claim History")}</CardTitle></CardHeader>
     <CardContent>
@@ -2443,4 +2447,5 @@ const ClaimTable = ({ claims, showEmployee, onApprove, onReject, onTogglePaid, o
       </div>
     </CardContent>
   </Card>
-);
+  );
+};
