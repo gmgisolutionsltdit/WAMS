@@ -766,7 +766,12 @@ const EmployeeProfile = () => {
               <p className="text-muted-foreground">{fmt(profile.designation)}</p>
               <div className="flex flex-wrap gap-2 mt-2">
                 {profile.department && <Badge variant="outline">{profile.department}</Badge>}
-                {profile.company_wing && <Badge variant="secondary">{profile.company_wing}</Badge>}
+                {/* Shows the Overview tab's own live Wing selection, not the
+                    last-saved profile.company_wing — so ticking a different
+                    Wing checkbox below is reflected here immediately instead
+                    of only after Save, which otherwise looked like the two
+                    disagreed. */}
+                {overviewForm.company_wing && <Badge variant="secondary">{overviewForm.company_wing}</Badge>}
                 <Badge variant="outline" className={statusClass}>{fmt(profile.employee_status)}</Badge>
                 <Badge>{role}</Badge>
               </div>
