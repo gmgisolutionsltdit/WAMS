@@ -60,6 +60,7 @@ type PayrollSettlementRow = {
 
 const Payment = () => {
   const { user, role } = useAuth();
+  const { t } = useLanguage();
   const isAdmin = role === "admin";
   // canApprove per-row is determined by can_approve() via RLS visibility — for
   // showing approve/reject buttons client-side, treat any row visible in the
@@ -756,6 +757,7 @@ function MyPaymentsTab() {
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
   const [historyRefresh, setHistoryRefresh] = useState(0);
+  const [confirmOpen, setConfirmOpen] = useState(false);
 
   const [grossSalary, setGrossSalary] = useState(0);
   const [loan, setLoan] = useState<{ id: string; monthly_deduction: number; remaining_balance: number } | null>(null);
@@ -901,10 +903,25 @@ function MyPaymentsTab() {
   // The Overtime box can be negative (deducting a shortfall from this
   // month's base salary now instead of carrying it forward), same
   // convention Loan's box already uses.
+  // Same "untouched box falls back to what's already recorded" rule submit()
+  // applies when actually saving (see its own comment above loanPaid/otPaid/
+  // expensePaid) — reused here so Net Payment and the confirmation preview
+  // always show what a save without retyping the amount would actually
+  // record, instead of showing 0 for an untouched box. Kept signed (not
+  // Math.abs'd) to match how otAmount/expenseAmount/loanAmount are added
+  // directly below — submit() only takes the abs value for loan when
+  // writing the ledger's stored magnitude, separately from this math.
+  const effectiveOtAmount = otAmountTouched ? (Number(otAmount) || 0) : (Number(existingSettlement?.ot_amount_paid) || 0);
+  const effectiveExpenseAmount = expenseAmountTouched ? (Number(expenseAmount) || 0) : (Number(existingSettlement?.expense_amount_paid) || 0);
+  // Loan is always a deduction once recorded, but the stored figure is an
+  // unsigned magnitude — so an untouched box falls back to that magnitude
+  // negated, same convention a freshly-typed deduction already uses.
+  const effectiveLoanAmount = loanAmountTouched ? (Number(loanAmount) || 0) : -Math.abs(Number(existingSettlement?.loan_amount_paid) || 0);
+
   const netPayment = grossSalary
-    + (otPaidNow ? (Number(otAmount) || 0) : 0)
-    + (expensePaidNow ? (Number(expenseAmount) || 0) : 0)
-    + (loanPaidNow ? (Number(loanAmount) || 0) : 0);
+    + (otPaidNow ? effectiveOtAmount : 0)
+    + (expensePaidNow ? effectiveExpenseAmount : 0)
+    + (loanPaidNow ? effectiveLoanAmount : 0);
 
   const submit = async () => {
     if (!user || !selectedUserId) return;
@@ -1189,16 +1206,7 @@ function MyPaymentsTab() {
                   <Checkbox checked={otPaidNow} onCheckedChange={(v) => setOtPaidNow(!!v)} />
                   Adjust Now (unchecked = carry to next month)
                 </label>
-                <div className="flex gap-1">
-                  <Input type="number" value={otAmount} onChange={(e) => { setOtAmount(e.target.value); setOtAmountTouched(true); }} disabled={!otPaidNow} />
-                  <Button
-                    type="button" variant="outline" size="sm" className="shrink-0"
-                    disabled={!otPaidNow || otOutstanding <= 0}
-                    onClick={() => { setOtAmount(String(otOutstanding)); setOtAmountTouched(true); }}
-                  >
-                    Pay full
-                  </Button>
-                </div>
+                <Input type="number" value={otAmount} onChange={(e) => { setOtAmount(e.target.value); setOtAmountTouched(true); }} disabled={!otPaidNow} />
                 {otPaidNow && otOutstanding > (Number(otAmount) || 0) && (
                   <p className="text-xs text-muted-foreground">Carrying forward: {fmtBDT(otOutstanding - (Number(otAmount) || 0))}</p>
                 )}
@@ -1210,16 +1218,7 @@ function MyPaymentsTab() {
                   <Checkbox checked={expensePaidNow} onCheckedChange={(v) => setExpensePaidNow(!!v)} />
                   Adjust Now (unchecked = carry to next month)
                 </label>
-                <div className="flex gap-1">
-                  <Input type="number" value={expenseAmount} onChange={(e) => { setExpenseAmount(e.target.value); setExpenseAmountTouched(true); }} disabled={!expensePaidNow} />
-                  <Button
-                    type="button" variant="outline" size="sm" className="shrink-0"
-                    disabled={!expensePaidNow || expenseOutstanding <= 0}
-                    onClick={() => { setExpenseAmount(String(expenseOutstanding)); setExpenseAmountTouched(true); }}
-                  >
-                    Pay full
-                  </Button>
-                </div>
+                <Input type="number" value={expenseAmount} onChange={(e) => { setExpenseAmount(e.target.value); setExpenseAmountTouched(true); }} disabled={!expensePaidNow} />
                 {expensePaidNow && expenseOutstanding > (Number(expenseAmount) || 0) && (
                   <p className="text-xs text-muted-foreground">Carrying forward: {fmtBDT(expenseOutstanding - (Number(expenseAmount) || 0))}</p>
                 )}
@@ -1233,16 +1232,7 @@ function MyPaymentsTab() {
                   <Checkbox checked={loanPaidNow} onCheckedChange={(v) => setLoanPaidNow(!!v)} disabled={!loan} />
                   Adjust Now (unchecked = carry to next month)
                 </label>
-                <div className="flex gap-1">
-                  <Input type="number" value={loanAmount} onChange={(e) => { setLoanAmount(e.target.value); setLoanAmountTouched(true); }} disabled={!loan || !loanPaidNow || loanDue <= 0} />
-                  <Button
-                    type="button" variant="outline" size="sm" className="shrink-0"
-                    disabled={!loan || !loanPaidNow || loanDue <= 0}
-                    onClick={() => { setLoanAmount(String(loanDue)); setLoanAmountTouched(true); }}
-                  >
-                    Pay full
-                  </Button>
-                </div>
+                <Input type="number" value={loanAmount} onChange={(e) => { setLoanAmount(e.target.value); setLoanAmountTouched(true); }} disabled={!loan || !loanPaidNow || loanDue <= 0} />
                 {loan && loanPaidNow && loanDue > Math.abs(Number(loanAmount) || 0) && (
                   <p className="text-xs text-muted-foreground">Carrying forward: {fmtBDT(loanDue - Math.abs(Number(loanAmount) || 0))} of this month's due</p>
                 )}
@@ -1270,12 +1260,57 @@ function MyPaymentsTab() {
               <AttachmentsInput files={attachments} onChange={setAttachments} label="Attachment" buttonText="Upload" />
             </div>
             <div className="flex flex-wrap gap-2">
-              <Button onClick={submit} disabled={saving || uploading}>{uploading ? "Uploading..." : saving ? "Recording..." : "Record Payment"}</Button>
+              <Button onClick={() => setConfirmOpen(true)} disabled={saving || uploading}>{uploading ? "Uploading..." : saving ? "Recording..." : "Record Payment"}</Button>
               {existingSettlement && (
                 <Button variant="outline" onClick={downloadReceipt}>Download Receipt</Button>
               )}
             </div>
             <PaymentHistoryTable userId={selectedUserId} canDelete refreshKey={historyRefresh} />
+
+            <Dialog open={confirmOpen} onOpenChange={setConfirmOpen}>
+              <DialogContent>
+                <DialogHeader>
+                  <DialogTitle>Confirm Payment</DialogTitle>
+                </DialogHeader>
+                <div className="space-y-2 text-sm">
+                  <p className="text-muted-foreground">
+                    {employees.find((e) => e.id === selectedUserId)?.full_name || employees.find((e) => e.id === selectedUserId)?.email || "This employee"}
+                    {" — "}{format(new Date(`${month}-01`), "MMMM yyyy")}
+                  </p>
+                  <div className="rounded-md border divide-y">
+                    <div className="flex items-center justify-between px-3 py-2">
+                      <span>Net Salary</span>
+                      <span className="font-medium">{fmtBDT(grossSalary)}</span>
+                    </div>
+                    <div className="flex items-center justify-between px-3 py-2">
+                      <span>Overtime {otPaidNow ? "" : "(carried to next month)"}</span>
+                      <span className="font-medium">{otPaidNow ? fmtBDT(effectiveOtAmount) : fmtBDT(0)}</span>
+                    </div>
+                    <div className="flex items-center justify-between px-3 py-2">
+                      <span>Expense {expensePaidNow ? "" : "(carried to next month)"}</span>
+                      <span className="font-medium">{expensePaidNow ? fmtBDT(effectiveExpenseAmount) : fmtBDT(0)}</span>
+                    </div>
+                    <div className="flex items-center justify-between px-3 py-2">
+                      <span>Loan {loanPaidNow ? "" : "(carried to next month)"}</span>
+                      <span className="font-medium">{loanPaidNow ? fmtBDT(effectiveLoanAmount) : fmtBDT(0)}</span>
+                    </div>
+                    <div className="flex items-center justify-between px-3 py-2 bg-muted/50">
+                      <span className="font-semibold">Net Payment</span>
+                      <span className="font-semibold">{fmtBDT(netPayment)}</span>
+                    </div>
+                  </div>
+                  {existingSettlement && (
+                    <p className="text-xs text-muted-foreground">A payment for this month was already recorded — confirming updates it.</p>
+                  )}
+                </div>
+                <DialogFooter>
+                  <Button variant="outline" onClick={() => setConfirmOpen(false)}>Cancel</Button>
+                  <Button onClick={() => { setConfirmOpen(false); submit(); }} disabled={saving || uploading}>
+                    {uploading ? "Uploading..." : saving ? "Recording..." : "Confirm & Record"}
+                  </Button>
+                </DialogFooter>
+              </DialogContent>
+            </Dialog>
           </div>
         )}
       </CardContent>
@@ -1798,6 +1833,7 @@ const monthFilterToRange = (monthFrom: string, monthTo: string): { from: string;
 
 function MySalaryMonthlyTable() {
   const { user } = useAuth();
+  const { t } = useLanguage();
   const [monthFrom, setMonthFrom] = useState("");
   const [monthTo, setMonthTo] = useState("");
   const [rows, setRows] = useState<SalaryMonthRow[]>([]);
@@ -2337,7 +2373,9 @@ function ExpenseClaimsTab() {
   );
 }
 
-const ClaimTable = ({ claims, showEmployee, onApprove, onReject, onTogglePaid, onDelete, isAdmin, canApprove, currentUserId }: any) => (
+const ClaimTable = ({ claims, showEmployee, onApprove, onReject, onTogglePaid, onDelete, isAdmin, canApprove, currentUserId }: any) => {
+  const { t } = useLanguage();
+  return (
   <Card>
     <CardHeader><CardTitle className="text-base">{t("Claim History")}</CardTitle></CardHeader>
     <CardContent>
@@ -2409,4 +2447,5 @@ const ClaimTable = ({ claims, showEmployee, onApprove, onReject, onTogglePaid, o
       </div>
     </CardContent>
   </Card>
-);
+  );
+};
