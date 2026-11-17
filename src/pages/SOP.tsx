@@ -177,14 +177,14 @@ const SOP = () => {
     <div className="space-y-6">
       <div className="flex justify-between items-center flex-wrap gap-4">
         <div>
-          <h1 className="text-2xl font-display font-bold">Standard Operating Procedures</h1>
-          <p className="text-sm text-muted-foreground">Official SOP documents and rule updates, for everyone.</p>
+          <h1 className="text-2xl font-display font-bold">{t("Standard Operating Procedures")}</h1>
+          <p className="text-sm text-muted-foreground">{t("Official SOP documents and rule updates, for everyone.")}</p>
         </div>
         {isAdmin && (
           <div className="flex gap-2">
             <Dialog open={ruleOpen} onOpenChange={setRuleOpen}>
               <DialogTrigger asChild>
-                <Button variant="outline"><MessageSquareText className="h-4 w-4 mr-1" /> Post Rule Update</Button>
+                <Button variant="outline"><MessageSquareText className="h-4 w-4 mr-1" /> {t("Post Rule Update")}</Button>
               </DialogTrigger>
               <DialogContent>
                 <DialogHeader><DialogTitle>Post a Rule Update</DialogTitle></DialogHeader>
@@ -197,7 +197,7 @@ const SOP = () => {
             </Dialog>
             <Dialog open={uploadOpen} onOpenChange={setUploadOpen}>
               <DialogTrigger asChild>
-                <Button><Upload className="h-4 w-4 mr-1" /> Upload New Version</Button>
+                <Button><Upload className="h-4 w-4 mr-1" /> {t("Upload New Version")}</Button>
               </DialogTrigger>
               <DialogContent>
                 <DialogHeader><DialogTitle>Upload New SOP Version</DialogTitle></DialogHeader>

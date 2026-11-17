@@ -327,7 +327,7 @@ const LeaveManagement = () => {
     <div className="space-y-4">
       <div className="flex items-center justify-between flex-wrap gap-2">
         <h2 className="text-2xl font-semibold flex items-center gap-2">
-          <CalendarHeart className="h-6 w-6" /> Leave Management
+          <CalendarHeart className="h-6 w-6" /> {t("Leave Management")}
         </h2>
       </div>
 

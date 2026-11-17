@@ -93,12 +93,12 @@ const Loans = () => {
     <div className="space-y-6">
       <div className="flex justify-between items-center flex-wrap gap-4">
         <div>
-          <h1 className="text-2xl font-display font-bold">Employee Loans</h1>
-          <p className="text-sm text-muted-foreground">Track active loans and monthly payroll deductions.</p>
+          <h1 className="text-2xl font-display font-bold">{t("Employee Loans")}</h1>
+          <p className="text-sm text-muted-foreground">{t("Track active loans and monthly payroll deductions.")}</p>
         </div>
         {canManage && (
           <Dialog open={open} onOpenChange={setOpen}>
-            <DialogTrigger asChild><Button><Plus className="h-4 w-4 mr-1" />New Loan</Button></DialogTrigger>
+            <DialogTrigger asChild><Button><Plus className="h-4 w-4 mr-1" />{t("New Loan")}</Button></DialogTrigger>
             <DialogContent>
               <DialogHeader><DialogTitle>Issue Loan</DialogTitle></DialogHeader>
               <div className="space-y-3">
@@ -149,14 +149,14 @@ const Loans = () => {
                       <TableCell>{Number(l.amount).toLocaleString()}</TableCell>
                       <TableCell className="font-semibold">{Number(l.remaining_balance).toLocaleString()}</TableCell>
                       <TableCell>{Number(l.monthly_deduction).toLocaleString()}</TableCell>
-                      <TableCell className="w-40"><Progress value={pct} /><span className="text-xs text-muted-foreground">{pct.toFixed(0)}% paid</span></TableCell>
+                      <TableCell className="w-40"><Progress value={pct} /><span className="text-xs text-muted-foreground">{pct.toFixed(0)}{t("% paid")}</span></TableCell>
                       <TableCell>
-                        {l.status === "approved" ? <Badge className="bg-success text-white"><AlertCircle className="h-3 w-3 mr-1" />Active</Badge> :
-                          l.status === "pending" ? <Badge variant="outline">Pending</Badge> :
-                          l.status === "rejected" ? <Badge className="bg-destructive text-white">Rejected</Badge> :
-                          <Badge variant="outline"><CheckCircle2 className="h-3 w-3 mr-1" />Closed</Badge>}
+                        {l.status === "approved" ? <Badge className="bg-success text-white"><AlertCircle className="h-3 w-3 mr-1" />{t("Active")}</Badge> :
+                          l.status === "pending" ? <Badge variant="outline">{t("Pending")}</Badge> :
+                          l.status === "rejected" ? <Badge className="bg-destructive text-white">{t("Rejected")}</Badge> :
+                          <Badge variant="outline"><CheckCircle2 className="h-3 w-3 mr-1" />{t("Closed")}</Badge>}
                       </TableCell>
-                      <TableCell>{canManage && l.status === "approved" && <Button size="sm" variant="outline" onClick={()=>closeLoan(l.id)}>Close</Button>}</TableCell>
+                      <TableCell>{canManage && l.status === "approved" && <Button size="sm" variant="outline" onClick={()=>closeLoan(l.id)}>{t("Close")}</Button>}</TableCell>
                     </TableRow>
                   );
                 })}
