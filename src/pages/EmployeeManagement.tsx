@@ -737,35 +737,6 @@ const EmployeeManagement = () => {
               </div>
             </div>
 
-            {canEditPayroll && (
-              <div className="mt-5 rounded-md border p-3 bg-muted/30">
-                <div className="flex items-center justify-between mb-2">
-                  <Label className="text-sm font-semibold">Compensation</Label>
-                  <Badge variant="outline" className="text-[10px]">Admin only</Badge>
-                </div>
-                <p className="text-xs text-muted-foreground mb-3">
-                  Update base salary on promotion or revision. Changes take effect on the next payroll generation.
-                </p>
-                <div className="grid grid-cols-3 gap-3">
-                  <div>
-                    <Label>Base Salary (monthly)</Label>
-                    <Input type="number" step="0.01" min="0" value={form.base_salary}
-                      onChange={(e) => setForm((f) => ({ ...f, base_salary: e.target.value }))} />
-                  </div>
-                  <div>
-                    <Label>Hourly OT Rate</Label>
-                    <Input type="number" step="0.01" min="0" value={form.hourly_overtime_rate}
-                      onChange={(e) => setForm((f) => ({ ...f, hourly_overtime_rate: e.target.value }))} />
-                  </div>
-                  <div>
-                    <Label>PF Contribution (%)</Label>
-                    <Input type="number" step="0.01" min="0" max="100" value={form.pf_contribution_pct}
-                      onChange={(e) => setForm((f) => ({ ...f, pf_contribution_pct: e.target.value }))} />
-                  </div>
-                </div>
-              </div>
-            )}
-
             <DialogFooter>
               <Button onClick={handleSave} disabled={saving} className="w-full mt-3">
                 {saving ? "Saving..." : "Create Employee"}
