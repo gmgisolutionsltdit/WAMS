@@ -756,6 +756,7 @@ function MyPaymentsTab() {
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
   const [historyRefresh, setHistoryRefresh] = useState(0);
+  const [confirmOpen, setConfirmOpen] = useState(false);
 
   const [grossSalary, setGrossSalary] = useState(0);
   const [loan, setLoan] = useState<{ id: string; monthly_deduction: number; remaining_balance: number } | null>(null);
@@ -1189,16 +1190,7 @@ function MyPaymentsTab() {
                   <Checkbox checked={otPaidNow} onCheckedChange={(v) => setOtPaidNow(!!v)} />
                   Adjust Now (unchecked = carry to next month)
                 </label>
-                <div className="flex gap-1">
-                  <Input type="number" value={otAmount} onChange={(e) => { setOtAmount(e.target.value); setOtAmountTouched(true); }} disabled={!otPaidNow} />
-                  <Button
-                    type="button" variant="outline" size="sm" className="shrink-0"
-                    disabled={!otPaidNow || otOutstanding <= 0}
-                    onClick={() => { setOtAmount(String(otOutstanding)); setOtAmountTouched(true); }}
-                  >
-                    Pay full
-                  </Button>
-                </div>
+                <Input type="number" value={otAmount} onChange={(e) => { setOtAmount(e.target.value); setOtAmountTouched(true); }} disabled={!otPaidNow} />
                 {otPaidNow && otOutstanding > (Number(otAmount) || 0) && (
                   <p className="text-xs text-muted-foreground">Carrying forward: {fmtBDT(otOutstanding - (Number(otAmount) || 0))}</p>
                 )}
@@ -1210,16 +1202,7 @@ function MyPaymentsTab() {
                   <Checkbox checked={expensePaidNow} onCheckedChange={(v) => setExpensePaidNow(!!v)} />
                   Adjust Now (unchecked = carry to next month)
                 </label>
-                <div className="flex gap-1">
-                  <Input type="number" value={expenseAmount} onChange={(e) => { setExpenseAmount(e.target.value); setExpenseAmountTouched(true); }} disabled={!expensePaidNow} />
-                  <Button
-                    type="button" variant="outline" size="sm" className="shrink-0"
-                    disabled={!expensePaidNow || expenseOutstanding <= 0}
-                    onClick={() => { setExpenseAmount(String(expenseOutstanding)); setExpenseAmountTouched(true); }}
-                  >
-                    Pay full
-                  </Button>
-                </div>
+                <Input type="number" value={expenseAmount} onChange={(e) => { setExpenseAmount(e.target.value); setExpenseAmountTouched(true); }} disabled={!expensePaidNow} />
                 {expensePaidNow && expenseOutstanding > (Number(expenseAmount) || 0) && (
                   <p className="text-xs text-muted-foreground">Carrying forward: {fmtBDT(expenseOutstanding - (Number(expenseAmount) || 0))}</p>
                 )}
@@ -1233,16 +1216,7 @@ function MyPaymentsTab() {
                   <Checkbox checked={loanPaidNow} onCheckedChange={(v) => setLoanPaidNow(!!v)} disabled={!loan} />
                   Adjust Now (unchecked = carry to next month)
                 </label>
-                <div className="flex gap-1">
-                  <Input type="number" value={loanAmount} onChange={(e) => { setLoanAmount(e.target.value); setLoanAmountTouched(true); }} disabled={!loan || !loanPaidNow || loanDue <= 0} />
-                  <Button
-                    type="button" variant="outline" size="sm" className="shrink-0"
-                    disabled={!loan || !loanPaidNow || loanDue <= 0}
-                    onClick={() => { setLoanAmount(String(loanDue)); setLoanAmountTouched(true); }}
-                  >
-                    Pay full
-                  </Button>
-                </div>
+                <Input type="number" value={loanAmount} onChange={(e) => { setLoanAmount(e.target.value); setLoanAmountTouched(true); }} disabled={!loan || !loanPaidNow || loanDue <= 0} />
                 {loan && loanPaidNow && loanDue > Math.abs(Number(loanAmount) || 0) && (
                   <p className="text-xs text-muted-foreground">Carrying forward: {fmtBDT(loanDue - Math.abs(Number(loanAmount) || 0))} of this month's due</p>
                 )}
@@ -1270,12 +1244,57 @@ function MyPaymentsTab() {
               <AttachmentsInput files={attachments} onChange={setAttachments} label="Attachment" buttonText="Upload" />
             </div>
             <div className="flex flex-wrap gap-2">
-              <Button onClick={submit} disabled={saving || uploading}>{uploading ? "Uploading..." : saving ? "Recording..." : "Record Payment"}</Button>
+              <Button onClick={() => setConfirmOpen(true)} disabled={saving || uploading}>{uploading ? "Uploading..." : saving ? "Recording..." : "Record Payment"}</Button>
               {existingSettlement && (
                 <Button variant="outline" onClick={downloadReceipt}>Download Receipt</Button>
               )}
             </div>
             <PaymentHistoryTable userId={selectedUserId} canDelete refreshKey={historyRefresh} />
+
+            <Dialog open={confirmOpen} onOpenChange={setConfirmOpen}>
+              <DialogContent>
+                <DialogHeader>
+                  <DialogTitle>Confirm Payment</DialogTitle>
+                </DialogHeader>
+                <div className="space-y-2 text-sm">
+                  <p className="text-muted-foreground">
+                    {employees.find((e) => e.id === selectedUserId)?.full_name || employees.find((e) => e.id === selectedUserId)?.email || "This employee"}
+                    {" — "}{format(new Date(`${month}-01`), "MMMM yyyy")}
+                  </p>
+                  <div className="rounded-md border divide-y">
+                    <div className="flex items-center justify-between px-3 py-2">
+                      <span>Net Salary</span>
+                      <span className="font-medium">{fmtBDT(grossSalary)}</span>
+                    </div>
+                    <div className="flex items-center justify-between px-3 py-2">
+                      <span>Overtime {otPaidNow ? "" : "(carried to next month)"}</span>
+                      <span className="font-medium">{otPaidNow ? fmtBDT(Number(otAmount) || 0) : fmtBDT(0)}</span>
+                    </div>
+                    <div className="flex items-center justify-between px-3 py-2">
+                      <span>Expense {expensePaidNow ? "" : "(carried to next month)"}</span>
+                      <span className="font-medium">{expensePaidNow ? fmtBDT(Number(expenseAmount) || 0) : fmtBDT(0)}</span>
+                    </div>
+                    <div className="flex items-center justify-between px-3 py-2">
+                      <span>Loan {loanPaidNow ? "" : "(carried to next month)"}</span>
+                      <span className="font-medium">{loanPaidNow ? fmtBDT(Number(loanAmount) || 0) : fmtBDT(0)}</span>
+                    </div>
+                    <div className="flex items-center justify-between px-3 py-2 bg-muted/50">
+                      <span className="font-semibold">Net Payment</span>
+                      <span className="font-semibold">{fmtBDT(netPayment)}</span>
+                    </div>
+                  </div>
+                  {existingSettlement && (
+                    <p className="text-xs text-muted-foreground">A payment for this month was already recorded — confirming updates it.</p>
+                  )}
+                </div>
+                <DialogFooter>
+                  <Button variant="outline" onClick={() => setConfirmOpen(false)}>Cancel</Button>
+                  <Button onClick={() => { setConfirmOpen(false); submit(); }} disabled={saving || uploading}>
+                    {uploading ? "Uploading..." : saving ? "Recording..." : "Confirm & Record"}
+                  </Button>
+                </DialogFooter>
+              </DialogContent>
+            </Dialog>
           </div>
         )}
       </CardContent>

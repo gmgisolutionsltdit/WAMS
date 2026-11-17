@@ -194,7 +194,6 @@ export const bn: Record<string, string> = {
   "Loan Due": "ঋণ বকেয়া",
   "Net Payment": "নেট পেমেন্ট",
   "Record Payment": "পেমেন্ট রেকর্ড করুন",
-  "Pay full": "পুরো পরিশোধ",
   "No active loan": "কোনো সক্রিয় ঋণ নেই",
   Filters: "ফিল্টার",
   "Filter Options": "ফিল্টার অপশন",
