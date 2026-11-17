@@ -231,18 +231,18 @@ const Payment = () => {
       <TableCell className="font-semibold">{Number(loan.amount).toLocaleString()}</TableCell>
       <TableCell className="text-xs text-muted-foreground max-w-[200px] truncate">{loan.reason || "—"}</TableCell>
       <TableCell>
-        {loan.installments} installment{loan.installments === 1 ? "" : "s"} · {Number(loan.monthly_deduction).toLocaleString()}
+        {loan.installments} {loan.installments === 1 ? t("installment") : t("installments")} · {Number(loan.monthly_deduction).toLocaleString()}
       </TableCell>
       <TableCell>{loan.month ? format(new Date(`${loan.month}T00:00:00`), "MMMM yyyy") : "—"}</TableCell>
-      <TableCell>{Number(loan.remaining_balance).toLocaleString()} left</TableCell>
+      <TableCell>{Number(loan.remaining_balance).toLocaleString()} {t("left")}</TableCell>
       <TableCell>
         <div className="flex items-center gap-1 flex-wrap">
           <Badge className={
             loan.status === "approved" ? "bg-success text-white" :
             loan.status === "rejected" ? "bg-destructive text-white" : ""
-          } variant={loan.status === "pending" ? "outline" : undefined}>{loan.status}</Badge>
+          } variant={loan.status === "pending" ? "outline" : undefined}>{t(loan.status.charAt(0).toUpperCase() + loan.status.slice(1))}</Badge>
           {loan.admin_flag && (
-            <Badge variant="destructive" className="gap-1"><AlertTriangle className="h-3 w-3" />Flagged</Badge>
+            <Badge variant="destructive" className="gap-1"><AlertTriangle className="h-3 w-3" />{t("Flagged")}</Badge>
           )}
           {isResigned(loan) && Number(loan.remaining_balance) > 0 && (
             <Badge variant="destructive">Outstanding — employee resigned</Badge>
@@ -283,23 +283,23 @@ const Payment = () => {
     <div className="space-y-6">
       <div className="flex justify-between items-center flex-wrap gap-4">
         <div>
-          <h1 className="text-2xl font-display font-bold">Payment</h1>
-          <p className="text-sm text-muted-foreground">Loans, Salary and Expense — one place for payment and payroll.</p>
+          <h1 className="text-2xl font-display font-bold">{t("Payment")}</h1>
+          <p className="text-sm text-muted-foreground">{t("Loans, Salary and Expense — one place for payment and payroll.")}</p>
         </div>
       </div>
 
       <Tabs defaultValue="loans">
         <TabsList>
-          <TabsTrigger value="loans">Loans</TabsTrigger>
-          <TabsTrigger value="salary">Salary</TabsTrigger>
-          <TabsTrigger value="expense">Expense</TabsTrigger>
-          <TabsTrigger value="my-payments">My Payments</TabsTrigger>
+          <TabsTrigger value="loans">{t("Loans")}</TabsTrigger>
+          <TabsTrigger value="salary">{t("Salary")}</TabsTrigger>
+          <TabsTrigger value="expense">{t("Expense")}</TabsTrigger>
+          <TabsTrigger value="my-payments">{t("My Payments")}</TabsTrigger>
         </TabsList>
 
         <TabsContent value="loans" className="space-y-4">
           <div className="flex justify-end">
             <Dialog open={requestOpen} onOpenChange={(o) => { setRequestOpen(o); if (!o) setLoanRequestForm({ amount: "", reason: "", installments: "1", month: format(new Date(), "yyyy-MM"), requestDate: format(new Date(), "yyyy-MM-dd") }); }}>
-              <DialogTrigger asChild><Button><Plus className="h-4 w-4 mr-1" />Request Loan</Button></DialogTrigger>
+              <DialogTrigger asChild><Button><Plus className="h-4 w-4 mr-1" />{t("Request Loan")}</Button></DialogTrigger>
               <DialogContent>
                 <DialogHeader><DialogTitle>Request a Loan</DialogTitle></DialogHeader>
                 <div className="space-y-3">
