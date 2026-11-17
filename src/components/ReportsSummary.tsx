@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
+import { useLanguage } from "@/contexts/LanguageContext";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -80,6 +81,7 @@ const fmtHoursMin = (hours: number) => {
 
 const ReportsSummary = () => {
   const { user, role } = useAuth();
+  const { t } = useLanguage();
   const isAdmin = role === "admin";
 
   const [dateFrom, setDateFrom] = useState("");
@@ -407,18 +409,18 @@ const ReportsSummary = () => {
     <div className="space-y-4">
       <Card>
         <CardHeader>
-          <CardTitle>Performance Summary</CardTitle>
-          <CardDescription>Late arrivals, short-duration days, and approved overtime.</CardDescription>
+          <CardTitle>{t("Performance Summary")}</CardTitle>
+          <CardDescription>{t("Late arrivals, short-duration days, and approved overtime.")}</CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
           <div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-6 gap-4 items-end">
             {isAdmin && (
               <div className="space-y-2">
-                <Label>Employee</Label>
+                <Label>{t("Employee")}</Label>
                 <Select value={employeeFilter} onValueChange={(v) => { setEmployeeFilter(v); }}>
                   <SelectTrigger><SelectValue /></SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="all">All employees</SelectItem>
+                    <SelectItem value="all">{t("All employees")}</SelectItem>
                     {employees.map((e) => (
                       <SelectItem key={e.id} value={e.id}>{e.full_name || e.email}</SelectItem>
                     ))}
@@ -427,24 +429,24 @@ const ReportsSummary = () => {
               </div>
             )}
             <div className="space-y-2">
-              <Label>Month From</Label>
+              <Label>{t("Month From")}</Label>
               <Input type="month" value={monthFrom} onChange={(e) => { setMonthFrom(e.target.value); if (e.target.value) { setDateFrom(""); setDateTo(""); } }} />
             </div>
             <div className="space-y-2">
-              <Label>Month To</Label>
+              <Label>{t("Month To")}</Label>
               <Input type="month" value={monthTo} onChange={(e) => { setMonthTo(e.target.value); if (e.target.value) { setDateFrom(""); setDateTo(""); } }} />
             </div>
             <div className="space-y-2">
-              <Label>From</Label>
+              <Label>{t("From")}</Label>
               <Input type="date" value={dateFrom} disabled={!!monthFrom || !!monthTo} onChange={(e) => { setDateFrom(e.target.value); }} />
             </div>
             <div className="space-y-2">
-              <Label>To</Label>
+              <Label>{t("To")}</Label>
               <Input type="date" value={dateTo} disabled={!!monthFrom || !!monthTo} onChange={(e) => { setDateTo(e.target.value); }} />
             </div>
             <div className="flex gap-2">
-              <Button onClick={fetchSummary} className="flex-1">Filter</Button>
-              <Button variant="outline" onClick={clearFilters}>Clear</Button>
+              <Button onClick={fetchSummary} className="flex-1">{t("Filter")}</Button>
+              <Button variant="outline" onClick={clearFilters}>{t("Clear")}</Button>
             </div>
           </div>
 
@@ -458,14 +460,14 @@ const ReportsSummary = () => {
                 <Table>
                   <TableHeader>
                     <TableRow>
-                      <TableHead>Employee</TableHead>
-                      <TableHead>Role</TableHead>
-                      <TableHead>Late Entry</TableHead>
-                      <TableHead>Less than 7hr Work Time</TableHead>
-                      <TableHead>Due Time</TableHead>
-                      <TableHead>Overtime</TableHead>
-                      <TableHead>Approved Overtime</TableHead>
-                      <TableHead>Net Hours</TableHead>
+                      <TableHead>{t("Employee")}</TableHead>
+                      <TableHead>{t("Role")}</TableHead>
+                      <TableHead>{t("Late Entry")}</TableHead>
+                      <TableHead>{t("Less than 7hr Work Time")}</TableHead>
+                      <TableHead>{t("Due Time")}</TableHead>
+                      <TableHead>{t("Overtime")}</TableHead>
+                      <TableHead>{t("Approved Overtime")}</TableHead>
+                      <TableHead>{t("Net Hours")}</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
@@ -525,10 +527,10 @@ const ReportsSummary = () => {
                       <Table>
                         <TableHeader>
                           <TableRow>
-                            <TableHead>Employee</TableHead>
-                            <TableHead>Date</TableHead>
-                            <TableHead className="text-right">Old Due</TableHead>
-                            <TableHead className="text-right">Corrected Due</TableHead>
+                            <TableHead>{t("Employee")}</TableHead>
+                            <TableHead>{t("Date")}</TableHead>
+                            <TableHead className="text-right">{t("Old Due")}</TableHead>
+                            <TableHead className="text-right">{t("Corrected Due")}</TableHead>
                           </TableRow>
                         </TableHeader>
                         <TableBody>
@@ -609,18 +611,18 @@ const ReportsSummary = () => {
               <Table>
                 <TableHeader>
                   <TableRow>
-                    <TableHead>Month</TableHead>
-                    <TableHead>Late Entry</TableHead>
-                    <TableHead>Late Entry Avg</TableHead>
-                    <TableHead>Less than 7hr Days</TableHead>
-                    <TableHead>Less than 7hr Avg</TableHead>
-                    <TableHead>Due Time Days</TableHead>
-                    <TableHead>Due Time</TableHead>
-                    <TableHead>Overtime Days</TableHead>
-                    <TableHead>Overtime</TableHead>
-                    <TableHead>Approved OT Days</TableHead>
-                    <TableHead>Approved Overtime</TableHead>
-                    <TableHead>Net Hours</TableHead>
+                    <TableHead>{t("Month")}</TableHead>
+                    <TableHead>{t("Late Entry")}</TableHead>
+                    <TableHead>{t("Late Entry Avg")}</TableHead>
+                    <TableHead>{t("Less than 7hr Days")}</TableHead>
+                    <TableHead>{t("Less than 7hr Avg")}</TableHead>
+                    <TableHead>{t("Due Time Days")}</TableHead>
+                    <TableHead>{t("Due Time")}</TableHead>
+                    <TableHead>{t("Overtime Days")}</TableHead>
+                    <TableHead>{t("Overtime")}</TableHead>
+                    <TableHead>{t("Approved OT Days")}</TableHead>
+                    <TableHead>{t("Approved Overtime")}</TableHead>
+                    <TableHead>{t("Net Hours")}</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
