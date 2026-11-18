@@ -35,6 +35,7 @@ export const bn: Record<string, string> = {
   Approve: "অনুমোদন",
   Reject: "প্রত্যাখ্যান",
   Edit: "এডিট",
+  Modify: "পরিবর্তন",
   Loading: "লোড হচ্ছে",
   Close: "বন্ধ",
   Search: "খুঁজুন",
