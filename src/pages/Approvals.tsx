@@ -8,7 +8,9 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Textarea } from "@/components/ui/textarea";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { toast } from "sonner";
 import { format } from "date-fns";
@@ -18,6 +20,7 @@ import { notifyEmployee } from "@/lib/notifications";
 import { applyOTFulfillment } from "@/lib/otFulfillment";
 import { humanMinutes } from "@/lib/officeTime";
 import { classifyDay, netRequiredHours, weekendDaysFor, type WorkSchedule } from "@/lib/workSchedule";
+import { computeWorkingDays } from "@/lib/leaveDays";
 import AttachmentThumbnails from "@/components/AttachmentThumbnails";
 import { DeleteReasonDialog } from "@/components/DeleteReasonDialog";
 import { moveToTrash, toastDeletedWithUndo } from "@/lib/trash";
@@ -83,6 +86,23 @@ const Approvals = () => {
   const [editOpen, setEditOpen] = useState(false);
   const [editReq, setEditReq] = useState<any>(null);
   const [editHours, setEditHours] = useState("");
+
+  // Modify & Approve Leave — mirrors LeaveManagement's own Team Requests
+  // tab feature, offered here too so an admin/manager can adjust a leave
+  // request's type/dates/day-type and approve it in one step, without
+  // leaving Pending Approvals. Fetches its own leave types/holidays/
+  // employee schedule on open rather than sharing Approvals' own fetchData
+  // state, since none of that is otherwise loaded here.
+  const [modOpen, setModOpen] = useState(false);
+  const [modReq, setModReq] = useState<any>(null);
+  const [modForm, setModForm] = useState<{
+    leave_type_id: string; start_date: string; end_date: string;
+    day_type: "full" | "first_half" | "second_half"; note: string;
+  }>({ leave_type_id: "", start_date: "", end_date: "", day_type: "full", note: "" });
+  const [modLeaveTypes, setModLeaveTypes] = useState<{ id: string; name: string; sandwich_leave?: boolean; bridge_holidays?: boolean }[]>([]);
+  const [modHolidaySet, setModHolidaySet] = useState<Set<string>>(new Set());
+  const [modWeekend, setModWeekend] = useState<number[]>([0, 6]);
+  const [modSaving, setModSaving] = useState(false);
 
   const fetchData = useCallback(async () => {
     if (!user) return;
@@ -294,6 +314,75 @@ const Approvals = () => {
     fetchData();
   };
 
+  const openModifyLeave = async (req: any) => {
+    setModReq(req);
+    setModForm({
+      leave_type_id: req.leave_type_id,
+      start_date: req.start_date,
+      end_date: req.end_date,
+      day_type: req.day_type,
+      note: "",
+    });
+    const [{ data: lts }, { data: hols }, { data: prof }] = await Promise.all([
+      supabase.from("leave_types").select("id, name, sandwich_leave, bridge_holidays"),
+      supabase.from("holidays").select("holiday_date, wing_names"),
+      supabase.from("profiles").select("working_days, company_wing").eq("id", req.user_id).maybeSingle(),
+    ]);
+    setModLeaveTypes((lts || []) as { id: string; name: string; sandwich_leave?: boolean; bridge_holidays?: boolean }[]);
+    const wingHolidays = (hols || []).filter(
+      (h: { wing_names: string[] | null }) => !h.wing_names?.length || h.wing_names.includes((prof as { company_wing?: string } | null)?.company_wing)
+    );
+    setModHolidaySet(new Set(wingHolidays.map((h: { holiday_date: string }) => h.holiday_date)));
+    setModWeekend(weekendDaysFor(prof as WorkSchedule | null));
+    setModOpen(true);
+  };
+
+  const submitModifyLeave = async () => {
+    if (!modReq || !user) return;
+    if (!modForm.leave_type_id || !modForm.start_date || !modForm.end_date) { toast.error("Fill all fields"); return; }
+    const modLt = modLeaveTypes.find((t) => t.id === modForm.leave_type_id);
+    const days = computeWorkingDays(modForm.start_date, modForm.end_date, modForm.day_type, modWeekend, modHolidaySet, !!modLt?.sandwich_leave, modLt?.bridge_holidays === true);
+    if (days <= 0) { toast.error("No working days in modified range"); return; }
+    setModSaving(true);
+    const { data, error } = await supabase
+      .from("leave_requests")
+      .update({
+        leave_type_id: modForm.leave_type_id,
+        start_date: modForm.start_date,
+        end_date: modForm.end_date,
+        day_type: modForm.day_type,
+        total_days: days,
+        status: "approved",
+        approver_id: user.id,
+        approver_note: modForm.note || null,
+        approved_at: new Date().toISOString(),
+        modified_by: user.id,
+        modified_at: new Date().toISOString(),
+        original_start_date: modReq.original_start_date ?? modReq.start_date,
+        original_end_date: modReq.original_end_date ?? modReq.end_date,
+        original_leave_type_id: modReq.original_leave_type_id ?? modReq.leave_type_id,
+        original_day_type: modReq.original_day_type ?? modReq.day_type,
+        original_total_days: modReq.original_total_days ?? modReq.total_days,
+      })
+      .eq("id", modReq.id)
+      .select("id");
+    setModSaving(false);
+    if (error) { toast.error(error.message); return; }
+    if (!data?.length) { toast.error(NOT_ALLOWED); return; }
+    await applyLeaveBalance({ user_id: modReq.user_id, leave_type_id: modForm.leave_type_id, start_date: modForm.start_date, total_days: days });
+    const lt = modLeaveTypes.find((l) => l.id === modForm.leave_type_id);
+    await notifyEmployee(
+      modReq.user_id,
+      "Leave Modified & Approved",
+      `Your leave was modified to ${lt?.name || "leave"} (${modForm.start_date} → ${modForm.end_date}, ${days}d) and approved.`,
+      modReq.id,
+      { route: "/leave", type: "leave_update" }
+    );
+    toast.success("Leave modified & approved");
+    setModOpen(false);
+    setModReq(null);
+    fetchData();
+  };
 
   const handleAction = async (req: any, status: "approved" | "rejected") => {
     if (!user) return;
@@ -850,6 +939,9 @@ const Approvals = () => {
                         <Button size="sm" className="bg-lime-500 hover:bg-lime-600 text-white" onClick={() => decideLeave(req, "approved")}>
                           <Check className="h-4 w-4 mr-1" /> {t("Approve")}
                         </Button>
+                        <Button size="sm" variant="outline" onClick={() => openModifyLeave(req)}>
+                          <Pencil className="h-4 w-4 mr-1" /> {t("Modify")}
+                        </Button>
                         <Button
                           size="sm"
                           className="bg-[#FF6347] hover:bg-[#E5533D] text-white"
@@ -1377,6 +1469,85 @@ const Approvals = () => {
             </div>
             <Button onClick={handleEdit} className="w-full bg-[#FFD700] hover:bg-[#E6C200] text-black">Save & Approve (Modified)</Button>
           </div>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={modOpen} onOpenChange={setModOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Modify &amp; Approve Leave</DialogTitle>
+            <DialogDescription>
+              Adjust the leave type, dates or day type before approving. The employee will be notified of the changes.
+            </DialogDescription>
+          </DialogHeader>
+          {modReq && (
+            <div className="space-y-3">
+              <div className="text-sm text-muted-foreground">
+                Original: <strong>{leaveTypeNames[modReq.leave_type_id] || "—"}</strong> · {modReq.start_date} → {modReq.end_date} ({modReq.total_days}d)
+              </div>
+              <div>
+                <Label>Leave Type</Label>
+                <Select value={modForm.leave_type_id} onValueChange={(v) => setModForm((f) => ({ ...f, leave_type_id: v }))}>
+                  <SelectTrigger><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    {modLeaveTypes.map((lt) => (
+                      <SelectItem key={lt.id} value={lt.id}>{lt.name}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <Label>Start Date</Label>
+                  <Input
+                    type="date"
+                    value={modForm.start_date}
+                    onChange={(e) => setModForm((f) => ({
+                      ...f,
+                      start_date: e.target.value,
+                      end_date: f.end_date && f.end_date < e.target.value ? e.target.value : f.end_date,
+                    }))}
+                  />
+                </div>
+                <div>
+                  <Label>End Date</Label>
+                  <Input
+                    type="date"
+                    value={modForm.end_date}
+                    min={modForm.start_date || undefined}
+                    onChange={(e) => setModForm((f) => ({ ...f, end_date: e.target.value }))}
+                  />
+                </div>
+              </div>
+              <div>
+                <Label>Day Type</Label>
+                <Select value={modForm.day_type} onValueChange={(v: "full" | "first_half" | "second_half") => setModForm((f) => ({ ...f, day_type: v }))}>
+                  <SelectTrigger><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="full">Full Day</SelectItem>
+                    <SelectItem value="first_half">First Half</SelectItem>
+                    <SelectItem value="second_half">Second Half</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              <div>
+                <Label>Note to employee (optional)</Label>
+                <Textarea value={modForm.note} onChange={(e) => setModForm((f) => ({ ...f, note: e.target.value }))} />
+              </div>
+              <div className="text-sm text-muted-foreground">
+                New chargeable days: <strong>
+                  {(() => {
+                    const lt = modLeaveTypes.find((t) => t.id === modForm.leave_type_id);
+                    return computeWorkingDays(modForm.start_date, modForm.end_date, modForm.day_type, modWeekend, modHolidaySet, !!lt?.sandwich_leave, lt?.bridge_holidays === true);
+                  })()}
+                </strong>
+              </div>
+            </div>
+          )}
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setModOpen(false)}>Cancel</Button>
+            <Button onClick={submitModifyLeave} disabled={modSaving}>{modSaving ? "Saving…" : "Save & Approve"}</Button>
+          </DialogFooter>
         </DialogContent>
       </Dialog>
     </div>
