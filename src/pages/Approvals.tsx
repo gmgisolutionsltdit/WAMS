@@ -324,7 +324,7 @@ const Approvals = () => {
       note: "",
     });
     const [{ data: lts }, { data: hols }, { data: prof }] = await Promise.all([
-      supabase.from("leave_types").select("id, name, sandwich_leave, bridge_holidays"),
+      supabase.from("leave_types").select("id, name, sandwich_leave, bridge_holidays").eq("active", true),
       supabase.from("holidays").select("holiday_date, wing_names"),
       supabase.from("profiles").select("working_days, company_wing").eq("id", req.user_id).maybeSingle(),
     ]);
