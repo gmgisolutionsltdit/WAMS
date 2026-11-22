@@ -27,7 +27,7 @@ import { DEFAULT_WORKING_DAYS } from "@/lib/workSchedule";
 
 const SERVICE_STATUS = ["Permanent", "Contractual", "Intern", "Short-Term", "Consultant"];
 const EMPLOYEE_STATUS = ["Active", "Inactive", "Resigned"];
-const LEGACY_WINGS = ["GMGI", "MORU"];
+const LEGACY_WINGS = ["GMGI", "GroupMappers"];
 const DOW = [
   { v: 0, label: "Sun" }, { v: 1, label: "Mon" }, { v: 2, label: "Tue" }, { v: 3, label: "Wed" },
   { v: 4, label: "Thu" }, { v: 5, label: "Fri" }, { v: 6, label: "Sat" },
