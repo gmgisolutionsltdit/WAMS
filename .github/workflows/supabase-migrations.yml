@@ -31,9 +31,13 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      # Pinned instead of "latest": the action resolves "latest" by calling
+      # GitHub's releases API unauthenticated, which hit a rate limit here
+      # and failed the whole job before any migration could run. A pinned
+      # version skips that lookup entirely. Bump this periodically.
       - uses: supabase/setup-cli@v1
         with:
-          version: latest
+          version: 3.2.0
 
       - name: Show pending migrations
         run: supabase db push --db-url "$SUPABASE_DB_URL" --dry-run
