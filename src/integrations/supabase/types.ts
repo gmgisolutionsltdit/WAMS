@@ -3013,7 +3013,7 @@ export type Database = {
         | "executive"
         | "supervisor"
       board_visibility: "private" | "workspace" | "public"
-      company_wing: "GMGI" | "MORU"
+      company_wing: "GMGI" | "GroupMappers"
       employee_status: "Active" | "Inactive" | "Resigned"
       leave_day_type: "full" | "first_half" | "second_half"
       leave_status:
@@ -3168,7 +3168,7 @@ export const Constants = {
         "supervisor",
       ],
       board_visibility: ["private", "workspace", "public"],
-      company_wing: ["GMGI", "MORU"],
+      company_wing: ["GMGI", "GroupMappers"],
       employee_status: ["Active", "Inactive", "Resigned"],
       leave_day_type: ["full", "first_half", "second_half"],
       leave_status: [
