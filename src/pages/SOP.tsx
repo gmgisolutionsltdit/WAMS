@@ -83,7 +83,13 @@ const SOP = () => {
   /** Opens the PDF in a new browser tab, like a normal link. */
   const openInBrowser = (doc: SopDocument) => {
     const { data } = supabase.storage.from("sop-documents").getPublicUrl(doc.file_path);
-    window.open(data.publicUrl, "_blank", "noopener,noreferrer");
+    const a = document.createElement("a");
+    a.href = data.publicUrl;
+    a.target = "_blank";
+    a.rel = "noopener noreferrer";
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
   };
 
   /** Forces an actual file download, regardless of the browser's PDF viewer. */
