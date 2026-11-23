@@ -12,6 +12,8 @@ type TableName =
   | "daily_work_logs"
   | "leave_requests"
   | "leave_balances"
+  | "personal_advances"
+  | "expense_claims"
   | "leave_types"
   | "projects"
   | "project_members"
