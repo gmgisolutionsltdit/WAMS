@@ -144,6 +144,11 @@ const Dashboard = () => {
 
   useRealtimeSubscription("overtime_requests", () => { fetchEmployeeData(); fetchAdminData(); }, "dashboard-ot");
   useRealtimeSubscription("attendance_logs", () => { fetchEmployeeData(); fetchAdminData(); }, "dashboard-attendance");
+  useRealtimeSubscription("manual_time_requests", fetchAdminData, "dashboard-manual");
+  useRealtimeSubscription("late_time_requests", fetchAdminData, "dashboard-late");
+  useRealtimeSubscription("leave_requests", fetchAdminData, "dashboard-leave");
+  useRealtimeSubscription("personal_advances", fetchAdminData, "dashboard-loan");
+  useRealtimeSubscription("expense_claims", fetchAdminData, "dashboard-expense");
 
   const performClockIn = async (faceDescriptor?: number[], workFromValue?: string[]) => {
     if (!user) return;
