@@ -12,7 +12,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from 
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Clock, LogIn, LogOut, Timer, AlertCircle, Users, CheckSquare, Plus, Check, X, Pause, Play } from "lucide-react";
+import { Clock, LogIn, LogOut, Timer, AlertCircle, Users, CheckSquare, Plus, Pause, Play } from "lucide-react";
 import { toast } from "sonner";
 import { format } from "date-fns";
 import DailyWorkLogDialog, { type TaskRow } from "@/components/DailyWorkLogDialog";
@@ -46,7 +46,6 @@ const Dashboard = () => {
   const isManagerOrAdmin = role === "manager" || role === "admin";
 
   const [activeLogs, setActiveLogs] = useState<any[]>([]);
-  const [pendingRequests, setPendingRequests] = useState<any[]>([]);
   const [stats, setStats] = useState({ totalOTToday: 0, pendingCount: 0, activeEmployees: 0 });
   const [approvalHistory, setApprovalHistory] = useState<any[]>([]);
 
@@ -123,7 +122,6 @@ const Dashboard = () => {
     ]);
 
     setActiveLogs(active || []);
-    setPendingRequests(pending || []);
     setApprovalHistory(history || []);
 
     const clockOT = (todayLogs || []).reduce((sum: number, l: any) => sum + (l.overtime_hours || 0), 0);
@@ -359,16 +357,6 @@ const Dashboard = () => {
     }
     setLoading(false);
   };
-
-  const handleApproval = async (id: string, status: "approved" | "rejected") => {
-    if (!user) return;
-    const { error } = await supabase.from("overtime_requests").update({ status, approved_by: user.id }).eq("id", id);
-    if (error) toast.error(error.message);
-    else { toast.success(`Request ${status}`); fetchAdminData(); }
-  };
-
-
-
 
   const getRunningDuration = (clockIn: string, breakMins: number = 0, breakStartStr?: string | null) => {
     let elapsed = currentTime.getTime() - new Date(clockIn).getTime();
@@ -643,39 +631,6 @@ const Dashboard = () => {
                         ) : (
                           <Badge variant="default">Working</Badge>
                         )}
-                      </TableCell>
-                    </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
-            </CardContent>
-          </Card>
-
-          <Card>
-            <CardHeader><CardTitle>Pending OT Approvals</CardTitle></CardHeader>
-            <CardContent>
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>Employee</TableHead>
-                    <TableHead>Date</TableHead>
-                    <TableHead>Hours</TableHead>
-                    <TableHead>Reason</TableHead>
-                    <TableHead>Actions</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {pendingRequests.length === 0 ? (
-                    <TableRow><TableCell colSpan={5} className="text-center text-muted-foreground">No pending requests</TableCell></TableRow>
-                  ) : pendingRequests.map((req) => (
-                    <TableRow key={req.id}>
-                      <TableCell className="font-medium">{(req.profiles as any)?.full_name || (req.profiles as any)?.email || "Unknown"}</TableCell>
-                      <TableCell>{format(new Date(req.date), "MMM d, yyyy")}</TableCell>
-                      <TableCell><Badge>{req.requested_hours}h</Badge></TableCell>
-                      <TableCell className="max-w-48 truncate">{req.reason}</TableCell>
-                      <TableCell className="space-x-2">
-                        <Button size="sm" className="bg-lime-500 hover:bg-lime-600 text-white" onClick={() => handleApproval(req.id, "approved")}><Check className="h-4 w-4 mr-1" /> Approve</Button>
-                        <Button size="sm" className="bg-[#FF6347] hover:bg-[#E5533D] text-white" onClick={() => handleApproval(req.id, "rejected")}><X className="h-4 w-4 mr-1" /> Reject</Button>
                       </TableCell>
                     </TableRow>
                   ))}
