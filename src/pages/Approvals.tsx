@@ -189,7 +189,9 @@ const Approvals = () => {
     const { data: monthLogs } = await supabase.from("attendance_logs").select("overtime_hours, user_id").gte("date", monthStart);
     const totalOT = (monthLogs || []).reduce((sum, l) => sum + (l.overtime_hours || 0), 0);
     const activeEmployees = new Set((monthLogs || []).map(l => l.user_id)).size;
-    setStats({ totalOT: Math.round(totalOT * 10) / 10, pendingCount: (requests || []).length, activeEmployees });
+    const totalPending = (requests || []).length + (manualReqs || []).length + (lateReqs || []).length
+      + (leaveReqs || []).length + (loanPend || []).length + (expensePend || []).length;
+    setStats({ totalOT: Math.round(totalOT * 10) / 10, pendingCount: totalPending, activeEmployees });
   }, [user]);
 
   useEffect(() => { fetchData(); }, [fetchData]);
@@ -663,7 +665,7 @@ const Approvals = () => {
           <CardContent><div className="flex items-center gap-2"><Clock className="h-5 w-5 text-destructive" /><span className="text-2xl font-bold">{stats.pendingCount}</span></div></CardContent>
         </Card>
         <Card>
-          <CardHeader className="pb-2"><CardDescription>{t("Active Employees")}</CardDescription></CardHeader>
+          <CardHeader className="pb-2"><CardDescription>{t("Active This Month")}</CardDescription></CardHeader>
           <CardContent><div className="flex items-center gap-2"><Users className="h-5 w-5 text-primary" /><span className="text-2xl font-bold">{stats.activeEmployees}</span></div></CardContent>
         </Card>
       </div>

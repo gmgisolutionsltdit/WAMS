@@ -106,12 +106,20 @@ const Dashboard = () => {
     if (!user || !isManagerOrAdmin) return;
     const today = localToday();
 
-    const [{ data: active }, { data: pending }, { data: todayLogs }, { data: history }, { data: approvedOTToday }] = await Promise.all([
+    const [
+      { data: active }, { data: pending }, { data: todayLogs }, { data: history }, { data: approvedOTToday },
+      { count: pendingManual }, { count: pendingLate }, { count: pendingLeave }, { count: pendingLoan }, { count: pendingExpense },
+    ] = await Promise.all([
       supabase.from("attendance_logs").select("*, profiles!attendance_logs_user_id_fkey(full_name, email)").eq("date", today).is("clock_out", null),
       supabase.from("overtime_requests").select("*, profiles!overtime_requests_user_id_fkey(full_name, email)").eq("status", "pending"),
       supabase.from("attendance_logs").select("overtime_hours").eq("date", today),
       supabase.from("overtime_requests").select("*, profiles!overtime_requests_user_id_fkey(full_name, email)").neq("status", "pending").order("updated_at", { ascending: false }).limit(10),
       supabase.from("overtime_requests").select("requested_hours").eq("date", today).in("status", ["approved", "modified"]),
+      supabase.from("manual_time_requests").select("*", { count: "exact", head: true }).eq("status", "pending"),
+      supabase.from("late_time_requests").select("*", { count: "exact", head: true }).eq("status", "pending"),
+      supabase.from("leave_requests").select("*", { count: "exact", head: true }).eq("status", "pending"),
+      supabase.from("personal_advances").select("*", { count: "exact", head: true }).eq("status", "pending"),
+      supabase.from("expense_claims").select("*", { count: "exact", head: true }).eq("status", "pending"),
     ]);
 
     setActiveLogs(active || []);
@@ -121,9 +129,10 @@ const Dashboard = () => {
     const clockOT = (todayLogs || []).reduce((sum: number, l: any) => sum + (l.overtime_hours || 0), 0);
     const requestOT = (approvedOTToday || []).reduce((sum: number, l: any) => sum + (l.requested_hours || 0), 0);
     const totalOTToday = clockOT + requestOT;
+    const totalPending = (pending || []).length + (pendingManual || 0) + (pendingLate || 0) + (pendingLeave || 0) + (pendingLoan || 0) + (pendingExpense || 0);
     setStats({
       totalOTToday: Math.round(totalOTToday * 10) / 10,
-      pendingCount: (pending || []).length,
+      pendingCount: totalPending,
       activeEmployees: (active || []).length,
     });
   }, [user, isManagerOrAdmin]);
@@ -588,7 +597,7 @@ const Dashboard = () => {
             </Card>
             <Card className="shadow-card overflow-hidden relative">
               <div className="absolute inset-0 bg-gradient-success opacity-10" />
-              <CardHeader className="pb-2 relative"><CardDescription>Active Employees</CardDescription></CardHeader>
+              <CardHeader className="pb-2 relative"><CardDescription>Clocked In Today</CardDescription></CardHeader>
               <CardContent className="relative">
                 <div className="flex items-center gap-3">
                   <div className="rounded-lg bg-gradient-success p-2.5 shadow-soft"><Users className="h-5 w-5 text-success-foreground" /></div>
