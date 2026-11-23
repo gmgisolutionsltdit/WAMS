@@ -133,7 +133,7 @@ export const bn: Record<string, string> = {
   "Total OT This Month": "এই মাসের মোট ওভারটাইম",
   "Pending Requests": "অপেক্ষমান রিকোয়েস্ট",
   "Active Employees": "সক্রিয় কর্মচারী",
-  "Active This Month": "এই মাসে সক্রিয়",
+  "Monthly Active Employees": "মাসিক সক্রিয় কর্মচারী",
 
   // Approvals page
   "Everything waiting on a decision, grouped by type.": "সিদ্ধান্তের অপেক্ষায় থাকা সবকিছু, ধরন অনুযায়ী ভাগ করা।",

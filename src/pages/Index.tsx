@@ -597,7 +597,7 @@ const Dashboard = () => {
             </Card>
             <Card className="shadow-card overflow-hidden relative">
               <div className="absolute inset-0 bg-gradient-success opacity-10" />
-              <CardHeader className="pb-2 relative"><CardDescription>Clocked In Today</CardDescription></CardHeader>
+              <CardHeader className="pb-2 relative"><CardDescription>Today Active Employees</CardDescription></CardHeader>
               <CardContent className="relative">
                 <div className="flex items-center gap-3">
                   <div className="rounded-lg bg-gradient-success p-2.5 shadow-soft"><Users className="h-5 w-5 text-success-foreground" /></div>
