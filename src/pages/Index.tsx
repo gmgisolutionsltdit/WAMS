@@ -12,7 +12,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from 
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Clock, LogIn, LogOut, Timer, AlertCircle, Users, CheckSquare, Plus, Pause, Play } from "lucide-react";
+import { Clock, LogIn, LogOut, Timer, AlertCircle, Users, CheckSquare, Plus, Pause, Play, ChevronLeft, ChevronRight } from "lucide-react";
 import { toast } from "sonner";
 import { format } from "date-fns";
 import DailyWorkLogDialog, { type TaskRow } from "@/components/DailyWorkLogDialog";
@@ -35,6 +35,9 @@ const localToday = () => format(new Date(), "yyyy-MM-dd");
 /** Minutes kept to 4dp so a stored break stays exact to the second. */
 const toStoredMinutes = (minutes: number) => Math.round(minutes * 10000) / 10000;
 
+const HISTORY_FETCH_LIMIT = 100;
+const HISTORY_PAGE_SIZE = 10;
+
 const Dashboard = () => {
   const { user, role } = useAuth();
   const { t } = useLanguage();
@@ -48,6 +51,7 @@ const Dashboard = () => {
   const [activeLogs, setActiveLogs] = useState<any[]>([]);
   const [stats, setStats] = useState({ totalOTToday: 0, pendingCount: 0, activeEmployees: 0 });
   const [approvalHistory, setApprovalHistory] = useState<any[]>([]);
+  const [historyPage, setHistoryPage] = useState(1);
 
 
 
@@ -112,7 +116,7 @@ const Dashboard = () => {
       supabase.from("attendance_logs").select("*, profiles!attendance_logs_user_id_fkey(full_name, email)").eq("date", today).is("clock_out", null),
       supabase.from("overtime_requests").select("*, profiles!overtime_requests_user_id_fkey(full_name, email)").eq("status", "pending"),
       supabase.from("attendance_logs").select("overtime_hours").eq("date", today),
-      supabase.from("overtime_requests").select("*, profiles!overtime_requests_user_id_fkey(full_name, email)").neq("status", "pending").order("updated_at", { ascending: false }).limit(10),
+      supabase.from("overtime_requests").select("*, profiles!overtime_requests_user_id_fkey(full_name, email)").neq("status", "pending").order("updated_at", { ascending: false }).limit(HISTORY_FETCH_LIMIT),
       supabase.from("overtime_requests").select("requested_hours").eq("date", today).in("status", ["approved", "modified"]),
       supabase.from("manual_time_requests").select("*", { count: "exact", head: true }).eq("status", "pending"),
       supabase.from("late_time_requests").select("*", { count: "exact", head: true }).eq("status", "pending"),
@@ -654,20 +658,40 @@ const Dashboard = () => {
                 <TableBody>
                   {approvalHistory.length === 0 ? (
                     <TableRow><TableCell colSpan={4} className="text-center text-muted-foreground">No history yet</TableCell></TableRow>
-                  ) : approvalHistory.map((req) => (
-                    <TableRow key={req.id}>
-                      <TableCell>{(req.profiles as any)?.full_name || (req.profiles as any)?.email || "Unknown"}</TableCell>
-                      <TableCell>{format(new Date(req.date), "MMM d, yyyy")}</TableCell>
-                      <TableCell>{req.requested_hours}h</TableCell>
-                      <TableCell>
-                        <Badge className={otStatusStyle(req.status)}>
-                          {req.status}
-                        </Badge>
-                      </TableCell>
-                    </TableRow>
-                  ))}
+                  ) : (() => {
+                    const pageCount = Math.max(1, Math.ceil(approvalHistory.length / HISTORY_PAGE_SIZE));
+                    const page = Math.min(historyPage, pageCount);
+                    const pageRows = approvalHistory.slice((page - 1) * HISTORY_PAGE_SIZE, page * HISTORY_PAGE_SIZE);
+                    return pageRows.map((req) => (
+                      <TableRow key={req.id}>
+                        <TableCell>{(req.profiles as any)?.full_name || (req.profiles as any)?.email || "Unknown"}</TableCell>
+                        <TableCell>{format(new Date(req.date), "MMM d, yyyy")}</TableCell>
+                        <TableCell>{req.requested_hours}h</TableCell>
+                        <TableCell>
+                          <Badge className={otStatusStyle(req.status)}>
+                            {req.status}
+                          </Badge>
+                        </TableCell>
+                      </TableRow>
+                    ));
+                  })()}
                 </TableBody>
               </Table>
+              {approvalHistory.length > HISTORY_PAGE_SIZE && (() => {
+                const pageCount = Math.max(1, Math.ceil(approvalHistory.length / HISTORY_PAGE_SIZE));
+                const page = Math.min(historyPage, pageCount);
+                return (
+                  <div className="flex items-center justify-center gap-3 pt-3">
+                    <Button variant="outline" size="sm" disabled={page <= 1} onClick={() => setHistoryPage(page - 1)}>
+                      <ChevronLeft className="h-4 w-4 mr-1" /> Previous
+                    </Button>
+                    <span className="text-sm text-muted-foreground whitespace-nowrap">Page {page} of {pageCount}</span>
+                    <Button variant="outline" size="sm" disabled={page >= pageCount} onClick={() => setHistoryPage(page + 1)}>
+                      Next <ChevronRight className="h-4 w-4 ml-1" />
+                    </Button>
+                  </div>
+                );
+              })()}
             </CardContent>
           </Card>
         </>
