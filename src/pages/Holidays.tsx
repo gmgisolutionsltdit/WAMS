@@ -208,8 +208,8 @@ const Holidays = () => {
               <TableRow key={g.ids[0]}>
                 <TableCell className="whitespace-nowrap">
                   {g.start_date === g.end_date
-                    ? format(new Date(g.start_date), "EEE, MMM d, yyyy")
-                    : `${format(new Date(g.start_date), "EEE, MMM d")} – ${format(new Date(g.end_date), "EEE, MMM d, yyyy")}`}
+                    ? format(new Date(g.start_date), "MMM d, yyyy")
+                    : `${format(new Date(g.start_date), "MMM d")} – ${format(new Date(g.end_date), "MMM d, yyyy")}`}
                 </TableCell>
                 <TableCell className="text-muted-foreground whitespace-nowrap">
                   {g.start_date === g.end_date
