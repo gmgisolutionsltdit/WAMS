@@ -25,6 +25,13 @@ const VISIBILITY_LABELS: Record<Visibility, string> = {
   public: "Public",
 };
 
+// Public is no longer offered as a choice when editing an existing board's
+// visibility (new boards never had it either — BoardCreatePopover's own
+// Visibility type is just private/workspace). A board already set to
+// Public before this change keeps working everywhere that reads
+// project.visibility; it's only removed from this picker going forward.
+const EDITABLE_VISIBILITIES: Visibility[] = ["private", "workspace"];
+
 type Project = { id: string; description: string | null; visibility: Visibility };
 
 // Trello-style board "Menu" (the three-dot button in the board header) —
@@ -381,9 +388,12 @@ export const BoardMenu = ({ project, canEdit, onOpenMembers, onProjectUpdated, o
             <Select value={project.visibility} onValueChange={(v) => changeVisibility(v as Visibility)} disabled={!canEdit}>
               <SelectTrigger><SelectValue /></SelectTrigger>
               <SelectContent>
-                {(Object.keys(VISIBILITY_LABELS) as Visibility[]).map((v) => (
+                {EDITABLE_VISIBILITIES.map((v) => (
                   <SelectItem key={v} value={v}>{VISIBILITY_LABELS[v]}</SelectItem>
                 ))}
+                {!EDITABLE_VISIBILITIES.includes(project.visibility) && (
+                  <SelectItem value={project.visibility} disabled>{VISIBILITY_LABELS[project.visibility]} (legacy)</SelectItem>
+                )}
               </SelectContent>
             </Select>
             <Button size="sm" variant="ghost" onClick={() => setPanel("menu")}>Back</Button>

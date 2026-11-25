@@ -52,6 +52,16 @@ export const BoardCreatePopover = ({ trigger, align = "end", onCreated }: {
     if (!name || creating) return;
     setCreating(true);
     try {
+      // Re-fetch the authenticated user right before the insert instead of
+      // trusting the possibly-stale id already in React context — a long-idle
+      // tab or an expired/refreshed session can otherwise send an owner_id
+      // that no longer matches what Postgres's RLS check (auth.uid() =
+      // owner_id) sees, surfacing as a confusing raw
+      // "new row violates row-level security policy" toast for any role.
+      const { data: authData } = await supabase.auth.getUser();
+      const ownerId = authData.user?.id || user?.id;
+      if (!ownerId) { toast.error("Your session has expired — please sign in again."); return; }
+
       const baseKey = slugKey(name);
       let data: { id: string } | null = null;
       let error: { code?: string; message: string } | null = null;
@@ -65,12 +75,16 @@ export const BoardCreatePopover = ({ trigger, align = "end", onCreated }: {
           : `${baseKey}${Math.random().toString(36).slice(2, 6).toUpperCase()}`;
         const res = await supabase
           .from("projects")
-          .insert({ key, name, owner_id: user!.id, visibility })
+          .insert({ key, name, owner_id: ownerId, visibility })
           .select("id")
           .single();
         data = res.data;
         error = res.error;
         if (!error || error.code !== "23505") break;
+      }
+      if (error?.code === "42501") {
+        toast.error("Your session has expired — please sign out and sign in again, then retry.");
+        return;
       }
       if (error || !data) { toast.error(error?.message || "Could not create board"); return; }
 
