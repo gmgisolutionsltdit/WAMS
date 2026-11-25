@@ -391,6 +391,9 @@ export const BoardMenu = ({ project, canEdit, onOpenMembers, onProjectUpdated, o
                 {EDITABLE_VISIBILITIES.map((v) => (
                   <SelectItem key={v} value={v}>{VISIBILITY_LABELS[v]}</SelectItem>
                 ))}
+                {!EDITABLE_VISIBILITIES.includes(project.visibility) && (
+                  <SelectItem value={project.visibility} disabled>{VISIBILITY_LABELS[project.visibility]} (legacy)</SelectItem>
+                )}
               </SelectContent>
             </Select>
             <Button size="sm" variant="ghost" onClick={() => setPanel("menu")}>Back</Button>
