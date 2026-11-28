@@ -909,26 +909,24 @@ const TaskBoard = () => {
 
       {/* Task Detail Dialog */}
       <Dialog open={!!activeTask} onOpenChange={(o) => { if (!o) { setActiveTask(null); openTaskIdRef.current = null; } }}>
-        <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto top-8 translate-y-0">
+        <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto top-8 translate-y-0" hideClose>
           {activeTask && (
             <>
-              <div className="flex items-center justify-between -mt-1 -mx-1 mb-1">
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  className="h-auto py-1"
-                  onClick={() => setMoveDialogTask(activeTask)}
+              <div className="-mt-1 -mx-1 mb-1">
+                <Select
+                  value={activeTask.column_id || ""}
+                  onValueChange={(v) => {
+                    const col = columns.find((c) => c.id === v);
+                    updateTask({ column_id: v, status: (col?.status || "todo") as Database["public"]["Enums"]["task_status"] });
+                  }}
                 >
-                  <ArrowRightLeft className="h-3.5 w-3.5 mr-1.5" /> Move card
-                </Button>
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  className="h-auto py-1 text-destructive hover:text-destructive"
-                  onClick={() => { archiveTask(activeTask); setActiveTask(null); openTaskIdRef.current = null; }}
-                >
-                  <Archive className="h-3.5 w-3.5 mr-1.5" /> Remove
-                </Button>
+                  <SelectTrigger className="h-auto w-auto gap-1.5 border-0 shadow-none px-2 py-1 text-sm font-medium hover:bg-accent">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {columns.map((c) => <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>)}
+                  </SelectContent>
+                </Select>
               </div>
               <DialogHeader>
                 <DialogTitle>
