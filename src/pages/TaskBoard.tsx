@@ -43,7 +43,6 @@ import {
 import { arrayMove, SortableContext, horizontalListSortingStrategy } from "@dnd-kit/sortable";
 import { KanbanColumn, KanbanColumnData } from "@/components/kanban/KanbanColumn";
 import { KanbanCard, KanbanTask, Profile } from "@/components/kanban/KanbanCard";
-import { KanbanEmptyState } from "@/components/kanban/KanbanEmptyState";
 import { BoardSearchCreate } from "@/components/tasks/BoardSearchCreate";
 import { AddChecklistPopover } from "@/components/tasks/AddChecklistPopover";
 import { AddListInline } from "@/components/tasks/AddListInline";
@@ -718,7 +717,6 @@ const TaskBoard = () => {
     );
   }
 
-  const totalTasks = tasks.length;
   const isOwnerOrAdmin = project.owner_id === user?.id || role === "admin";
   // A Public-visibility board can be viewed by non-members, but the
   // "Members view tasks"/"Members manage boards" RLS policies only let
@@ -804,13 +802,6 @@ const TaskBoard = () => {
           />
         </div>
       </div>
-
-      {/* Hint banner when board is empty — but always render the columns below */}
-      {totalTasks === 0 && columns.length > 0 && (
-        <div className="rounded-2xl bg-gradient-to-b from-muted/30 to-transparent border border-border/60 shrink-0">
-          <KanbanEmptyState onCreate={() => openCreate(columns[0].id)} />
-        </div>
-      )}
 
       <DndContext
         sensors={sensors}
