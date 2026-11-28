@@ -673,6 +673,31 @@ const TaskBoard = () => {
     toast.success("List archived");
   };
 
+  // Trello's "Copy list" — creates a new, empty list with the given name
+  // immediately to the right of the one copied (cards aren't duplicated,
+  // matching the simple Name-only copy dialog this board offers).
+  const copyColumn = async (colId: string, name: string) => {
+    const trimmed = name.trim();
+    if (!trimmed || !boardId) return;
+    const source = columns.find((c) => c.id === colId);
+    if (!source) return;
+    const toShift = columns.filter((c) => c.position > source.position);
+    if (toShift.length) {
+      await Promise.all(toShift.map((c) =>
+        supabase.from("task_columns").update({ position: c.position + 1 }).eq("id", c.id),
+      ));
+    }
+    const { error } = await supabase.from("task_columns").insert({
+      board_id: boardId,
+      name: trimmed,
+      status: source.status,
+      position: source.position + 1,
+    });
+    if (error) { toast.error(error.message); fetchAll(); return; }
+    toast.success("List copied");
+    fetchAll();
+  };
+
   const renameColumn = async (colId: string, name: string) => {
     const trimmed = name.trim();
     if (!trimmed) return;
@@ -828,6 +853,7 @@ const TaskBoard = () => {
                 onOpenTask={openTask}
                 onDeleteColumn={deleteColumn}
                 onArchiveColumn={archiveColumn}
+                onCopyColumn={copyColumn}
                 onRenameColumn={renameColumn}
                 onToggleComplete={toggleComplete}
                 onArchiveTask={archiveTask}
