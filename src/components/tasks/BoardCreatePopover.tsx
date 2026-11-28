@@ -8,6 +8,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { toast } from "sonner";
 import { ChevronLeft, LayoutGrid, X } from "lucide-react";
+import { DEFAULT_BOARD_LABEL_COLORS } from "@/lib/taskLabels";
 
 type Visibility = "private" | "workspace";
 
@@ -90,9 +91,19 @@ export const BoardCreatePopover = ({ trigger, align = "end", onCreated }: {
 
       // No default lists — a new board starts empty, same as Trello, and the
       // first list gets added via the board's own "Add a list" control.
-      await supabase
+      const { data: board } = await supabase
         .from("task_boards")
-        .insert({ project_id: data.id, name: "Main Board", position: 0 });
+        .insert({ project_id: data.id, name: "Main Board", position: 0 })
+        .select("id")
+        .single();
+
+      // Seed the same 6 unnamed labels Trello starts every new board with,
+      // ready to rename/use immediately from the Labels popover.
+      if (board) {
+        await supabase.from("task_labels").insert(
+          DEFAULT_BOARD_LABEL_COLORS.map((color, i) => ({ board_id: board.id, name: "", color, position: i })),
+        );
+      }
 
       toast.success("Board created");
       setOpen(false);
