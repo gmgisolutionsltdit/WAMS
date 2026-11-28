@@ -1006,31 +1006,6 @@ const TaskBoard = () => {
                   })}
                 </div>
               )}
-              <div className="grid grid-cols-3 gap-3">
-                <div>
-                  <Label className="text-xs text-muted-foreground">Status</Label>
-                  <Select
-                    value={activeTask.column_id || ""}
-                    onValueChange={(v) => {
-                      const col = columns.find((c) => c.id === v);
-                      updateTask({ column_id: v, status: (col?.status || "todo") as any });
-                    }}
-                  >
-                    <SelectTrigger><SelectValue /></SelectTrigger>
-                    <SelectContent>{columns.map((c) => <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>)}</SelectContent>
-                  </Select>
-                </div>
-                <div>
-                  <Label className="text-xs text-muted-foreground">Priority</Label>
-                  <Select value={activeTask.priority} onValueChange={(v) => updateTask({ priority: v as any })}>
-                    <SelectTrigger><SelectValue /></SelectTrigger>
-                    <SelectContent>{PRIORITIES.map((p) => <SelectItem key={p} value={p}>{p}</SelectItem>)}</SelectContent>
-                  </Select>
-                </div>
-                <div className="text-xs text-muted-foreground pt-5">
-                  Reporter: {profileFor((activeTask as any).reporter_id)?.full_name || "—"}
-                </div>
-              </div>
               <div className="grid grid-cols-5 gap-4">
                 <div className="col-span-3 space-y-4">
                   <div>
