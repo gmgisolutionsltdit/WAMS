@@ -88,20 +88,11 @@ export const BoardCreatePopover = ({ trigger, align = "end", onCreated }: {
       }
       if (error || !data) { toast.error(error?.message || "Could not create board"); return; }
 
-      const { data: board } = await supabase
+      // No default lists — a new board starts empty, same as Trello, and the
+      // first list gets added via the board's own "Add a list" control.
+      await supabase
         .from("task_boards")
-        .insert({ project_id: data.id, name: "Main Board", position: 0 })
-        .select("id")
-        .single();
-
-      if (board) {
-        await supabase.from("task_columns").insert([
-          { board_id: board.id, name: "To Do", status: "todo", position: 0 },
-          { board_id: board.id, name: "In Progress", status: "in_progress", position: 1 },
-          { board_id: board.id, name: "In Review", status: "in_review", position: 2 },
-          { board_id: board.id, name: "Done", status: "done", position: 3 },
-        ]);
-      }
+        .insert({ project_id: data.id, name: "Main Board", position: 0 });
 
       toast.success("Board created");
       setOpen(false);
