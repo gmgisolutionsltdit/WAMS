@@ -5,7 +5,6 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/u
 import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { toast } from "sonner";
 import type { KanbanTask } from "@/components/kanban/KanbanCard";
 
@@ -22,10 +21,9 @@ interface Props {
   onMoved: () => void;
 }
 
-/** Trello's "Move card" dialog: Inbox (move within the card's current list,
- * just a new position) and Board (pick a different board/list/position). */
+/** Trello's "Move card" dialog, Board tab only — WAMS has no equivalent to
+ * Trello's personal "Inbox" tab, so this is just Board → List → Position. */
 export const MoveCardDialog = ({ task, currentProjectId, currentTaskBoardId, onClose, onMoved }: Props) => {
-  const [tab, setTab] = useState<"inbox" | "board">("inbox");
   const [boards, setBoards] = useState<BoardOption[]>([]);
   const [boardId, setBoardId] = useState(currentProjectId);
   const [columns, setColumns] = useState<ColumnOption[]>([]);
@@ -37,7 +35,6 @@ export const MoveCardDialog = ({ task, currentProjectId, currentTaskBoardId, onC
 
   useEffect(() => {
     if (!task) return;
-    setTab("inbox");
     setBoardId(currentProjectId);
     setColumnId(task.column_id || "");
     setTaskBoardId(currentTaskBoardId);
@@ -46,16 +43,6 @@ export const MoveCardDialog = ({ task, currentProjectId, currentTaskBoardId, onC
       setBoards((data || []) as BoardOption[]);
     })();
   }, [task, currentProjectId, currentTaskBoardId]);
-
-  // Inbox tab always targets the card's own current list — if Board tab
-  // selections had wandered elsewhere, switching back to Inbox resets them.
-  const selectTab = (v: string) => {
-    setTab(v as "inbox" | "board");
-    if (v === "inbox") {
-      setBoardId(currentProjectId);
-      setColumnId(task?.column_id || "");
-    }
-  };
 
   useEffect(() => {
     if (!task || !boardId) return;
@@ -128,52 +115,29 @@ export const MoveCardDialog = ({ task, currentProjectId, currentTaskBoardId, onC
     <Dialog open={!!task} onOpenChange={(o) => !o && onClose()}>
       <DialogContent className="max-w-xs">
         <DialogHeader><DialogTitle className="text-sm">Move card</DialogTitle></DialogHeader>
-        <Tabs value={tab} onValueChange={selectTab}>
-          <TabsList className="grid grid-cols-2 h-8">
-            <TabsTrigger value="inbox" className="text-xs">Inbox</TabsTrigger>
-            <TabsTrigger value="board" className="text-xs">Board</TabsTrigger>
-          </TabsList>
-        </Tabs>
         <div className="space-y-3">
-          {tab === "board" && (
-            <>
-              <p className="text-xs text-muted-foreground">Select destination</p>
-              <div className="space-y-1">
-                <Label className="text-xs text-muted-foreground">Board</Label>
-                <Select value={boardId} onValueChange={setBoardId}>
-                  <SelectTrigger className="h-8"><SelectValue /></SelectTrigger>
-                  <SelectContent>
-                    {boards.map((b) => <SelectItem key={b.id} value={b.id}>{b.name}</SelectItem>)}
-                  </SelectContent>
-                </Select>
-              </div>
-              <div className="grid grid-cols-2 gap-2">
-                <div className="space-y-1">
-                  <Label className="text-xs text-muted-foreground">List</Label>
-                  <Select value={columnId} onValueChange={setColumnId}>
-                    <SelectTrigger className="h-8"><SelectValue /></SelectTrigger>
-                    <SelectContent>
-                      {columns.map((c) => <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>)}
-                    </SelectContent>
-                  </Select>
-                </div>
-                <div className="space-y-1">
-                  <Label className="text-xs text-muted-foreground">Position</Label>
-                  <Select value={String(position)} onValueChange={(v) => setPosition(Number(v))}>
-                    <SelectTrigger className="h-8"><SelectValue /></SelectTrigger>
-                    <SelectContent>
-                      {Array.from({ length: columnTaskCount + 1 }, (_, i) => i + 1).map((n) => (
-                        <SelectItem key={n} value={String(n)}>{n}</SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-              </div>
-            </>
-          )}
-          {tab === "inbox" && (
+          <p className="text-xs text-muted-foreground">Select destination</p>
+          <div className="space-y-1">
+            <Label className="text-xs text-muted-foreground">Board</Label>
+            <Select value={boardId} onValueChange={setBoardId}>
+              <SelectTrigger className="h-8"><SelectValue /></SelectTrigger>
+              <SelectContent>
+                {boards.map((b) => <SelectItem key={b.id} value={b.id}>{b.name}</SelectItem>)}
+              </SelectContent>
+            </Select>
+          </div>
+          <div className="grid grid-cols-2 gap-2">
             <div className="space-y-1">
-              <Label className="text-xs text-muted-foreground">Select position</Label>
+              <Label className="text-xs text-muted-foreground">List</Label>
+              <Select value={columnId} onValueChange={setColumnId}>
+                <SelectTrigger className="h-8"><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  {columns.map((c) => <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>)}
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-1">
+              <Label className="text-xs text-muted-foreground">Position</Label>
               <Select value={String(position)} onValueChange={(v) => setPosition(Number(v))}>
                 <SelectTrigger className="h-8"><SelectValue /></SelectTrigger>
                 <SelectContent>
@@ -183,7 +147,7 @@ export const MoveCardDialog = ({ task, currentProjectId, currentTaskBoardId, onC
                 </SelectContent>
               </Select>
             </div>
-          )}
+          </div>
           <Button className="w-full" size="sm" onClick={move} disabled={saving || !columnId}>Move</Button>
         </div>
       </DialogContent>
