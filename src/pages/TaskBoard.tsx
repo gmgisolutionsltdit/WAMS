@@ -1041,8 +1041,8 @@ const TaskBoard = () => {
                   })}
                 </div>
               )}
-              <div className="grid grid-cols-5 gap-4">
-                <div className="col-span-3 space-y-4">
+              <div className="flex flex-col sm:flex-row gap-4">
+                <div className="sm:flex-[3] min-w-0 space-y-4">
                   <div>
                     <Label>{t("Description")}</Label>
                     {editingDescription ? (
@@ -1097,13 +1097,14 @@ const TaskBoard = () => {
                   ))}
                 </div>
 
-                <div className="col-span-2 space-y-2 md:border-l md:pl-4">
+                <div className="sm:flex-[2] min-w-0 space-y-2 sm:border-l sm:pl-4">
                   <Label className="flex items-center gap-1"><MessageSquare className="h-3 w-3" /> Comments and activity</Label>
                   <div className="flex gap-2">
                     <Input
                       value={newComment}
                       onChange={(e) => setNewComment(e.target.value)}
-                      placeholder={t("Add a comment...")}
+                      placeholder={t("Write a comment...")}
+                      className="bg-muted/40 border-0 focus-visible:bg-background"
                       onKeyDown={(e) => e.key === "Enter" && addComment()}
                     />
                     <Button size="sm" onClick={addComment}>Post</Button>

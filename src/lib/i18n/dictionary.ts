@@ -333,7 +333,7 @@ export const bn: Record<string, string> = {
   "Select assignee": "দায়িত্বপ্রাপ্ত নির্বাচন করুন",
   Create: "তৈরি করুন",
   "Back to boards": "বোর্ডে ফিরে যান",
-  "Add a comment...": "একটি মন্তব্য যোগ করুন...",
+  "Write a comment...": "একটি মন্তব্য লিখুন...",
 
   // Reports
   "Filter by employee, date range, and type.": "কর্মচারী, তারিখের পরিসর এবং ধরন অনুযায়ী ফিল্টার করুন।",
