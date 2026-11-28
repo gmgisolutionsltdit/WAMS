@@ -14,7 +14,7 @@ import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription,
 } from "@/components/ui/dialog";
 import { toast } from "sonner";
-import { ArrowLeft, Plus, MessageSquare, Loader2, AlertCircle, CheckSquare, UserPlus, Tag, CalendarClock, ArrowRightLeft, Archive } from "lucide-react";
+import { ArrowLeft, Plus, MessageSquare, Loader2, AlertCircle, CheckSquare, UserPlus, Tag, CalendarClock, ChevronDown } from "lucide-react";
 import {
   DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
@@ -913,20 +913,15 @@ const TaskBoard = () => {
           {activeTask && (
             <>
               <div className="-mt-1 -mx-1 mb-1">
-                <Select
-                  value={activeTask.column_id || ""}
-                  onValueChange={(v) => {
-                    const col = columns.find((c) => c.id === v);
-                    updateTask({ column_id: v, status: (col?.status || "todo") as Database["public"]["Enums"]["task_status"] });
-                  }}
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="h-auto gap-1.5 px-2 py-1 text-sm font-medium"
+                  onClick={() => setMoveDialogTask(activeTask)}
                 >
-                  <SelectTrigger className="h-auto w-auto gap-1.5 border-0 shadow-none px-2 py-1 text-sm font-medium hover:bg-accent">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {columns.map((c) => <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>)}
-                  </SelectContent>
-                </Select>
+                  {columns.find((c) => c.id === activeTask.column_id)?.name || "Move"}
+                  <ChevronDown className="h-3.5 w-3.5 text-muted-foreground" />
+                </Button>
               </div>
               <DialogHeader>
                 <DialogTitle>
