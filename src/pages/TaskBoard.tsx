@@ -1115,7 +1115,18 @@ const TaskBoard = () => {
             currentProjectId={projectId}
             currentTaskBoardId={boardId}
             onClose={() => setMoveDialogTask(null)}
-            onMoved={fetchAll}
+            onMoved={() => {
+              fetchAll();
+              // Moving the task that's open in the detail dialog would
+              // otherwise leave activeTask.column_id stale (wrong list shown
+              // on the dropdown, checklist-to-card actions targeting the old
+              // list) — closing is simplest and safe since the move already
+              // succeeded.
+              if (activeTask && moveDialogTask && activeTask.id === moveDialogTask.id) {
+                setActiveTask(null);
+                openTaskIdRef.current = null;
+              }
+            }}
           />
           <CopyCardDialog
             task={copyDialogTask}
