@@ -4,7 +4,8 @@ import { CSS } from "@dnd-kit/utilities";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
-import { Plus, MoreVertical, Trash2, X, Archive } from "lucide-react";
+import { Plus, MoreVertical, Trash2, X, Archive, Copy } from "lucide-react";
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { cn } from "@/lib/utils";
 import { KanbanCard, KanbanTask, Profile } from "./KanbanCard";
 import type { TaskLabel } from "@/lib/taskLabels";
@@ -31,6 +32,7 @@ interface Props {
   onOpenTask: (task: KanbanTask) => void;
   onDeleteColumn?: (columnId: string) => void;
   onArchiveColumn?: (columnId: string) => void;
+  onCopyColumn?: (columnId: string, name: string) => void;
   onRenameColumn?: (columnId: string, name: string) => void;
   onToggleComplete?: (task: KanbanTask) => void;
   onArchiveTask?: (task: KanbanTask) => void;
@@ -58,6 +60,7 @@ export function KanbanColumn({
   onOpenTask,
   onDeleteColumn,
   onArchiveColumn,
+  onCopyColumn,
   onRenameColumn,
   onToggleComplete,
   onArchiveTask,
@@ -95,6 +98,8 @@ export function KanbanColumn({
 
   const [editingName, setEditingName] = useState(false);
   const [nameDraft, setNameDraft] = useState(column.name);
+  const [copyingList, setCopyingList] = useState(false);
+  const [copyListName, setCopyListName] = useState(column.name);
   const canRename = !!canEditBoard && !!onRenameColumn;
 
   const startEditingName = () => {
@@ -227,7 +232,7 @@ export function KanbanColumn({
               {tasks.length}
             </span>
           </div>
-          {canDelete && (onDeleteColumn || onArchiveColumn) && (
+          {canDelete && (onDeleteColumn || onArchiveColumn || onCopyColumn) && (
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
                 <Button size="icon" variant="ghost" className="h-7 w-7 shrink-0" aria-label="Column menu" onPointerDown={(e) => e.stopPropagation()}>
@@ -235,6 +240,14 @@ export function KanbanColumn({
                 </Button>
               </DropdownMenuTrigger>
               <DropdownMenuContent align="end">
+                <DropdownMenuItem onClick={() => openAddCard(tasks.length)}>
+                  <Plus className="h-3.5 w-3.5 mr-2" /> Add card
+                </DropdownMenuItem>
+                {onCopyColumn && (
+                  <DropdownMenuItem onClick={() => { setCopyListName(column.name); setCopyingList(true); }}>
+                    <Copy className="h-3.5 w-3.5 mr-2" /> Copy list
+                  </DropdownMenuItem>
+                )}
                 {onArchiveColumn && (
                   <DropdownMenuItem onClick={() => onArchiveColumn(column.id)}>
                     <Archive className="h-3.5 w-3.5 mr-2" /> Archive this list
@@ -297,6 +310,34 @@ export function KanbanColumn({
             <Plus className="h-4 w-4" /> Add a card
           </button>
         )}
+      </div>
+
+      <div onClick={(e) => e.stopPropagation()} onPointerDown={(e) => e.stopPropagation()}>
+        <Dialog open={copyingList} onOpenChange={setCopyingList}>
+          <DialogContent className="max-w-xs">
+            <DialogHeader><DialogTitle className="text-sm">Copy list</DialogTitle></DialogHeader>
+            <div className="space-y-3">
+              <div className="space-y-1">
+                <label className="text-xs text-muted-foreground">Name</label>
+                <Textarea
+                  autoFocus
+                  value={copyListName}
+                  onChange={(e) => setCopyListName(e.target.value)}
+                  rows={2}
+                  className="text-sm resize-none"
+                />
+              </div>
+              <Button
+                className="w-full"
+                size="sm"
+                onClick={() => { onCopyColumn?.(column.id, copyListName); setCopyingList(false); }}
+                disabled={!copyListName.trim()}
+              >
+                Create list
+              </Button>
+            </div>
+          </DialogContent>
+        </Dialog>
       </div>
     </div>
   );

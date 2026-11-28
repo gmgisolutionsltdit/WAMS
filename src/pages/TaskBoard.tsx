@@ -14,7 +14,7 @@ import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription,
 } from "@/components/ui/dialog";
 import { toast } from "sonner";
-import { ArrowLeft, Plus, MessageSquare, Loader2, AlertCircle, CheckSquare, UserPlus, Tag, CalendarClock, ArrowRightLeft, Archive } from "lucide-react";
+import { ArrowLeft, Plus, MessageSquare, Loader2, AlertCircle, CheckSquare, UserPlus, Tag, CalendarClock, ChevronDown } from "lucide-react";
 import {
   DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
@@ -673,6 +673,31 @@ const TaskBoard = () => {
     toast.success("List archived");
   };
 
+  // Trello's "Copy list" — creates a new, empty list with the given name
+  // immediately to the right of the one copied (cards aren't duplicated,
+  // matching the simple Name-only copy dialog this board offers).
+  const copyColumn = async (colId: string, name: string) => {
+    const trimmed = name.trim();
+    if (!trimmed || !boardId) return;
+    const source = columns.find((c) => c.id === colId);
+    if (!source) return;
+    const toShift = columns.filter((c) => c.position > source.position);
+    if (toShift.length) {
+      await Promise.all(toShift.map((c) =>
+        supabase.from("task_columns").update({ position: c.position + 1 }).eq("id", c.id),
+      ));
+    }
+    const { error } = await supabase.from("task_columns").insert({
+      board_id: boardId,
+      name: trimmed,
+      status: source.status,
+      position: source.position + 1,
+    });
+    if (error) { toast.error(error.message); fetchAll(); return; }
+    toast.success("List copied");
+    fetchAll();
+  };
+
   const renameColumn = async (colId: string, name: string) => {
     const trimmed = name.trim();
     if (!trimmed) return;
@@ -828,6 +853,7 @@ const TaskBoard = () => {
                 onOpenTask={openTask}
                 onDeleteColumn={deleteColumn}
                 onArchiveColumn={archiveColumn}
+                onCopyColumn={copyColumn}
                 onRenameColumn={renameColumn}
                 onToggleComplete={toggleComplete}
                 onArchiveTask={archiveTask}
@@ -913,20 +939,15 @@ const TaskBoard = () => {
           {activeTask && (
             <>
               <div className="-mt-1 -mx-1 mb-1">
-                <Select
-                  value={activeTask.column_id || ""}
-                  onValueChange={(v) => {
-                    const col = columns.find((c) => c.id === v);
-                    updateTask({ column_id: v, status: (col?.status || "todo") as Database["public"]["Enums"]["task_status"] });
-                  }}
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="h-auto gap-1.5 px-2 py-1 text-sm font-medium"
+                  onClick={() => setMoveDialogTask(activeTask)}
                 >
-                  <SelectTrigger className="h-auto w-auto gap-1.5 border-0 shadow-none px-2 py-1 text-sm font-medium hover:bg-accent">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {columns.map((c) => <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>)}
-                  </SelectContent>
-                </Select>
+                  {columns.find((c) => c.id === activeTask.column_id)?.name || "Move"}
+                  <ChevronDown className="h-3.5 w-3.5 text-muted-foreground" />
+                </Button>
               </div>
               <DialogHeader>
                 <DialogTitle>
@@ -1120,7 +1141,18 @@ const TaskBoard = () => {
             currentProjectId={projectId}
             currentTaskBoardId={boardId}
             onClose={() => setMoveDialogTask(null)}
-            onMoved={fetchAll}
+            onMoved={() => {
+              fetchAll();
+              // Moving the task that's open in the detail dialog would
+              // otherwise leave activeTask.column_id stale (wrong list shown
+              // on the dropdown, checklist-to-card actions targeting the old
+              // list) — closing is simplest and safe since the move already
+              // succeeded.
+              if (activeTask && moveDialogTask && activeTask.id === moveDialogTask.id) {
+                setActiveTask(null);
+                openTaskIdRef.current = null;
+              }
+            }}
           />
           <CopyCardDialog
             task={copyDialogTask}
