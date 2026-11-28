@@ -1,7 +1,6 @@
 import { useState } from "react";
 import { useSortable } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
-import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import {
   Calendar as CalendarIcon, AlertTriangle, MessageSquare, CheckSquare, CheckCircle2, Circle, Archive,
   MoreHorizontal, Copy, ArrowRightLeft, Sparkles, Tag,
@@ -41,15 +40,6 @@ export type Profile = {
   photo_url: string | null;
 };
 
-// Flat, Trello-plain priority chips — a plain gray background for everything
-// but Urgent (which stays legible as a warning), no glow rings or gradients.
-const PRIORITY_STYLES: Record<string, { bg: string; label: string }> = {
-  low: { bg: "bg-muted text-muted-foreground", label: "Low" },
-  medium: { bg: "bg-muted text-muted-foreground", label: "Medium" },
-  high: { bg: "bg-muted text-muted-foreground", label: "High" },
-  urgent: { bg: "bg-red-100 text-red-700 dark:bg-red-950 dark:text-red-300", label: "Urgent" },
-};
-
 interface Props {
   task: KanbanTask;
   assignee: Profile | null;
@@ -79,7 +69,6 @@ interface Props {
 
 export function KanbanCard({
   task,
-  assignee,
   onClick,
   onToggleComplete,
   canToggleComplete = true,
@@ -109,7 +98,6 @@ export function KanbanCard({
     opacity: isDragging ? 0.4 : 1,
   };
 
-  const priority = PRIORITY_STYLES[task.priority] || PRIORITY_STYLES.medium;
   const overdue =
     task.due_date && new Date(task.due_date) < new Date(new Date().toDateString()) && task.status !== "done";
 
@@ -140,13 +128,7 @@ export function KanbanCard({
         </div>
       )}
 
-      <div className="flex items-center justify-between mb-1.5">
-        {task.ticket_key && (
-          <span className="text-[10px] font-mono text-muted-foreground tracking-wide">{task.ticket_key}</span>
-        )}
-        <span className={cn("text-[10px] font-medium px-1.5 py-0.5 rounded-full", priority.bg)}>
-          {priority.label}
-        </span>
+      <div className="flex items-center justify-end mb-1.5">
         {!isOverlay && canManageCard && (onCopy || onMove || onToggleLabel || onArchive) && (
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
@@ -269,16 +251,6 @@ export function KanbanCard({
             </span>
           )}
         </div>
-        {assignee ? (
-          <Avatar className="h-6 w-6 ring-2 ring-background">
-            <AvatarImage src={assignee.photo_url || undefined} />
-            <AvatarFallback className="text-[10px]">
-              {(assignee.full_name || assignee.email || "?").slice(0, 2).toUpperCase()}
-            </AvatarFallback>
-          </Avatar>
-        ) : (
-          <div className="h-6 w-6 rounded-full border border-dashed border-muted-foreground/30" />
-        )}
       </div>
 
       {onToggleLabel && boardId && (
