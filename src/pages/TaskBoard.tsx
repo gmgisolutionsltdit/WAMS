@@ -8,14 +8,13 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
-import { Badge } from "@/components/ui/badge";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription,
 } from "@/components/ui/dialog";
 import { toast } from "sonner";
-import { ArrowLeft, Plus, MessageSquare, Loader2, AlertCircle, CheckSquare, UserPlus, Tag, CalendarClock } from "lucide-react";
+import { ArrowLeft, Plus, MessageSquare, Loader2, AlertCircle, CheckSquare, UserPlus, Tag, CalendarClock, ArrowRightLeft, Archive } from "lucide-react";
 import {
   DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
@@ -913,9 +912,26 @@ const TaskBoard = () => {
         <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto top-8 translate-y-0">
           {activeTask && (
             <>
+              <div className="flex items-center justify-between -mt-1 -mx-1 mb-1">
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="h-auto py-1"
+                  onClick={() => setMoveDialogTask(activeTask)}
+                >
+                  <ArrowRightLeft className="h-3.5 w-3.5 mr-1.5" /> Move card
+                </Button>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="h-auto py-1 text-destructive hover:text-destructive"
+                  onClick={() => { archiveTask(activeTask); setActiveTask(null); openTaskIdRef.current = null; }}
+                >
+                  <Archive className="h-3.5 w-3.5 mr-1.5" /> Remove
+                </Button>
+              </div>
               <DialogHeader>
-                <DialogTitle className="flex items-center gap-2">
-                  <Badge variant="outline">{activeTask.ticket_key}</Badge>
+                <DialogTitle>
                   <Input
                     value={activeTask.title}
                     onChange={(e) => setActiveTask({ ...activeTask, title: e.target.value })}
