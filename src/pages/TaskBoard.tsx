@@ -14,7 +14,7 @@ import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription,
 } from "@/components/ui/dialog";
 import { toast } from "sonner";
-import { ArrowLeft, Plus, MessageSquare, Loader2, AlertCircle, CheckSquare, UserPlus, Tag, CalendarClock } from "lucide-react";
+import { ArrowLeft, Plus, MessageSquare, Loader2, AlertCircle, CheckSquare, UserPlus, Tag, CalendarClock, ArrowRightLeft, Archive } from "lucide-react";
 import {
   DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
